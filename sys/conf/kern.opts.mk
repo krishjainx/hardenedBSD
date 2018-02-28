@@ -95,11 +95,6 @@ __DEFAULT_YES_OPTIONS+=	RETPOLINE
 __DEFAULT_NO_OPTIONS+=	RETPOLINE
 .endif
 
-# EFI doesn't exist on mips, powerpc, sparc or riscv.
-.if ${MACHINE:Mmips} || ${MACHINE:Mpowerpc} || ${MACHINE:Msparc64} || ${MACHINE:Mriscv}
-BROKEN_OPTIONS+=EFI
-.endif
-
 # expanded inline from bsd.mkopt.mk to avoid share/mk dependency
 
 # Those that default to yes
