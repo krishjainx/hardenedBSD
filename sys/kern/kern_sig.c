@@ -3436,26 +3436,6 @@ out:
 	return (0);
 }
 
-#ifdef PAX_INSECURE_MODE
-static int
-coredump_sanitise_path(const char *path)
-{
-	size_t i;
-
-	/*
-	 * Only send a subset of ASCII to devd(8) because it
-	 * might pass these strings to sh -c.
-	 */
-	for (i = 0; path[i]; i++)
-		if (!(isalpha(path[i]) || isdigit(path[i])) &&
-		    path[i] != '/' && path[i] != '.' &&
-		    path[i] != '-')
-			return (0);
-
-	return (1);
-}
-#endif /* PAX_INSECURE_MODE */
-
 /*
  * Dump a process' core.  The main routine does some
  * policy checking, and creates the name of the coredump;
@@ -3476,13 +3456,8 @@ coredump(struct thread *td)
 	char *name;			/* name of corefile */
 	void *rl_cookie;
 	off_t limit;
-#ifdef PAX_INSECURE_MODE
-	char *data = NULL;
 	char *fullpath, *freepath = NULL;
-	size_t len;
-	static const char comm_name[] = "comm=";
-	static const char core_name[] = "core=";
-#endif /* PAX_INSECURE_MODE */
+	struct sbuf *sb;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	MPASS((p->p_flag & P_HADTHREADS) == 0 || p->p_singlethread == td);
@@ -3559,31 +3534,41 @@ coredump(struct thread *td)
 	}
 	vn_rangelock_unlock(vp, rl_cookie);
 
-#ifdef PAX_INSECURE_MODE
 	/*
 	 * Notify the userland helper that a process triggered a core dump.
 	 * This allows the helper to run an automated debugging session.
 	 */
 	if (error != 0 || coredump_devctl == 0)
 		goto out;
-	len = MAXPATHLEN * 2 + sizeof(comm_name) - 1 +
-	    sizeof(' ') + sizeof(core_name) - 1;
-	data = malloc(len, M_TEMP, M_WAITOK);
+	sb = sbuf_new_auto();
 	if (vn_fullpath_global(td, p->p_textvp, &fullpath, &freepath) != 0)
-		goto out;
-	if (!coredump_sanitise_path(fullpath))
-		goto out;
-	snprintf(data, len, "%s%s ", comm_name, fullpath);
+		goto out2;
+	sbuf_printf(sb, "comm=\"");
+	devctl_safe_quote_sb(sb, fullpath);
 	free(freepath, M_TEMP);
-	freepath = NULL;
-	if (vn_fullpath_global(td, vp, &fullpath, &freepath) != 0)
-		goto out;
-	if (!coredump_sanitise_path(fullpath))
-		goto out;
-	strlcat(data, core_name, len);
-	strlcat(data, fullpath, len);
-	devctl_notify("kernel", "signal", "coredump", data);
-#endif /* PAX_INSECURE_MODE */
+	sbuf_printf(sb, "\" core=\"");
+
+	/*
+	 * We can't lookup core file vp directly. When we're replacing a core, and
+	 * other random times, we flush the name cache, so it will fail. Instead,
+	 * if the path of the core is relative, add the current dir in front if it.
+	 */
+	if (name[0] != '/') {
+		fullpath = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
+		if (kern___getcwd(td, fullpath, UIO_SYSSPACE, MAXPATHLEN, MAXPATHLEN) != 0) {
+			free(fullpath, M_TEMP);
+			goto out2;
+		}
+		devctl_safe_quote_sb(sb, fullpath);
+		free(fullpath, M_TEMP);
+		sbuf_putc(sb, '/');
+	}
+	devctl_safe_quote_sb(sb, name);
+	sbuf_printf(sb, "\"");
+	if (sbuf_finish(sb) == 0)
+		devctl_notify("kernel", "signal", "coredump", sbuf_data(sb));
+out2:
+	sbuf_delete(sb);
 out:
 	error1 = vn_close(vp, FWRITE, cred, td);
 	if (error == 0)
@@ -3591,10 +3576,6 @@ out:
 #ifdef AUDIT
 	audit_proc_coredump(td, name, error);
 #endif
-#ifdef PAX_INSECURE_MODE
-	free(freepath, M_TEMP);
-	free(data, M_TEMP);
-#endif /* PAX_INSECURE_MODE */
 	free(name, M_TEMP);
 	return (error);
 }
