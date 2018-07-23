@@ -148,7 +148,6 @@ __DEFAULT_YES_OPTIONS = \
     NLS_CATALOGS \
     NS_CACHING \
     NTP \
-    OFED \
     OPENSSL \
     PAM \
     PC_SYSINSTALL \
@@ -206,6 +205,7 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_FORCE_LE \
     LOADER_LUA \
     NAND \
+    OFED \
     OFED_EXTRA \
     OPENLDAP \
     OPENNTPD \
