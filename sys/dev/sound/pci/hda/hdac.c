@@ -41,6 +41,7 @@
 #include <dev/pci/pcivar.h>
 
 #include <sys/ctype.h>
+#include <sys/endian.h>
 #include <sys/taskqueue.h>
 
 #include <dev/sound/pci/hda/hdac_private.h>
@@ -569,7 +570,7 @@ hdac_dma_alloc(struct hdac_softc *sc, struct hdac_dma *dma, bus_size_t size)
 	    NULL,				/* lockfuncarg */
 	    &dma->dma_tag);			/* dmat */
 	if (result != 0) {
-		device_printf(sc->dev, "%s: bus_dma_tag_create failed (%x)\n",
+		device_printf(sc->dev, "%s: bus_dma_tag_create failed (%d)\n",
 		    __func__, result);
 		goto hdac_dma_alloc_fail;
 	}
@@ -582,7 +583,7 @@ hdac_dma_alloc(struct hdac_softc *sc, struct hdac_dma *dma, bus_size_t size)
 	    ((sc->flags & HDAC_F_DMA_NOCACHE) ? BUS_DMA_NOCACHE : 0),
 	    &dma->dma_map);
 	if (result != 0) {
-		device_printf(sc->dev, "%s: bus_dmamem_alloc failed (%x)\n",
+		device_printf(sc->dev, "%s: bus_dmamem_alloc failed (%d)\n",
 		    __func__, result);
 		goto hdac_dma_alloc_fail;
 	}
@@ -597,7 +598,7 @@ hdac_dma_alloc(struct hdac_softc *sc, struct hdac_dma *dma, bus_size_t size)
 	if (result != 0 || dma->dma_paddr == 0) {
 		if (result == 0)
 			result = ENOMEM;
-		device_printf(sc->dev, "%s: bus_dmamem_load failed (%x)\n",
+		device_printf(sc->dev, "%s: bus_dmamem_load failed (%d)\n",
 		    __func__, result);
 		goto hdac_dma_alloc_fail;
 	}
@@ -718,7 +719,7 @@ hdac_irq_alloc(struct hdac_softc *sc)
 	    NULL, hdac_intr_handler, sc, &irq->irq_handle);
 	if (result != 0) {
 		device_printf(sc->dev,
-		    "%s: Unable to setup interrupt handler (%x)\n",
+		    "%s: Unable to setup interrupt handler (%d)\n",
 		    __func__, result);
 		goto hdac_irq_alloc_fail;
 	}
@@ -900,7 +901,7 @@ hdac_rirb_flush(struct hdac_softc *sc)
 {
 	struct hdac_rirb *rirb_base, *rirb;
 	nid_t cad;
-	uint32_t resp;
+	uint32_t resp, resp_ex;
 	uint8_t rirbwp;
 	int ret;
 
@@ -916,9 +917,10 @@ hdac_rirb_flush(struct hdac_softc *sc)
 		sc->rirb_rp++;
 		sc->rirb_rp %= sc->rirb_size;
 		rirb = &rirb_base[sc->rirb_rp];
-		cad = HDAC_RIRB_RESPONSE_EX_SDATA_IN(rirb->response_ex);
-		resp = rirb->response;
-		if (rirb->response_ex & HDAC_RIRB_RESPONSE_EX_UNSOLICITED) {
+		resp = le32toh(rirb->response);
+		resp_ex = le32toh(rirb->response_ex);
+		cad = HDAC_RIRB_RESPONSE_EX_SDATA_IN(resp_ex);
+		if (resp_ex & HDAC_RIRB_RESPONSE_EX_UNSOLICITED) {
 			sc->unsolq[sc->unsolq_wp++] = resp;
 			sc->unsolq_wp %= HDAC_UNSOLQ_MAX;
 			sc->unsolq[sc->unsolq_wp++] = cad;
@@ -985,7 +987,7 @@ hdac_send_command(struct hdac_softc *sc, nid_t cad, uint32_t verb)
 	bus_dmamap_sync(sc->corb_dma.dma_tag,
 	    sc->corb_dma.dma_map, BUS_DMASYNC_PREWRITE);
 #endif
-	corb[sc->corb_wp] = verb;
+	corb[sc->corb_wp] = htole32(verb);
 #if 0
 	bus_dmamap_sync(sc->corb_dma.dma_tag,
 	    sc->corb_dma.dma_map, BUS_DMASYNC_POSTWRITE);
@@ -1285,7 +1287,7 @@ hdac_attach(device_t dev)
 	    NULL,				/* lockfuncarg */
 	    &sc->chan_dmat);			/* dmat */
 	if (result != 0) {
-		device_printf(dev, "%s: bus_dma_tag_create failed (%x)\n",
+		device_printf(dev, "%s: bus_dma_tag_create failed (%d)\n",
 		     __func__, result);
 		goto hdac_attach_fail;
 	}
@@ -1312,8 +1314,9 @@ hdac_attach(device_t dev)
 
 hdac_attach_fail:
 	hdac_irq_free(sc);
-	for (i = 0; i < sc->num_ss; i++)
-		hdac_dma_free(sc, &sc->streams[i].bdl);
+	if (sc->streams != NULL)
+		for (i = 0; i < sc->num_ss; i++)
+			hdac_dma_free(sc, &sc->streams[i].bdl);
 	free(sc->streams, M_HDAC);
 	hdac_dma_free(sc, &sc->rirb_dma);
 	hdac_dma_free(sc, &sc->corb_dma);
