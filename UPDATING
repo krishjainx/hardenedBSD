@@ -16,6 +16,48 @@ from older versions of FreeBSD, try WITHOUT_CLANG and WITH_GCC to bootstrap to
 the tip of head, and then rebuild without this option. The bootstrap process
 from older version of current across the gcc/clang cutover is a bit fragile.
 
+20180927	p4	FreeBSD-EN-18:09.ip
+			FreeBSD-EN-18:10.syscall
+			FreeBSD-EN-18:11.listen
+			FreeBSD-EN-18:12.mem
+
+	Fix regression in IPv6 fragment reassembly. [EN-18:09.ip]
+
+	Fix NULL pointer dereference in freebsd4_getfsstat. [EN-18:10.syscall]
+
+	Fix DoS in listen syscall over IPv6 socket. [EN-18:11.listen]
+
+	Fix small kernel memory disclosures. [EN-18:12.mem]
+
+20180912	p3	FreeBSD-SA-18:12.elf
+			FreeBSD-EN-18:08.lazyfpu
+
+	Fix improper elf header parsing. [SA-18:12.elf]
+
+	Fix regression in Lazy FPU remediation. [EN-18:08.lazyfpu]
+
+20180814	p2	FreeBSD-SA-18:08.tcp [revised]
+			FreeBSD-SA-18:09.l1tf
+			FreeBSD-SA-18:10.ip
+			FreeBSD-SA-18:11.hostapd
+
+	Revise manual pages. [SA-18:08.tcp]
+
+	Fix L1 Terminal Fault (L1TF) kernel information disclosure.
+	[SA-18:09.l1tf]
+
+	Fix resource exhaustion in IP fragment reassembly. [SA-18:10.ip]
+
+	Fix unauthenticated EAPOL-Key decryption vulnerability.
+	[SA-18:11.hostapd]
+
+20180806	p1	FreeBSD-SA-18:08.tcp
+
+	Fix resource exhaustion in TCP reassembly.
+
+20180627:
+	11.2-RELEASE.
+
 20180504:
 	The tz database (tzdb) has been updated to 2018e.  This version more
 	correctly models time stamps in time zones with negative DST such as
