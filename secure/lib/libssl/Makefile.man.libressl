@@ -1,7 +1,8 @@
 # $OpenBSD: Makefile,v 1.65 2018/03/17 18:52:42 schwarze Exp $
 # $FreeBSD$
 
-MAN =	BIO_f_ssl.3 \
+MAN= \
+	BIO_f_ssl.3 \
 	DTLSv1_listen.3 \
 	OPENSSL_init_ssl.3 \
 	PEM_read_SSL_SESSION.3 \
@@ -116,7 +117,7 @@ MAN =	BIO_f_ssl.3 \
 	d2i_SSL_SESSION.3 \
 	ssl.3
 
-MKLINKS+=\
+MKLINKS+= \
 	BIO_f_ssl.3 BIO_do_handshake.3 \
 	BIO_f_ssl.3 BIO_get_num_renegotiates.3 \
 	BIO_f_ssl.3 BIO_get_ssl.3 \
@@ -205,6 +206,8 @@ MKLINKS+=\
 	SSL_CTX_set_client_CA_list.3 SSL_set_client_CA_list.3 \
 	SSL_CTX_set_client_cert_cb.3 SSL_CTX_get_client_cert_cb.3 \
 	SSL_CTX_set_client_cert_cb.3 client_cert_cb.3 \
+	SSL_CTX_set_default_passwd_cb.3 SSL_CTX_get_default_passwd_cb.3 \
+	SSL_CTX_set_default_passwd_cb.3 SSL_CTX_get_default_passwd_cb_userdata.3 \
 	SSL_CTX_set_default_passwd_cb.3 SSL_CTX_set_default_passwd_cb_userdata.3 \
 	SSL_CTX_set_default_passwd_cb.3 pem_password_cb.3 \
 	SSL_CTX_set_generate_session_id.3 GEN_SESSION_CB.3 \
@@ -265,7 +268,7 @@ MKLINKS+=\
 	SSL_CTX_set_tmp_dh_callback.3 SSL_set_tmp_dh_callback.3 \
 	SSL_CTX_set_tmp_rsa_callback.3 SSL_CTX_need_tmp_RSA.3 \
 	SSL_CTX_set_tmp_rsa_callback.3 SSL_CTX_set_tmp_rsa.3 \
-	SSL_CTX_set_tmp_rsa_callback.3 SSL_need_tmp_rsa.3 \
+	SSL_CTX_set_tmp_rsa_callback.3 SSL_need_tmp_RSA.3 \
 	SSL_CTX_set_tmp_rsa_callback.3 SSL_set_tmp_rsa.3 \
 	SSL_CTX_set_tmp_rsa_callback.3 SSL_set_tmp_rsa_callback.3 \
 	SSL_CTX_set_verify.3 SSL_CTX_set_verify_depth.3 \
@@ -371,4 +374,4 @@ MKLINKS+=\
 	SSL_want.3 SSL_want_read.3 \
 	SSL_want.3 SSL_want_write.3 \
 	SSL_want.3 SSL_want_x509_lookup.3 \
-	d2i_SSL_SESSION.3 i2d_SSL_SESSION.3
+	d2i_SSL_SESSION.3 i2d_SSL_SESSION.3 \

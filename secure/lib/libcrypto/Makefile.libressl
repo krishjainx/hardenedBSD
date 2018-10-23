@@ -5,7 +5,7 @@ SHLIBDIR?=      /lib
 .include <bsd.own.mk>
 
 LIB=            crypto
-SHLIB_MAJOR=    43
+SHLIB_MAJOR=    44
 
 NO_LINT=
 
@@ -399,3 +399,4 @@ SRCS+= wp_block.c
 # generated
 CFLAGS+= -I${.OBJDIR}
 
+.include <bsd.lib.mk>
