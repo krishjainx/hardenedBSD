@@ -1,13 +1,12 @@
 include_directories(
 	.
-	../include
-	../include/compat
 	../crypto/modes
 	../crypto/asn1
 	../ssl
 	../tls
 	../apps/openssl
 	../apps/openssl/compat
+	../include/compat
 )
 
 add_definitions(-D_PATH_SSL_CA_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/../apps/openssl/cert.pem\")
@@ -64,6 +63,11 @@ if(ENABLE_EXTRATESTS)
 	target_link_libraries(biotest ${OPENSSL_LIBS})
 	add_test(biotest biotest)
 endif()
+
+# bnaddsub
+add_executable(bnaddsub bnaddsub.c)
+target_link_libraries(bnaddsub ${OPENSSL_LIBS})
+add_test(bnaddsub bnaddsub)
 
 # bntest
 if(NOT BUILD_SHARED_LIBS)

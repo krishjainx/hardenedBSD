@@ -1,9 +1,3 @@
-include_directories(
-	.
-	../include
-	../include/compat
-)
-
 set(
 	TLS_SRC
 	tls.c
@@ -37,11 +31,17 @@ else()
 endif()
 
 add_library(tls ${TLS_SRC})
+target_include_directories(tls
+	PRIVATE
+		.
+		../include/compat
+	PUBLIC
+		../include)
+
 if (BUILD_SHARED_LIBS)
 	export_symbol(tls ${CMAKE_CURRENT_SOURCE_DIR}/tls.sym)
-	target_link_libraries(tls ssl crypto)
+	target_link_libraries(tls ssl crypto ${PLATFORM_LIBS})
 	if (WIN32)
-		target_link_libraries(tls Ws2_32.lib)
 		set(TLS_POSTFIX -${TLS_MAJOR_VERSION})
 	endif()
 	set_target_properties(tls PROPERTIES

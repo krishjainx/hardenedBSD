@@ -1,9 +1,3 @@
-include_directories(
-	.
-	../include
-	../include/compat
-)
-
 set(
 	SSL_SRC
 	bio_ssl.c
@@ -48,11 +42,17 @@ set(
 )
 
 add_library(ssl ${SSL_SRC})
+target_include_directories(ssl
+	PRIVATE
+		.
+		../include/compat
+	PUBLIC
+		../include)
+
 if (BUILD_SHARED_LIBS)
 	export_symbol(ssl ${CMAKE_CURRENT_SOURCE_DIR}/ssl.sym)
-	target_link_libraries(ssl crypto)
+	target_link_libraries(ssl crypto ${PLATFORM_LIBS})
 	if (WIN32)
-		target_link_libraries(ssl Ws2_32.lib)
 		set(SSL_POSTFIX -${SSL_MAJOR_VERSION})
 	endif()
 	set_target_properties(ssl PROPERTIES

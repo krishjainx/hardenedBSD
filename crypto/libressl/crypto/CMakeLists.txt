@@ -1,14 +1,3 @@
-include_directories(
-	.
-	../include
-	../include/compat
-	asn1
-	bn
-	dsa
-	evp
-	modes
-)
-
 if(HOST_ASM_ELF_X86_64)
 	set(
 		ASM_X86_64_ELF_SRC
@@ -91,6 +80,7 @@ if(HOST_ASM_MACOSX_X86_64)
 	add_definitions(-DOPENSSL_CPUID_OBJ)
 	set(CRYPTO_SRC ${CRYPTO_SRC} ${ASM_X86_64_MACOSX_SRC})
 	set_property(SOURCE ${ASM_X86_64_MACOSX_SRC} PROPERTY LANGUAGE C)
+	set_property(SOURCE ${ASM_X86_64_MACOSX_SRC} PROPERTY XCODE_EXPLICIT_FILE_TYPE "sourcecode.asm")
 endif()
 
 if((NOT HOST_ASM_ELF_X86_64) AND (NOT HOST_ASM_MACOSX_X86_64))
@@ -810,10 +800,22 @@ if(EXTRA_EXPORT)
 endif()
 
 add_library(crypto ${CRYPTO_SRC})
+target_include_directories(crypto
+	PRIVATE
+		.
+		asn1
+		bn
+		dsa
+		evp
+		modes
+		../include/compat
+	PUBLIC
+		../include)
+
 if (BUILD_SHARED_LIBS)
 	export_symbol(crypto ${CMAKE_CURRENT_BINARY_DIR}/crypto_p.sym)
+	target_link_libraries(crypto ${PLATFORM_LIBS})
 	if (WIN32)
-		target_link_libraries(crypto Ws2_32.lib)
 		set(CRYPTO_POSTFIX -${CRYPTO_MAJOR_VERSION})
 	endif()
 	set_target_properties(crypto PROPERTIES
