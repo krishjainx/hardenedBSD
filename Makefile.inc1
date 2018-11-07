@@ -2147,13 +2147,12 @@ _dtc= usr.bin/dtc
 _dtc= gnu/usr.bin/dtc
 .endif
 
-<<<<<<< HEAD
 .if ${MK_HBSD_EXTRA_SANITIZE} != "no"
 CFLAGS+=	-DHBSD_EXTRA_SANITIZE
-=======
+.endif
+
 .if ${MK_LOCALES} != "no"
 _localedef=	usr.bin/localedef
->>>>>>> origin/hardened/current/master
 .endif
 
 .if ${MK_KERBEROS} != "no"
