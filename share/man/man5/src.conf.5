@@ -310,7 +310,7 @@ When set, it enforces these options:
 Set to build without Control-Flow Integrity (CFI)
 .Pp
 This is a default setting on
-arm/arm, arm/armv6, arm/armv7, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64, riscv/riscv64sf and sparc64/sparc64.
+arm/arm, arm/armv6, arm/armv7, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64 and sparc64/sparc64.
 .It Va WITH_CFI
 Set to build with Control-Flow Integrity (CFI)
 .Pp
@@ -1549,7 +1549,7 @@ When set, it enforces these options:
 Disable building of Position-Independent Executables (PIEs).
 .Pp
 This is a default setting on
-arm/arm, arm/armv6, arm/armv7, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64, riscv/riscv64sf and sparc64/sparc64.
+arm/arm, arm/armv6, arm/armv7, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64 and sparc64/sparc64.
 .It Va WITHOUT_PKGBOOTSTRAP
 Set to not build
 .Xr pkg 7
@@ -1609,6 +1609,12 @@ bit-for-bit identical output.
 .It Va WITHOUT_RESCUE
 Set to not build
 .Xr rescue 8 .
+.It Va WITH_RETPOLINE
+Set to build the base system with the retpoline speculative execution
+vulnerability mitigation for CVE-2017-5715.
+.Pp
+This is a default setting on
+amd64/amd64.
 .It Va WITHOUT_ROUTED
 Set to not build
 .Xr routed 8
@@ -1621,7 +1627,7 @@ with warmstart support.
 Set to compile world without SafeStack.
 .Pp
 This is a default setting on
-arm/arm, arm/armv6, arm/armv7, arm64/aarch64, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64, riscv/riscv64sf and sparc64/sparc64.
+arm/arm, arm/armv6, arm/armv7, arm64/aarch64, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64 and sparc64/sparc64.
 .It Va WITH_SAFESTACK
 Set to compile with SafeStack.
 .Pp
@@ -1650,7 +1656,7 @@ The set includes
 and necessary utilities like assembler, linker and library archive manager.
 .Pp
 This is a default setting on
-amd64/amd64, arm/arm, arm/armv7, arm64/aarch64, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64, riscv/riscv64sf and sparc64/sparc64.
+amd64/amd64, arm/arm, arm/armv7, arm64/aarch64, i386/i386, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64 and sparc64/sparc64.
 .It Va WITH_SORT_THREADS
 Set to enable threads in
 .Xr sort 1 .
