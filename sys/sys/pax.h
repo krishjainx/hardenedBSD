@@ -55,6 +55,7 @@ struct hbsd_features {
 	} noexec;
 	struct hbsd_hardening {
 		pax_state_t	 procfs_harden;		/* (p) Harden procfs */
+		pax_state_t	 unprivileged_proc_debug;	/* (p) Unprivileged process debugging */
 	} hardening;
 	struct hbsd_log {
 		pax_state_t	log;		/* (p) Per-jail logging status */

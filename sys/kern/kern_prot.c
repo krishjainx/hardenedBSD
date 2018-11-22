@@ -1639,26 +1639,6 @@ p_cansched(struct thread *td, struct proc *p)
 	return (0);
 }
 
-/*
- * The 'unprivileged_proc_debug' flag may be used to disable a variety of
- * unprivileged inter-process debugging services, including some procfs
- * functionality, ptrace(), and ktrace().  In the past, inter-process
- * debugging has been involved in a variety of security problems, and sites
- * not requiring the service might choose to disable it when hardening
- * systems.
- *
- * XXX: Should modifying and reading this variable require locking?
- * XXX: data declarations should be together near the beginning of the file.
- */
-#ifdef PAX_HARDENING
-static int	unprivileged_proc_debug = 0;
-#else
-static int	unprivileged_proc_debug = 1;
-#endif
-SYSCTL_INT(_security_bsd, OID_AUTO, unprivileged_proc_debug, CTLFLAG_RW,
-    &unprivileged_proc_debug, 0,
-    "Unprivileged processes may use process debugging facilities");
-
 /*-
  * Determine whether td may debug p.
  * Returns: 0 for permitted, an errno value otherwise
@@ -1674,7 +1654,7 @@ p_candebug(struct thread *td, struct proc *p)
 
 	KASSERT(td == curthread, ("%s: td not curthread", __func__));
 	PROC_LOCK_ASSERT(p, MA_OWNED);
-	if (!unprivileged_proc_debug) {
+	if (!td->td_ucred->cr_prison->pr_hbsd.hardening.unprivileged_proc_debug) {
 		error = priv_check(td, PRIV_DEBUG_UNPRIV);
 		if (error)
 			return (error);

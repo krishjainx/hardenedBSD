@@ -61,20 +61,49 @@ FEATURE(hbsd_hardening, "Various hardening features.");
 static int pax_procfs_harden_global = PAX_FEATURE_SIMPLE_ENABLED;
 static int pax_randomize_pids_global = PAX_FEATURE_SIMPLE_ENABLED;
 static int pax_init_hardening_global = PAX_FEATURE_SIMPLE_ENABLED;
+static int unprivileged_proc_debug_global = PAX_FEATURE_SIMPLE_DISABLED;
 #else
 static int pax_procfs_harden_global = PAX_FEATURE_SIMPLE_DISABLED;
 static int pax_randomize_pids_global = PAX_FEATURE_SIMPLE_DISABLED;
 static int pax_init_hardening_global = PAX_FEATURE_SIMPLE_DISABLED;
+static int unprivileged_proc_debug_global = PAX_FEATURE_SIMPLE_ENABLED;
 #endif
 
 TUNABLE_INT("hardening.procfs_harden", &pax_procfs_harden_global);
 TUNABLE_INT("hardening.randomize_pids", &pax_randomize_pids_global);
+TUNABLE_INT("security.bsd.unprivileged_proc_debug",
+    &unprivileged_proc_debug_global);
 
 #ifdef PAX_SYSCTLS
 SYSCTL_HBSD_2STATE(pax_procfs_harden_global, pr_hbsd.hardening.procfs_harden,
     _hardening, procfs_harden,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE,
     "Harden procfs, disabling write of /proc/pid/mem");
+#endif
+
+/*
+ * The 'unprivileged_proc_debug' flag may be used to disable a variety of
+ * unprivileged inter-process debugging services, including some procfs
+ * functionality, ptrace(), and ktrace().  In the past, inter-process
+ * debugging has been involved in a variety of security problems, and sites
+ * not requiring the service might choose to disable it when hardening
+ * systems.
+ *
+ * XXX: Should modifying and reading this variable require locking?
+ * XXX: data declarations should be together near the beginning of the file.
+ */
+SYSCTL_HBSD_2STATE(unprivileged_proc_debug_global,
+    pr_hbsd.hardening.unprivileged_proc_debug,
+    _security_bsd, unprivileged_proc_debug,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE|CTLFLAG_PRISON,
+    "Unprivileged processes may use process debugging facilities");
+
+#ifdef PAX_JAIL_SUPPORT
+SYSCTL_DECL(_security_jail_param_hardening);
+
+SYSCTL_JAIL_PARAM(_hardening, unprivileged_proc_debug,
+    CTLTYPE_INT | CTLFLAG_RD, "I",
+    "Unprivileged processes may use process debugging facilities");
 #endif
 
 #if 0
@@ -100,6 +129,26 @@ pax_hardening_sysinit(void)
 		    pax_status_simple_str[pax_procfs_harden_global]);
 	}
 
+	old_state = unprivileged_proc_debug_global;
+	if (!pax_feature_simple_validate_state(&unprivileged_proc_debug_global)) {
+		printf("[HBSD HARDENING] WARNING, invalid settings in loader.conf!"
+		    " (hardening.procfs_harden = %d)\n", old_state);
+		/* XXX In case of invalid setting,
+		 * pax_feature_simple_validate_state sets the variable
+		 * to enabled. In this case, we want the opposite.
+		 * Ideally, we should expand
+		 * pax_feature_simple_validate_state to accept a
+		 * second argument: the default value in case of
+		 * invalid setting.
+		 */
+		unprivileged_proc_debug_global = PAX_FEATURE_SIMPLE_DISABLED;
+	}
+
+	if (bootverbose) {
+		printf("[HBSD HARDENING] unprivileged proc debug: %s\n",
+		    pax_status_simple_str[pax_procfs_harden_global]);
+	}
+
 	old_state = pax_randomize_pids_global;
 	if (!pax_feature_simple_validate_state(&pax_randomize_pids_global)) {
 		printf("[HBSD HARDENING] WARNING, invalid settings in loader.conf!"
@@ -122,17 +171,18 @@ int
 pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts)
 {
 	struct prison *pr_p;
-#if 0
 	int error;
-#endif
 
 	CTR2(KTR_PAX, "%s: Setting prison %s PaX variables\n",
 	    __func__, pr->pr_name);
 
+	error = 0;
 	if (pr == &prison0) {
 		/* prison0 has no parent, use globals */
 		pr->pr_hbsd.hardening.procfs_harden =
 		    pax_procfs_harden_global;
+		pr->pr_hbsd.hardening.unprivileged_proc_debug =
+		    unprivileged_proc_debug_global;
 	} else {
 		KASSERT(pr->pr_parent != NULL,
 		   ("%s: pr->pr_parent == NULL", __func__));
@@ -140,6 +190,13 @@ pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts)
 
 		pr->pr_hbsd.hardening.procfs_harden =
 		    pr_p->pr_hbsd.hardening.procfs_harden;
+		pr->pr_hbsd.hardening.unprivileged_proc_debug =
+		    pr_p->pr_hbsd.hardening.unprivileged_proc_debug;
+		error = pax_handle_prison_param(opts,
+		    "hardening.unprivileged_proc_debug",
+		    &pr->pr_hbsd.hardening.unprivileged_proc_debug);
+		if (error != 0)
+			return (error);
 #if 0
 		error = pax_handle_prison_param(opts, "hardening.procfs_harden",
 		    &pr->pr_hbsd.hardening.procfs_harden);
@@ -148,7 +205,7 @@ pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts)
 #endif
 	}
 
-	return (0);
+	return (error);
 }
 
 int
