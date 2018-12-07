@@ -358,7 +358,7 @@ pax_segvguard_cleaner(void *args)
 {
 	struct pax_segvguard_entry *se = args;
 
-	printf("Entry for inode %u on %s expired and removed for user %d.\n",
+	printf("Entry for inode %lu on %s expired and removed for user %d.\n",
 	    se->se_inode, se->se_mntpoint, se->se_uid);
 	LIST_REMOVE(se, se_entry);
 	free(se, M_PAX);
