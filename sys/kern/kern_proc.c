@@ -403,22 +403,7 @@ struct proc *
 pfind(pid_t pid)
 {
 
-<<<<<<< HEAD
-	if (pid > PID_MAX)
-		return (NULL);
-
-	p = curproc;
-	if (p->p_pid == pid) {
-		PROC_LOCK(p);
-		return (p);
-	}
-	sx_slock(&allproc_lock);
-	p = pfind_locked(pid);
-	sx_sunlock(&allproc_lock);
-	return (p);
-=======
 	return (_pfind(pid, false));
->>>>>>> origin/hardened/current/master
 }
 
 /*
@@ -427,11 +412,6 @@ pfind(pid_t pid)
 struct proc *
 pfind_any(pid_t pid)
 {
-<<<<<<< HEAD
-	struct proc *p;
->>>>>>> origin/hardened/current/master
-=======
->>>>>>> origin/hardened/current/master
 
 	return (_pfind(pid, true));
 }
@@ -1286,27 +1266,7 @@ zpfind(pid_t pid)
 			break;
 		}
 	}
-<<<<<<< HEAD
-	return (p);
-}
-
-/*
- * Locate a zombie process by number
- */
-struct proc *
-zpfind(pid_t pid)
-{
-	struct proc *p;
-
-	if (pid > PID_MAX)
-		return (NULL);
-
-	sx_slock(&allproc_lock);
-	p = zpfind_locked(pid);
-	sx_sunlock(&allproc_lock);
-=======
 	sx_sunlock(&zombproc_lock);
->>>>>>> origin/hardened/current/master
 	return (p);
 }
 
