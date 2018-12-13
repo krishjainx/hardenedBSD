@@ -75,6 +75,7 @@ _LIBRARIES=	\
 		cam \
 		casper \
 		cap_dns \
+		cap_fileargs \
 		cap_grp \
 		cap_pwd \
 		cap_random \
@@ -194,6 +195,12 @@ _LIBRARIES+= \
 
 .endif
 
+.if ${MK_HBSDCONTROL} != "no"
+_LIBRARIES+= \
+		hbsdcontrol \
+
+.endif
+
 .if ${MK_OFED} != "no"
 _LIBRARIES+= \
 		cxgb4 \
@@ -218,6 +225,7 @@ _DP_zstd=	pthread
 .if ${MK_BLACKLIST} != "no"
 _DP_blacklist+=	pthread
 .endif
+_DP_crypto=	pthread
 .if ${MK_OPENSSL} != "no"
 _DP_archive+=	crypto
 .else
@@ -239,11 +247,15 @@ _DP_cam=	sbuf
 _DP_kvm=	elf
 _DP_casper=	nv
 _DP_cap_dns=	nv
+_DP_cap_fileargs=	nv
 _DP_cap_grp=	nv
 _DP_cap_pwd=	nv
 _DP_cap_random=	nv
 _DP_cap_sysctl=	nv
 _DP_cap_syslog=	nv
+.if ${MK_HBSDCONTROL} != "no"
+_DP_hbsdcontrol=	sbuf
+.endif
 .if ${MK_OFED} != "no"
 _DP_pcap=	ibverbs mlx5
 .endif
@@ -274,7 +286,7 @@ _DP_mp=	crypto
 _DP_memstat=	kvm
 _DP_magic=	z
 _DP_mt=		sbuf bsdxml
-_DP_ldns=	crypto
+_DP_ldns=	ssl crypto
 .if ${MK_OPENSSL} != "no"
 _DP_fetch=	ssl crypto
 .else
@@ -483,6 +495,11 @@ LIBPMCSTAT?=	${LIBPMCSTATDIR}/libpmcstat.a
 
 LIBC_NOSSP_PICDIR=	${OBJTOP}/lib/libc
 LIBC_NOSSP_PIC?=	${LIBC_NOSSP_PICDIR}/libc_nossp_pic.a
+
+.if ${MK_HBSDCONTROL} != "no"
+LIBHBSDCONTROLDIR=	${OBJTOP}/lib/libhbsdcontrol
+LIBHBSDCONTROL?=	${LIBHBSDCONTROLDIR}/libhbsdcontrol.a
+.endif
 
 # Define a directory for each library.  This is useful for adding -L in when
 # not using a --sysroot or for meta mode bootstrapping when there is no

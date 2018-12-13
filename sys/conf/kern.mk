@@ -25,6 +25,7 @@ NO_WUNNEEDED_INTERNAL_DECL=	-Wno-error-unneeded-internal-declaration
 NO_WSOMETIMES_UNINITIALIZED=	-Wno-error-sometimes-uninitialized
 NO_WCAST_QUAL=			-Wno-error-cast-qual
 NO_WTAUTOLOGICAL_POINTER_COMPARE= -Wno-tautological-pointer-compare
+NO_WARRAY_BOUNDS=		-Wno-error-array-bounds
 # Several other warnings which might be useful in some cases, but not severe
 # enough to error out the whole kernel build.  Display them anyway, so there is
 # some incentive to fix them eventually.
@@ -39,10 +40,6 @@ CWARNEXTRA+=	-Wno-address-of-packed-member
 .endif
 
 CLANG_NO_IAS= -no-integrated-as
-.if ${COMPILER_VERSION} < 30500
-# XXX: clang < 3.5 integrated-as doesn't grok .codeNN directives
-CLANG_NO_IAS34= -no-integrated-as
-.endif
 .endif
 
 .if ${COMPILER_TYPE} == "gcc"
@@ -131,7 +128,7 @@ INLINE_LIMIT?=	8000
 .endif
 
 .if ${MACHINE_CPUARCH} == "riscv"
-CFLAGS.gcc+=	-mcmodel=medany -march=rv64imafd -mabi=lp64
+CFLAGS.gcc+=	-mcmodel=medany -march=rv64imafdc -mabi=lp64
 INLINE_LIMIT?=	8000
 .endif
 
@@ -227,7 +224,6 @@ CFLAGS+=	-fstack-protector
 
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
 CFLAGS+=	-mretpoline
-LDFLAGS+=	-Wl,-z,retpoline
 .endif
 
 #

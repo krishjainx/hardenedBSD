@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
+#include <sys/epoch.h>
 #include <sys/rangelock.h>
 #include <sys/resourcevar.h>
 #include <sys/sdt.h>
@@ -92,7 +93,7 @@ _Static_assert(offsetof(struct thread, td_pflags) == 0x104,
     "struct thread KBI td_pflags");
 _Static_assert(offsetof(struct thread, td_frame) == 0x470,
     "struct thread KBI td_frame");
-_Static_assert(offsetof(struct thread, td_emuldata) == 0x518,
+_Static_assert(offsetof(struct thread, td_emuldata) == 0x528,
     "struct thread KBI td_emuldata");
 _Static_assert(offsetof(struct proc, p_flag) == 0xb0,
     "struct proc KBI p_flag");
@@ -100,9 +101,9 @@ _Static_assert(offsetof(struct proc, p_pid) == 0xbc,
     "struct proc KBI p_pid");
 _Static_assert(offsetof(struct proc, p_filemon) == 0x3d0,
     "struct proc KBI p_filemon");
-_Static_assert(offsetof(struct proc, p_comm) == 0x3e4,
+_Static_assert(offsetof(struct proc, p_comm) == 0x3e8,
     "struct proc KBI p_comm");
-_Static_assert(offsetof(struct proc, p_emuldata) == 0x4b8,
+_Static_assert(offsetof(struct proc, p_emuldata) == 0x4c0,
     "struct proc KBI p_emuldata");
 #endif
 #ifdef __i386__
@@ -120,9 +121,9 @@ _Static_assert(offsetof(struct proc, p_pid) == 0x74,
     "struct proc KBI p_pid");
 _Static_assert(offsetof(struct proc, p_filemon) == 0x27c,
     "struct proc KBI p_filemon");
-_Static_assert(offsetof(struct proc, p_comm) == 0x28c,
+_Static_assert(offsetof(struct proc, p_comm) == 0x290,
     "struct proc KBI p_comm");
-_Static_assert(offsetof(struct proc, p_emuldata) == 0x318,
+_Static_assert(offsetof(struct proc, p_emuldata) == 0x31c,
     "struct proc KBI p_emuldata");
 #endif
 #endif /* PAX */
@@ -206,7 +207,7 @@ thread_ctor(void *mem, int size, void *arg, int flags)
 
 	td = (struct thread *)mem;
 	td->td_state = TDS_INACTIVE;
-	td->td_oncpu = NOCPU;
+	td->td_lastcpu = td->td_oncpu = NOCPU;
 
 	td->td_tid = tid_alloc();
 
@@ -282,6 +283,7 @@ thread_init(void *mem, int size, int flags)
 	td->td_rlqe = NULL;
 	EVENTHANDLER_DIRECT_INVOKE(thread_init, td);
 	umtx_thread_init(td);
+	epoch_thread_init(td);
 	td->td_kstack = 0;
 	td->td_sel = NULL;
 	return (0);
@@ -301,6 +303,7 @@ thread_fini(void *mem, int size)
 	turnstile_free(td->td_turnstile);
 	sleepq_free(td->td_sleepqueue);
 	umtx_thread_fini(td);
+	epoch_thread_fini(td);
 	seltdfini(td);
 }
 
