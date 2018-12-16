@@ -6,7 +6,11 @@
 PACKAGE=rescue
 MAN=
 MK_SSP=	no
+<<<<<<< HEAD
 MK_CFI=	no
+=======
+NO_SHARED=	yes
+>>>>>>> freebsd/12.0-releng/master
 
 PROG=	rescue
 BINDIR?=/rescue
