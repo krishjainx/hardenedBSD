@@ -95,6 +95,7 @@ _COMPAT_LINUX32	opt_compat.h	# XXX: make sure opt_compat.h exists
 COMPILING_LINT	opt_global.h
 CY_PCI_FASTINTR
 DEADLKRES	opt_watchdog.h
+EXPERIMENTAL	opt_global.h
 EXT_RESOURCES	opt_global.h
 DIRECTIO
 FILEMON		opt_dontuse.h
@@ -229,6 +230,9 @@ UMTX_PROFILING
 UMTX_CHAINS	opt_global.h
 VERBOSE_SYSINIT
 ZSTDIO		opt_zstdio.h
+
+# Sanitizers
+KUBSAN		opt_global.h
 
 # POSIX kernel options
 P1003_1B_MQUEUE			opt_posix.h
@@ -499,6 +503,7 @@ NETGRAPH_BLUETOOTH_UBTBCMFW	opt_netgraph.h
 NETGRAPH_BPF		opt_netgraph.h
 NETGRAPH_BRIDGE		opt_netgraph.h
 NETGRAPH_CAR		opt_netgraph.h
+NETGRAPH_CHECKSUM	opt_netgraph.h
 NETGRAPH_CISCO		opt_netgraph.h
 NETGRAPH_DEFLATE	opt_netgraph.h
 NETGRAPH_DEVICE		opt_netgraph.h

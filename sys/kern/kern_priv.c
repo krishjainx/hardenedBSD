@@ -65,7 +65,7 @@ SYSCTL_INT(_security_bsd, OID_AUTO, unprivileged_mlock, CTLFLAG_RWTUN,
     &unprivileged_mlock, 0, "Allow non-root users to call mlock(2)");
 
 #ifdef PAX_HARDENING
-static int	unprivileged_read_msgbuf;
+static int	unprivileged_read_msgbuf = 0;
 #else
 static int	unprivileged_read_msgbuf = 1;
 #endif
@@ -82,7 +82,7 @@ SDT_PROBE_DEFINE1(priv, kernel, priv_check, priv__err, "int");
  * only a few to grant it.
  */
 int
-priv_check_cred(struct ucred *cred, int priv, int flags)
+priv_check_cred(struct ucred *cred, int priv)
 {
 	int error;
 
@@ -194,6 +194,18 @@ priv_check_cred(struct ucred *cred, int priv, int flags)
 	}
 
 	/*
+	 * Allow unprivileged process debugging on a per-jail basis.
+	 * Do this here instead of prison_priv_check(), so it can also
+	 * apply to prison0.
+	 */
+	if (priv == PRIV_DEBUG_UNPRIV) {
+		if (prison_allow(cred, PR_ALLOW_UNPRIV_DEBUG)) {
+			error = 0;
+			goto out;
+		}
+	}
+
+	/*
 	 * Now check with MAC, if enabled, to see if a policy module grants
 	 * privilege.
 	 */
@@ -223,5 +235,5 @@ priv_check(struct thread *td, int priv)
 
 	KASSERT(td == curthread, ("priv_check: td != curthread"));
 
-	return (priv_check_cred(td->td_ucred, priv, 0));
+	return (priv_check_cred(td->td_ucred, priv));
 }

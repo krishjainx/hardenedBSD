@@ -152,7 +152,6 @@ CFLAGS+=	-fPIC
 
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
 CFLAGS+=	-mretpoline
-LDFLAGS+=	-Wl,-z,retpoline
 .endif
 
 # Temporary workaround for PR 196407, which contains the fascinating details.
@@ -381,6 +380,9 @@ ${_src}:
 .endif
 .endfor
 .endif
+
+# Add the sanitizer C flags
+CFLAGS+=	${SAN_CFLAGS}
 
 # Respect configuration-specific C flags.
 CFLAGS+=	${ARCH_FLAGS} ${CONF_CFLAGS}
