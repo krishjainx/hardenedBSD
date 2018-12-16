@@ -69,6 +69,9 @@
 
 /* Define to 1 if you have the `CRYPTO_cleanup_all_ex_data' function. */
 /* #undef HAVE_CRYPTO_CLEANUP_ALL_EX_DATA */
+#ifdef WITH_LIBRESSL
+#define HAVE_CRYPTO_CLEANUP_ALL_EX_DATA 1
+#endif
 
 /* Define to 1 if you have the `ctime_r' function. */
 #define HAVE_CTIME_R 1
@@ -79,10 +82,14 @@
 /* Define to 1 if you have the declaration of `arc4random', and to 0 if you
    don't. */
 /* #undef HAVE_DECL_ARC4RANDOM */
+#ifdef WITH_LIBRESSL
+#define HAVE_DECL_ARC4RANDOM 1
 
 /* Define to 1 if you have the declaration of `arc4random_uniform', and to 0
    if you don't. */
 /* #undef HAVE_DECL_ARC4RANDOM_UNIFORM */
+#define HAVE_DECL_ARC4RANDOM_UNIFORM 1
+#endif
 
 /* Define to 1 if you have the declaration of `inet_ntop', and to 0 if you
    don't. */
@@ -94,11 +101,19 @@
 
 /* Define to 1 if you have the declaration of `NID_ED25519', and to 0 if you
    don't. */
+#ifndef WITH_LIBRESSL
 #define HAVE_DECL_NID_ED25519 1
+#else
+#define HAVE_DECL_NID_ED25519 0
+#endif
 
 /* Define to 1 if you have the declaration of `NID_ED448', and to 0 if you
    don't. */
+#ifndef WITH_LIBRESSL
 #define HAVE_DECL_NID_ED448 1
+#else
+#define HAVE_DECL_NID_ED448 0
+#endif
 
 /* Define to 1 if you have the declaration of `NID_secp384r1', and to 0 if you
    don't. */
@@ -111,6 +126,9 @@
 /* Define to 1 if you have the declaration of `reallocarray', and to 0 if you
    don't. */
 /* #undef HAVE_DECL_REALLOCARRAY */
+#ifdef WITH_LIBRESSL
+#define HAVE_DECL_REALLOCARRAY 1
+#endif
 
 /* Define to 1 if you have the declaration of `redisConnect', and to 0 if you
    don't. */
@@ -131,10 +149,14 @@
 /* Define to 1 if you have the declaration of `strlcat', and to 0 if you
    don't. */
 /* #undef HAVE_DECL_STRLCAT */
+#ifdef WITH_LIBRESSL
+#define HAVE_DECL_STRLCAT 1
 
 /* Define to 1 if you have the declaration of `strlcpy', and to 0 if you
    don't. */
 /* #undef HAVE_DECL_STRLCPY */
+#define HAVE_DECL_STRLCPY 1
+#endif
 
 /* Define to 1 if you have the declaration of `XML_StopParser', and to 0 if
    you don't. */
@@ -160,9 +182,13 @@
 
 /* Define to 1 if you have the `ERR_free_strings' function. */
 /* #undef HAVE_ERR_FREE_STRINGS */
+#ifdef WITH_LIBRESSL
+#define HAVE_ERR_FREE_STRINGS 1
 
 /* Define to 1 if you have the `ERR_load_crypto_strings' function. */
 /* #undef HAVE_ERR_LOAD_CRYPTO_STRINGS */
+#define HAVE_ERR_LOAD_CRYPTO_STRINGS 1
+#endif
 
 /* Define to 1 if you have the `event_base_free' function. */
 /* #undef HAVE_EVENT_BASE_FREE */
@@ -181,12 +207,20 @@
 
 /* Define to 1 if you have the `EVP_cleanup' function. */
 /* #undef HAVE_EVP_CLEANUP */
+#ifdef WITH_LIBRESSL
+#define HAVE_EVP_CLEANUP 1
+#endif
 
 /* Define to 1 if you have the `EVP_DigestVerify' function. */
+#ifndef WITH_LIBRESSL
 #define HAVE_EVP_DIGESTVERIFY 1
+#endif
 
 /* Define to 1 if you have the `EVP_dss1' function. */
 /* #undef HAVE_EVP_DSS1 */
+#ifdef WITH_LIBRESSL
+#define HAVE_EVP_DSS1 1
+#endif
 
 /* Define to 1 if you have the `EVP_MD_CTX_new' function. */
 #define HAVE_EVP_MD_CTX_NEW 1
@@ -216,7 +250,9 @@
 #define HAVE_FCNTL 1
 
 /* Define to 1 if you have the `FIPS_mode' function. */
+#ifndef WITH_LIBRESSL
 #define HAVE_FIPS_MODE 1
+#endif
 
 /* Define to 1 if you have the `fork' function. */
 #define HAVE_FORK 1
@@ -295,6 +331,9 @@
 
 /* Define if we have LibreSSL */
 /* #undef HAVE_LIBRESSL */
+#ifdef WITH_LIBRESSL
+#define HAVE_LIBRESSL 1
+#endif
 
 /* Define to 1 if you have the `localtime_r' function. */
 #define HAVE_LOCALTIME_R 1
@@ -334,6 +373,9 @@
 
 /* Define to 1 if you have the `OpenSSL_add_all_digests' function. */
 /* #undef HAVE_OPENSSL_ADD_ALL_DIGESTS */
+#ifdef WITH_LIBRESSL
+#define HAVE_OPENSSL_ADD_ALL_DIGESTS 1
+#endif
 
 /* Define to 1 if you have the <openssl/bn.h> header file. */
 #define HAVE_OPENSSL_BN_H 1
@@ -394,6 +436,9 @@
 
 /* Define to 1 if you have the `RAND_cleanup' function. */
 /* #undef HAVE_RAND_CLEANUP */
+#ifdef WITH_LIBRESSL
+#define HAVE_RAND_CLEANUP 1
+#endif
 
 /* Define to 1 if you have the `reallocarray' function. */
 #define HAVE_REALLOCARRAY 1
@@ -453,6 +498,7 @@
 #define HAVE_SSL /**/
 
 /* Define to 1 if you have the `SSL_CTX_set_security_level' function. */
+#ifndef WITH_LIBRESSL
 #define HAVE_SSL_CTX_SET_SECURITY_LEVEL 1
 
 /* Define to 1 if you have the `SSL_get0_peername' function. */
@@ -460,6 +506,7 @@
 
 /* Define to 1 if you have the `SSL_set1_host' function. */
 #define HAVE_SSL_SET1_HOST 1
+#endif
 
 /* Define to 1 if you have the <stdarg.h> header file. */
 #define HAVE_STDARG_H 1
@@ -737,6 +784,7 @@
 /* #undef USE_ECDSA_EVP_WORKAROUND */
 
 /* Define this to enable ED25519 support. */
+#ifndef WITH_LIBRESSL
 #define USE_ED25519 1
 
 /* Define this to enable ED448 support. */
@@ -744,6 +792,9 @@
 
 /* Define this to enable GOST support. */
 /* #undef USE_GOST */
+#else
+#define USE_GOST 1
+#endif
 
 /* Define to 1 to use ipsecmod support. */
 /* #undef USE_IPSECMOD */

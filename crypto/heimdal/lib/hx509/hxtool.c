@@ -1387,12 +1387,20 @@ info(void *opt, int argc, char **argv)
     {
 	const RSA_METHOD *m = RSA_get_default_method();
 	if (m != NULL)
+#ifdef LIBRESSL_VERSION_NUMBER
+	    printf("rsa: %s\n", m->name);
+#else
 	    printf("rsa: %s\n", RSA_meth_get0_name(m));
+#endif
     }
     {
 	const DH_METHOD *m = DH_get_default_method();
 	if (m != NULL)
+#ifdef LIBRESSL_VERSION_NUMBER
+	    printf("dh: %s\n", m->name);
+#else
 	    printf("dh: %s\n", DH_meth_get0_name(m));
+#endif
     }
 #ifdef HAVE_OPENSSL
     {

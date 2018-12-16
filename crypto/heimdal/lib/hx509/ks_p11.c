@@ -213,6 +213,7 @@ p11_rsa_finish(RSA *rsa)
     return 1;
 }
 
+#ifndef LIBRESSL_VERSION_NUMBER
 static const RSA_METHOD *
 get_p11_rsa_pkcs1_method(void)
 {
@@ -254,6 +255,26 @@ out:
     RSA_meth_free(new_method);
     return NULL;
 }
+#else
+/* Restore original behavior for LibreSSL, from line 217
+   https://github.com/heimdal/heimdal/blob/heimdal-7-1-branch/lib/hx509/ks_p11.c */
+static const RSA_METHOD p11_rsa_pkcs1_method = {
+    "hx509 PKCS11 PKCS#1 RSA",
+    p11_rsa_public_encrypt,
+    p11_rsa_public_decrypt,
+    p11_rsa_private_encrypt,
+    p11_rsa_private_decrypt,
+    NULL,
+    NULL,
+    p11_rsa_init,
+    p11_rsa_finish,
+    0,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+#endif
 
 /*
  *
@@ -678,10 +699,16 @@ collect_private_key(hx509_context context,
     if (p->ref == UINT_MAX)
 	_hx509_abort("pkcs11 ref == UINT_MAX on alloc");
 
+#ifndef LIBRESSL_VERSION_NUMBER
     meth = get_p11_rsa_pkcs1_method();
     if (meth == NULL)
 	_hx509_abort("failed to create RSA method");
     RSA_set_method(rsa, meth);
+#else
+/* Restore original behavior for LibreSSL, from line 666
+   https://github.com/heimdal/heimdal/blob/heimdal-7-1-branch/lib/hx509/ks_p11.c */
+    RSA_set_method(rsa, &p11_rsa_pkcs1_method);
+#endif
     ret = RSA_set_app_data(rsa, p11rsa);
     if (ret != 1)
 	_hx509_abort("RSA_set_app_data");
