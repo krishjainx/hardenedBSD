@@ -14,8 +14,6 @@ CONFS=	DAEMON \
 	abi \
 	addswap \
 	adjkerntz \
-	auditd \
-	auditdistd \
 	bgfsck \
 	${_blacklistd} \
 	${_bluetooth} \
@@ -161,6 +159,12 @@ APM+=		apm
 APM+=		apmd
 .endif
 APMPACKAGE=	apm
+.endif
+
+.if ${MK_AUDIT} != "no"
+CONFGROUPS+=	AUDIT
+AUDIT+=		auditd
+AUDIT+=		auditdistd
 .endif
 
 .if ${MK_AUTOFS} != "no"
