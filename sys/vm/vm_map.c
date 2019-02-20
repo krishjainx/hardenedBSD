@@ -3459,6 +3459,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	    pmap_pinit);
 	if (vm2 == NULL)
 		return (NULL);
+
 	vm2->vm_taddr = vm1->vm_taddr;
 	vm2->vm_daddr = vm1->vm_daddr;
 	vm2->vm_maxsaddr = vm1->vm_maxsaddr;
