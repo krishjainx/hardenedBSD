@@ -128,6 +128,7 @@ __DEFAULT_YES_OPTIONS = \
     LIBPTHREAD \
     LIBTHR \
     LOADER_GELI \
+    LOADER_LUA \
     LOADER_OFW \
     LOADER_UBOOT \
     LOCALES \
@@ -187,6 +188,7 @@ __DEFAULT_YES_OPTIONS = \
     WIRELESS \
     WPA_SUPPLICANT_EAPOL \
     ZFS \
+    LOADER_ZFS \
     ZONEINFO
 
 __DEFAULT_NO_OPTIONS = \
@@ -202,7 +204,6 @@ __DEFAULT_NO_OPTIONS = \
     LINT \
     LOADER_FIREWIRE \
     LOADER_FORCE_LE \
-    LOADER_LUA \
     NAND \
     OFED_EXTRA \
     OPENLDAP \
@@ -297,10 +298,6 @@ BROKEN_OPTIONS+=LIBSOFT
 .if ${__T:Mmips*} || ${__TT:Mpc98*} || ${__T:Mpowerpc*} || ${__T:Msparc64} || \
     ${__T:Mriscv*}
 BROKEN_OPTIONS+=EFI
-.endif
-# GELI isn't supported on !x86
-.if ${__T} != "i386" && ${__T} != "amd64"
-BROKEN_OPTIONS+=LOADER_GELI
 .endif
 # OFW is only for powerpc and sparc64, exclude others
 .if ${__T:Mpowerpc*} == "" && ${__T:Msparc64} == ""
@@ -399,6 +396,7 @@ MK_SOURCELESS_UCODE:= no
 
 .if ${MK_CDDL} == "no"
 MK_ZFS:=	no
+MK_LOADER_ZFS:=	no
 MK_CTF:=	no
 .endif
 
