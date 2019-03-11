@@ -38,6 +38,8 @@
 #   xargs -n1 | sort | uniq -d;
 # done
 
+# 20190311: libexecinfo move to /lib
+OLD_LIBS+=usr/lib/libexecinfo.so.1
 # 20190304: new libc++ import which bumps version from 7.0.1 to 8.0.0.
 OLD_FILES+=usr/include/c++/v1/experimental/dynarray
 # 20190304: new clang import which bumps version from 7.0.1 to 8.0.0.
@@ -166,6 +168,7 @@ OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.asan-preinit-x86_64.a
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.asan-x86_64.a
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.asan-x86_64.so
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.asan_cxx-i386.a
+OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.cfi-x86_64.a
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.asan_cxx-x86_64.a
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.msan-x86_64.a
 OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.msan_cxx-x86_64.a
@@ -341,6 +344,7 @@ OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.asan-x86_64.a
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.asan-x86_64.so
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.asan_cxx-i386.a
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.asan_cxx-x86_64.a
+OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.cfi-x86_64.a
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.profile-arm.a
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.profile-armhf.a
 OLD_FILES+=usr/lib/clang/6.0.1/lib/freebsd/libclang_rt.profile-i386.a
