@@ -16,6 +16,38 @@ from older versions of FreeBSD, try WITHOUT_CLANG and WITH_GCC to bootstrap to
 the tip of head, and then rebuild without this option. The bootstrap process
 from older version of current across the gcc/clang cutover is a bit fragile.
 
+20190205:	p3	FreeBSD-SA-19:01.syscall
+			FreeBSD-SA-19:02.fd
+			FreeBSD-EN-19:06.dtrace
+			FreeBSD-EN-19:07.lle
+
+	amd64: clear callee-preserved registers on syscall exit
+							[SA-19:01.syscall]
+
+	Avoid leaking fp references when truncating SCM_RIGHTS control messages.
+							[SA-19:02.fd]
+
+	dtrace: fix userspace access on boxes with SMAP [EN-19:06.dtrace]
+
+	Fix an LLE lookup race [EN-19:07.lle]
+
+20190109:	p2	FreeBSD-EN-19:01.cc_cubic
+			FreeBSD-EN-19:02.tcp
+			FreeBSD-EN-19:03.sqlite
+			FreeBSD-EN-19:04.tzdata
+
+	Revert CC Cubic: fix underflow for cubic_cwnd() [EN-19:01.cc_cubic]
+
+	Fix a TCP handling of received segments. [EN-19:02.tcp]
+
+	Update sqlite3-3.23.1 --> sqlite3-3.26.0 (3260000) [EN-19:03.sqlite]
+
+	Import tzdata 2018h, 2018i [EN-19:04.tzdata]
+
+20181219:	p1	FreeBSD-SA-18:15.bootpd
+
+	bootpd: validate hardware type [SA-18:15.bootpd]
+
 20181211:
 	12.0-RELEASE.
 
