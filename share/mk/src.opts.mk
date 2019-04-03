@@ -210,6 +210,7 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_FIREWIRE \
     LOADER_FORCE_LE \
     LOADER_VERBOSE \
+    LOADER_VERIEXEC_PASS_MANIFEST \
     NAND \
     OFED \
     OFED_EXTRA \
@@ -610,6 +611,9 @@ MK_NTP:=	no
 MK_OPENNTPD:=	no
 .endif
 
+.if ${MK_LOADER_VERIEXEC} == "no"
+MK_LOADER_VERIEXEC_PASS_MANIFEST := no
+.endif
 
 #
 # MK_* options whose default value depends on another option.
