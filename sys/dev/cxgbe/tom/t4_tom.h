@@ -257,13 +257,6 @@ struct listen_ctx {
 	TAILQ_HEAD(, synq_entry) synq;
 };
 
-struct clip_entry {
-	TAILQ_ENTRY(clip_entry) link;
-	struct in6_addr lip;	/* local IPv6 address */
-	u_int refcount;
-};
-
-TAILQ_HEAD(clip_head, clip_entry);
 struct tom_data {
 	struct toedev tod;
 
@@ -277,10 +270,6 @@ struct tom_data {
 	int lctx_count;		/* # of lctx in the hash table */
 
 	struct ppod_region pr;
-
-	struct mtx clip_table_lock;
-	struct clip_head clip_table;
-	int clip_gen;
 
 	/* WRs that will not be sent to the chip because L2 resolution failed */
 	struct mtx unsent_wr_lock;
@@ -329,7 +318,6 @@ void insert_tid(struct adapter *, int, void *, int);
 void *lookup_tid(struct adapter *, int);
 void update_tid(struct adapter *, int, void *);
 void remove_tid(struct adapter *, int, int);
-void release_tid(struct adapter *, int, struct sge_wrq *);
 int find_best_mtu_idx(struct adapter *, struct in_conninfo *,
     struct offload_settings *);
 u_long select_rcv_wnd(struct socket *);
@@ -341,9 +329,6 @@ int select_ulp_mode(struct socket *, struct adapter *,
     struct offload_settings *);
 void set_ulp_mode(struct toepcb *, int);
 int negative_advice(int);
-struct clip_entry *hold_lip(struct tom_data *, struct in6_addr *,
-    struct clip_entry *);
-void release_lip(struct tom_data *, struct clip_entry *);
 
 /* t4_connect.c */
 void t4_init_connect_cpl_handlers(void);
@@ -387,7 +372,6 @@ void t4_set_tcb_field(struct adapter *, struct sge_wrq *, struct toepcb *,
     uint16_t, uint64_t, uint64_t, int, int);
 void t4_push_frames(struct adapter *sc, struct toepcb *toep, int drop);
 void t4_push_pdus(struct adapter *sc, struct toepcb *toep, int drop);
-int do_set_tcb_rpl(struct sge_iq *, const struct rss_header *, struct mbuf *);
 
 /* t4_ddp.c */
 int t4_init_ppod_region(struct ppod_region *, struct t4_range *, u_int,
@@ -413,7 +397,6 @@ void ddp_queue_toep(struct toepcb *);
 void release_ddp_resources(struct toepcb *toep);
 void handle_ddp_close(struct toepcb *, struct tcpcb *, uint32_t);
 void handle_ddp_indicate(struct toepcb *);
-void handle_ddp_tcb_rpl(struct toepcb *, const struct cpl_set_tcb_rpl *);
 void insert_ddp_data(struct toepcb *, uint32_t);
 const struct offload_settings *lookup_offload_policy(struct adapter *, int,
     struct mbuf *, uint16_t, struct inpcb *);
