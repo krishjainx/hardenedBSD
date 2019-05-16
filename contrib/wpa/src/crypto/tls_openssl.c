@@ -259,10 +259,6 @@ struct tls_connection {
 	X509 *peer_issuer;
 	X509 *peer_issuer_issuer;
 
-<<<<<<< HEAD
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
-=======
->>>>>>> origin/freebsd/11.2-releng/master
 	unsigned char client_random[SSL3_RANDOM_SIZE];
 	unsigned char server_random[SSL3_RANDOM_SIZE];
 
@@ -3247,14 +3243,10 @@ static int tls_parse_pkcs12(struct tls_data *data, SSL *ssl, PKCS12 *p12,
 
 	if (certs) {
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(LIBRESSL_VERSION_NUMBER)
-<<<<<<< HEAD
-		SSL_clear_chain_certs(ssl);
-=======
 		if (ssl)
 			SSL_clear_chain_certs(ssl);
 		else
 			SSL_CTX_clear_chain_certs(data->ssl);
->>>>>>> origin/freebsd/11.2-releng/master
 		while ((cert = sk_X509_pop(certs)) != NULL) {
 			X509_NAME_oneline(X509_get_subject_name(cert), buf,
 					  sizeof(buf));
@@ -3857,19 +3849,6 @@ int tls_connection_get_random(void *ssl_ctx, struct tls_connection *conn,
 	if (conn == NULL || keys == NULL)
 		return -1;
 	ssl = conn->ssl;
-<<<<<<< HEAD
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-	if (ssl == NULL || ssl->s3 == NULL || ssl->session == NULL)
-		return -1;
-
-	os_memset(keys, 0, sizeof(*keys));
-	keys->client_random = ssl->s3->client_random;
-	keys->client_random_len = SSL3_RANDOM_SIZE;
-	keys->server_random = ssl->s3->server_random;
-	keys->server_random_len = SSL3_RANDOM_SIZE;
-#else
-=======
->>>>>>> origin/freebsd/11.2-releng/master
 	if (ssl == NULL)
 		return -1;
 
@@ -3888,13 +3867,9 @@ int tls_connection_get_random(void *ssl_ctx, struct tls_connection *conn,
 #ifdef OPENSSL_NEED_EAP_FAST_PRF
 static int openssl_get_keyblock_size(SSL *ssl)
 {
-<<<<<<< HEAD
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-=======
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || \
 	(defined(LIBRESSL_VERSION_NUMBER) && \
 	 LIBRESSL_VERSION_NUMBER < 0x20700000L)
->>>>>>> origin/freebsd/11.2-releng/master
 	const EVP_CIPHER *c;
 	const EVP_MD *h;
 	int md_size;
@@ -3953,54 +3928,10 @@ int tls_connection_export_key(void *tls_ctx, struct tls_connection *conn,
 			      const char *label, const u8 *context,
 			      size_t context_len, u8 *out, size_t out_len)
 {
-<<<<<<< HEAD
-#ifdef CONFIG_FIPS
-	wpa_printf(MSG_ERROR, "OpenSSL: TLS keys cannot be exported in FIPS "
-		   "mode");
-	return -1;
-#else /* CONFIG_FIPS */
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-	SSL *ssl;
-	u8 *rnd;
-	int ret = -1;
-	int skip = 0;
-	u8 *tmp_out = NULL;
-	u8 *_out = out;
-	const char *ver;
-
-	/*
-	 * TLS library did not support key generation, so get the needed TLS
-	 * session parameters and use an internal implementation of TLS PRF to
-	 * derive the key.
-	 */
-
-	if (conn == NULL)
-		return -1;
-	ssl = conn->ssl;
-	if (ssl == NULL || ssl->s3 == NULL || ssl->session == NULL ||
-	    ssl->session->master_key_length <= 0)
-		return -1;
-	ver = SSL_get_version(ssl);
-
-	if (skip_keyblock) {
-		skip = openssl_get_keyblock_size(ssl);
-		if (skip < 0)
-			return -1;
-		tmp_out = os_malloc(skip + out_len);
-		if (!tmp_out)
-			return -1;
-		_out = tmp_out;
-	}
-
-	rnd = os_malloc(2 * SSL3_RANDOM_SIZE);
-	if (!rnd) {
-		os_free(tmp_out);
-=======
 	if (!conn ||
 	    SSL_export_keying_material(conn->ssl, out, out_len, label,
 				       os_strlen(label), context, context_len,
 				       context != NULL) != 1)
->>>>>>> origin/freebsd/11.2-releng/master
 		return -1;
 	return 0;
 }
