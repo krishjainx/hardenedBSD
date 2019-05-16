@@ -618,7 +618,6 @@ struct proc {
 	struct sigiolst	p_sigiolst;	/* (c) List of sigio sources. */
 	int		p_sigparent;	/* (c) Signal to parent on exit. */
 	int		p_sig;		/* (n) For core dump/debugger XXX. */
-	u_long		p_code;		/* (n) For core dump/debugger XXX. */
 	u_int		p_stops;	/* (c) Stop event bitmask. */
 	u_int		p_stype;	/* (c) Stop event type. */
 	char		p_step;		/* (c) Process is stopped. */
@@ -763,6 +762,9 @@ struct proc {
 #define	P2_AST_SU	0x00000008	/* Handles SU ast for kthreads. */
 #define	P2_PTRACE_FSTP	0x00000010 /* SIGSTOP from PT_ATTACH not yet handled. */
 #define	P2_TRAPCAP	0x00000020	/* SIGTRAP on ENOTCAPABLE */
+#define	P2_ASLR_ENABLE	0x00000040	/* Force enable ASLR. */
+#define	P2_ASLR_DISABLE	0x00000080	/* Force disable ASLR. */
+#define	P2_ASLR_IGNSTART 0x00000100	/* Enable ASLR to consume sbrk area. */
 
 /* Flags protected by proctree_lock, kept in p_treeflags. */
 #define	P_TREE_ORPHANED		0x00000001	/* Reparented, on orphan list */
@@ -993,8 +995,11 @@ extern struct uma_zone *proc_zone;
 
 struct	proc *pfind(pid_t);		/* Find process by id. */
 struct	proc *pfind_any(pid_t);		/* Find (zombie) process by id. */
+struct	proc *pfind_any_locked(pid_t pid); /* Find process by id, locked. */
 struct	pgrp *pgfind(pid_t);		/* Find process group by id. */
 struct	proc *zpfind(pid_t);		/* Find zombie process by id. */
+void	pidhash_slockall(void);		/* Shared lock all pid hash lists. */
+void	pidhash_sunlockall(void);	/* Shared unlock all pid hash lists. */
 
 struct	fork_req {
 	int		fr_flags;

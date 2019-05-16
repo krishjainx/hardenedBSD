@@ -136,7 +136,7 @@ struct vm_map_entry {
 #define MAP_ENTRY_IN_TRANSITION		0x0100	/* entry being changed */
 #define MAP_ENTRY_NEEDS_WAKEUP		0x0200	/* waiters in transition */
 #define MAP_ENTRY_NOCOREDUMP		0x0400	/* don't include in a core */
-
+#define	MAP_ENTRY_VN_EXEC		0x0800	/* text vnode mapping */
 #define	MAP_ENTRY_GROWS_DOWN		0x1000	/* Top-down stacks */
 #define	MAP_ENTRY_GROWS_UP		0x2000	/* Bottom-up stacks */
 
@@ -201,6 +201,7 @@ struct vm_map {
 	vm_flags_t flags;		/* flags for this vm_map */
 	vm_map_entry_t root;		/* Root of a binary search tree */
 	pmap_t pmap;			/* (c) Physical map */
+	vm_offset_t anon_loc;
 	int busy;
 };
 
@@ -209,6 +210,9 @@ struct vm_map {
  */
 #define MAP_WIREFUTURE		0x01	/* wire all future pages */
 #define	MAP_BUSY_WAKEUP		0x02
+#define	MAP_IS_SUB_MAP		0x04	/* has parent */
+#define	MAP_ASLR		0x08	/* enabled ASLR */
+#define	MAP_ASLR_IGNSTART	0x10
 
 #ifdef	_KERNEL
 #if defined(KLD_MODULE) && !defined(KLD_TIED)
@@ -355,6 +359,7 @@ long vmspace_resident_count(struct vmspace *vmspace);
 #define	MAP_ACC_NO_CHARGE	0x8000
 #define	MAP_CREATE_STACK_GAP_UP	0x10000
 #define	MAP_CREATE_STACK_GAP_DN	0x20000
+#define	MAP_VN_EXEC		0x40000
 
 /*
  * vm_fault option flags
@@ -424,8 +429,10 @@ int vm_map_madvise (vm_map_t, vm_offset_t, vm_offset_t, int);
 int vm_map_stack (vm_map_t, vm_offset_t, vm_size_t, vm_prot_t, vm_prot_t, int);
 int vm_map_unwire(vm_map_t map, vm_offset_t start, vm_offset_t end,
     int flags);
-int vm_map_wire(vm_map_t map, vm_offset_t start, vm_offset_t end,
+int vm_map_wire(vm_map_t map, vm_offset_t start, vm_offset_t end, int flags);
+int vm_map_wire_locked(vm_map_t map, vm_offset_t start, vm_offset_t end,
     int flags);
 long vmspace_swap_count(struct vmspace *vmspace);
+void vm_map_entry_set_vnode_text(vm_map_entry_t entry, bool add);
 #endif				/* _KERNEL */
 #endif				/* _VM_MAP_ */

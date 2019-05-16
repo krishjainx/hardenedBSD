@@ -585,8 +585,12 @@ off_t	 __syscall(quad_t, ...);
 int	 undelete(const char *);
 int	 unwhiteout(const char *);
 void	*valloc(size_t);			/* obsoleted by malloc() */
+<<<<<<< HEAD
 int	 getdtablecount(void);
 int	 getentropy(void *, size_t);
+=======
+int	 funlinkat(int, const char *, int, int);
+>>>>>>> origin/hardened/current/master
 
 #ifndef _OPTRESET_DECLARED
 #define	_OPTRESET_DECLARED

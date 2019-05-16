@@ -61,6 +61,7 @@ struct class {
 };
 
 struct dev_pm_ops {
+	int (*prepare)(struct device *dev);
 	int (*suspend)(struct device *dev);
 	int (*suspend_late)(struct device *dev);
 	int (*resume)(struct device *dev);
@@ -105,7 +106,7 @@ struct device {
 	struct class	*class;
 	void		(*release)(struct device *dev);
 	struct kobject	kobj;
-	uint64_t	*dma_mask;
+	void		*dma_priv;
 	void		*driver_data;
 	unsigned int	irq;
 #define	LINUX_IRQ_INVALID	65535
