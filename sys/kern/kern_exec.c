@@ -143,8 +143,6 @@ SYSCTL_INT(_kern, OID_AUTO, disallow_high_osrel, CTLFLAG_RW,
     &disallow_high_osrel, 0,
     "Disallow execution of binaries built for higher version of the world");
 
-EVENTHANDLER_LIST_DECLARE(process_exec);
-
 static int
 sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS)
 {
