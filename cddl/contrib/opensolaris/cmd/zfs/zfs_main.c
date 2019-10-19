@@ -284,13 +284,14 @@ get_usage(zfs_help_t idx)
 		    "<filesystem|volume|snapshot>\n"
 		    "\trename [-f] -p <filesystem|volume> <filesystem|volume>\n"
 		    "\trename -r <snapshot> <snapshot>\n"
+		    "\trename <bookmark> <bookmark>\n"
 		    "\trename -u [-p] <filesystem> <filesystem>"));
 	case HELP_ROLLBACK:
 		return (gettext("\trollback [-rRf] <snapshot>\n"));
 	case HELP_SEND:
 		return (gettext("\tsend [-DnPpRvLec] [-[iI] snapshot] "
 		    "<snapshot>\n"
-		    "\tsend [-Le] [-i snapshot|bookmark] "
+		    "\tsend [-LPcenv] [-i snapshot|bookmark] "
 		    "<filesystem|volume|snapshot>\n"
 		    "\tsend [-nvPe] -t <receive_resume_token>\n"));
 	case HELP_SET:
@@ -3254,6 +3255,7 @@ zfs_do_list(int argc, char **argv)
  * zfs rename [-f] <fs | snap | vol> <fs | snap | vol>
  * zfs rename [-f] -p <fs | vol> <fs | vol>
  * zfs rename -r <snap> <snap>
+ * zfs rename <bmark> <bmark>
  * zfs rename -u [-p] <fs> <fs>
  *
  * Renames the given dataset to another of the same type.
@@ -3270,6 +3272,7 @@ zfs_do_rename(int argc, char **argv)
 	int ret = 0;
 	int types;
 	boolean_t parents = B_FALSE;
+	boolean_t bookmarks = B_FALSE;
 	char *snapshot = NULL;
 
 	/* check options */
@@ -3320,7 +3323,7 @@ zfs_do_rename(int argc, char **argv)
 		usage(B_FALSE);
 	}
 
-	if (flags.recurse && strchr(argv[0], '@') == 0) {
+	if (flags.recurse && strchr(argv[0], '@') == NULL) {
 		(void) fprintf(stderr, gettext("source dataset for recursive "
 		    "rename must be a snapshot\n"));
 		usage(B_FALSE);
@@ -3332,10 +3335,22 @@ zfs_do_rename(int argc, char **argv)
 		usage(B_FALSE);
 	}
 
+	if (strchr(argv[0], '#') != NULL)
+		bookmarks = B_TRUE;
+
+	if (bookmarks && (flags.nounmount || flags.recurse ||
+	    flags.forceunmount || parents)) {
+		(void) fprintf(stderr, gettext("options are not supported "
+		    "for renaming bookmarks\n"));
+		usage(B_FALSE);
+	}
+
 	if (flags.nounmount)
 		types = ZFS_TYPE_FILESYSTEM;
 	else if (parents)
 		types = ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME;
+	else if (bookmarks)
+		types = ZFS_TYPE_BOOKMARK;
 	else
 		types = ZFS_TYPE_DATASET;
 
@@ -3928,13 +3943,11 @@ zfs_do_send(int argc, char **argv)
 	if (strchr(argv[0], '@') == NULL ||
 	    (fromname && strchr(fromname, '#') != NULL)) {
 		char frombuf[ZFS_MAX_DATASET_NAME_LEN];
-		enum lzc_send_flags lzc_flags = 0;
 
 		if (flags.replicate || flags.doall || flags.props ||
-		    flags.dedup || flags.dryrun || flags.verbose ||
-		    flags.progress) {
-			(void) fprintf(stderr,
-			    gettext("Error: "
+		    flags.dedup || (strchr(argv[0], '@') == NULL &&
+		    (flags.dryrun || flags.verbose || flags.progress))) {
+			(void) fprintf(stderr, gettext("Error: "
 			    "Unsupported flag with filesystem or bookmark.\n"));
 			return (1);
 		}
@@ -3942,13 +3955,6 @@ zfs_do_send(int argc, char **argv)
 		zhp = zfs_open(g_zfs, argv[0], ZFS_TYPE_DATASET);
 		if (zhp == NULL)
 			return (1);
-
-		if (flags.largeblock)
-			lzc_flags |= LZC_SEND_FLAG_LARGE_BLOCK;
-		if (flags.embed_data)
-			lzc_flags |= LZC_SEND_FLAG_EMBED_DATA;
-		if (flags.compress)
-			lzc_flags |= LZC_SEND_FLAG_COMPRESS;
 
 		if (fromname != NULL &&
 		    (fromname[0] == '#' || fromname[0] == '@')) {
@@ -3963,7 +3969,7 @@ zfs_do_send(int argc, char **argv)
 			(void) strlcat(frombuf, fromname, sizeof (frombuf));
 			fromname = frombuf;
 		}
-		err = zfs_send_one(zhp, fromname, STDOUT_FILENO, lzc_flags);
+		err = zfs_send_one(zhp, fromname, STDOUT_FILENO, flags);
 		zfs_close(zhp);
 		return (err != 0);
 	}

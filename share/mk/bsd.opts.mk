@@ -69,9 +69,15 @@ __DEFAULT_YES_OPTIONS = \
     WARNS
 
 __DEFAULT_NO_OPTIONS = \
+    BIND_NOW \
     CCACHE_BUILD \
     CTF \
     INSTALL_AS_USER \
+<<<<<<< HEAD
+=======
+    PIE \
+    RETPOLINE \
+>>>>>>> origin/freebsd/12-stable/master
     STALE_STAGED
 
 __DEFAULT_DEPENDENT_OPTIONS = \

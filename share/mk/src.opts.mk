@@ -193,6 +193,7 @@ __DEFAULT_YES_OPTIONS = \
 
 __DEFAULT_NO_OPTIONS = \
     BEARSSL \
+    BSD_CRTBEGIN \
     BSD_GREP \
     BSD_GREP_FASTMATCH \
     DEVD_PIE \
@@ -441,6 +442,11 @@ __DEFAULT_NO_OPTIONS+=HYPERV
 __DEFAULT_YES_OPTIONS+=NVME
 .else
 __DEFAULT_NO_OPTIONS+=NVME
+.endif
+
+# Sparc64 need extra crt*.o files
+.if ${__T:Msparc64}
+BROKEN_OPTIONS+=BSD_CRTBEGIN
 .endif
 
 .if ${COMPILER_FEATURES:Mc++11} && (${__T} == "amd64" || ${__T} == "i386")

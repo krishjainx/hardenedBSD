@@ -42,6 +42,7 @@ enum {
 	MODE_INVALID,
 	MODE_TRACE,
 	MODE_TRAPCAP,
+	MODE_STACKGAP,
 #ifdef PROC_KPTI_CTL
 	MODE_KPTI,
 #endif
@@ -71,8 +72,13 @@ static void __dead2
 usage(void)
 {
 
+<<<<<<< HEAD
 	fprintf(stderr, "Usage: proccontrol -m (trace|trapcap"
 	    KPTI_USAGE") [-q] "
+=======
+	fprintf(stderr, "Usage: proccontrol -m (aslr|trace|trapcap|"
+	    "stackgap"KPTI_USAGE") [-q] "
+>>>>>>> origin/freebsd/12-stable/master
 	    "[-s (enable|disable)] [-p pid | command]\n");
 	exit(1);
 }
@@ -95,6 +101,8 @@ main(int argc, char *argv[])
 				mode = MODE_TRACE;
 			else if (strcmp(optarg, "trapcap") == 0)
 				mode = MODE_TRAPCAP;
+			else if (strcmp(optarg, "stackgap") == 0)
+				mode = MODE_STACKGAP;
 #ifdef PROC_KPTI_CTL
 			else if (strcmp(optarg, "kpti") == 0)
 				mode = MODE_KPTI;
@@ -141,6 +149,9 @@ main(int argc, char *argv[])
 		case MODE_TRAPCAP:
 			error = procctl(P_PID, pid, PROC_TRAPCAP_STATUS, &arg);
 			break;
+		case MODE_STACKGAP:
+			error = procctl(P_PID, pid, PROC_STACKGAP_STATUS, &arg);
+			break;
 #ifdef PROC_KPTI_CTL
 		case MODE_KPTI:
 			error = procctl(P_PID, pid, PROC_KPTI_STATUS, &arg);
@@ -168,6 +179,26 @@ main(int argc, char *argv[])
 				break;
 			case PROC_TRAPCAP_CTL_DISABLE:
 				printf("disabled\n");
+				break;
+			}
+			break;
+		case MODE_STACKGAP:
+			switch (arg & (PROC_STACKGAP_ENABLE |
+			    PROC_STACKGAP_DISABLE)) {
+			case PROC_STACKGAP_ENABLE:
+				printf("enabled\n");
+				break;
+			case PROC_STACKGAP_DISABLE:
+				printf("disabled\n");
+				break;
+			}
+			switch (arg & (PROC_STACKGAP_ENABLE_EXEC |
+			    PROC_STACKGAP_DISABLE_EXEC)) {
+			case PROC_STACKGAP_ENABLE_EXEC:
+				printf("enabled after exec\n");
+				break;
+			case PROC_STACKGAP_DISABLE_EXEC:
+				printf("disabled after exec\n");
 				break;
 			}
 			break;
@@ -199,6 +230,12 @@ main(int argc, char *argv[])
 			arg = enable ? PROC_TRAPCAP_CTL_ENABLE :
 			    PROC_TRAPCAP_CTL_DISABLE;
 			error = procctl(P_PID, pid, PROC_TRAPCAP_CTL, &arg);
+			break;
+		case MODE_STACKGAP:
+			arg = enable ? PROC_STACKGAP_ENABLE_EXEC :
+			    (PROC_STACKGAP_DISABLE |
+			    PROC_STACKGAP_DISABLE_EXEC);
+			error = procctl(P_PID, pid, PROC_STACKGAP_CTL, &arg);
 			break;
 #ifdef PROC_KPTI_CTL
 		case MODE_KPTI:
