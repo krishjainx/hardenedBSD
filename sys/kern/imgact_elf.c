@@ -131,16 +131,7 @@ SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     nxstack, CTLFLAG_RW, &__elfN(nxstack), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable non-executable stack");
 
-<<<<<<< HEAD
-=======
-#if __ELF_WORD_SIZE == 32
-#if defined(__amd64__)
-int i386_read_exec = 0;
-SYSCTL_INT(_kern_elf32, OID_AUTO, read_exec, CTLFLAG_RW, &i386_read_exec, 0,
-    "enable execution from readable segments");
-#endif
-#endif
-
+#ifndef PAX_ASLR
 static u_long __elfN(pie_base) = ET_DYN_LOAD_ADDR;
 static int
 sysctl_pie_base(SYSCTL_HANDLER_ARGS)
@@ -162,7 +153,6 @@ SYSCTL_PROC(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO, pie_base,
     sysctl_pie_base, "LU",
     "PIE load base without randomization");
 
->>>>>>> origin/freebsd/12-stable/master
 SYSCTL_NODE(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO, aslr, CTLFLAG_RW, 0,
     "");
 #define	ASLR_NODE_OID	__CONCAT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), _aslr)
@@ -189,6 +179,7 @@ SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, stack_gap, CTLFLAG_RW,
     &__elfN(aslr_stack_gap), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE))
     ": maximum percentage of main stack to waste on a random gap");
+#endif /* PAX_ASLR */
 
 static Elf_Brandinfo *elf_brand_list[MAX_BRANDS];
 
@@ -1171,10 +1162,10 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		 * Honour the base load address from the dso if it is
 		 * non-zero for some reason.
 		 */
-<<<<<<< HEAD
+#ifdef PAX_ASLR
 		if (baddr == 0)
 			et_dyn_addr = ET_DYN_LOAD_ADDR;
-=======
+#else
 		if (baddr == 0) {
 			if ((sv->sv_flags & SV_ASLR) == 0 ||
 			    (fctl0 & NT_FREEBSD_FCTL_ASLR_DISABLE) != 0)
@@ -1186,7 +1177,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			else
 				et_dyn_addr = __elfN(pie_base);
 		}
->>>>>>> origin/freebsd/12-stable/master
+#endif /* PAX_ASLR */
 	}
 
 	/*
