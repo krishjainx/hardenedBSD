@@ -1055,14 +1055,24 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	const Elf_Phdr *phdr;
 	Elf_Auxargs *elf_auxargs;
 	struct vmspace *vmspace;
+#ifndef PAX_ASLR
+	vm_map_t map;
+#endif
 	char *interp;
 	Elf_Brandinfo *brand_info;
 	struct sysentvec *sv;
 	u_long addr, baddr, et_dyn_addr, entry, proghdr;
+#ifndef PAX_ASLR
+	u_long maxalign, mapsz, maxv, maxv1;
+#endif
 	uint32_t fctl0;
 	int32_t osrel;
 	bool free_interp;
 	int error, i, n;
+#ifndef PAX_ASLR
+	maxalign = PAGE_SIZE;
+	mapsz = 0;
+#endif
 
 	hdr = (const Elf_Ehdr *)imgp->image_header;
 
@@ -1101,12 +1111,21 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	interp = NULL;
 	free_interp = false;
 	td = curthread;
+#ifndef PAX_ASLR
+	maxalign = PAGE_SIZE;
+	mapsz = 0;
+#endif
 
 	for (i = 0; i < hdr->e_phnum; i++) {
 		switch (phdr[i].p_type) {
 		case PT_LOAD:
 			if (n == 0)
 				baddr = phdr[i].p_vaddr;
+#ifndef PAX_ASLR
+			if (phdr[i].p_align > maxalign)
+				maxalign = phdr[i].p_align;
+			mapsz += phdr[i].p_memsz;
+#endif
 			n++;
 
 			/*
@@ -1151,6 +1170,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		error = ENOEXEC;
 		goto ret;
 	}
+	sv = brand_info->sysvec;
 	et_dyn_addr = 0;
 	if (hdr->e_type == ET_DYN) {
 		if ((brand_info->flags & BI_CAN_EXEC_DYN) == 0) {
@@ -1193,10 +1213,59 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	 */
 	VOP_UNLOCK(imgp->vp, 0);
 
-	sv = brand_info->sysvec;
+#ifndef PAX_ASLR
+	/*
+	 * Decide whether to enable randomization of user mappings.
+	 * First, reset user preferences for the setid binaries.
+	 * Then, account for the support of the randomization by the
+	 * ABI, by user preferences, and make special treatment for
+	 * PIE binaries.
+	 */
+	if (imgp->credential_setid) {
+		PROC_LOCK(imgp->proc);
+		imgp->proc->p_flag2 &= ~(P2_ASLR_ENABLE | P2_ASLR_DISABLE);
+		PROC_UNLOCK(imgp->proc);
+	}
+	if ((sv->sv_flags & SV_ASLR) == 0 ||
+	    (imgp->proc->p_flag2 & P2_ASLR_DISABLE) != 0 ||
+	    (fctl0 & NT_FREEBSD_FCTL_ASLR_DISABLE) != 0) {
+		KASSERT(et_dyn_addr != ET_DYN_ADDR_RAND,
+		    ("et_dyn_addr == RAND and !ASLR"));
+	} else if ((imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0 ||
+	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC) ||
+	    et_dyn_addr == ET_DYN_ADDR_RAND) {
+		imgp->map_flags |= MAP_ASLR;
+		/*
+		 * If user does not care about sbrk, utilize the bss
+		 * grow region for mappings as well.  We can select
+		 * the base for the image anywere and still not suffer
+		 * from the fragmentation.
+		 */
+		if (!__elfN(aslr_honor_sbrk) ||
+		    (imgp->proc->p_flag2 & P2_ASLR_IGNSTART) != 0)
+			imgp->map_flags |= MAP_ASLR_IGNSTART;
+	}
+#endif /* PAX_ASLR */
+
 	error = exec_new_vmspace(imgp, sv);
+	vmspace = imgp->proc->p_vmspace;
+#ifndef PAX_ASLR
+	map = &vmspace->vm_map;
+#endif
+
 	imgp->proc->p_sysent = sv;
 
+#ifndef PAX_ASLR
+	maxv = vm_map_max(map) - lim_max(td, RLIMIT_STACK);
+	if (et_dyn_addr == ET_DYN_ADDR_RAND) {
+		KASSERT((map->flags & MAP_ASLR) != 0,
+		    ("ET_DYN_ADDR_RAND but !MAP_ASLR"));
+		et_dyn_addr = __CONCAT(rnd_, __elfN(base))(map,
+		    vm_map_min(map) + mapsz + lim_max(td, RLIMIT_DATA),
+		    /* reserve half of the address space to interpreter */
+		    maxv / 2, 1UL << flsl(maxalign));
+	}
+#else /* PAX_ASLR */
 	et_dyn_addr = 0;
 	if (hdr->e_type == ET_DYN) {
 		if ((brand_info->flags & BI_CAN_EXEC_DYN) == 0) {
@@ -1210,11 +1279,10 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		 */
 		if (baddr == 0) {
 			et_dyn_addr = ET_DYN_LOAD_ADDR;
-#ifdef PAX_ASLR
 			pax_aslr_execbase(imgp->proc, &et_dyn_addr);
-#endif
 		}
 	}
+#endif
 
 	vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
 	if (error != 0)
@@ -1236,18 +1304,38 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	 * calculation is that it leaves room for the heap to grow to
 	 * its maximum allowed size.
 	 */
-	PROC_LOCK(imgp->proc);
-	vmspace = imgp->proc->p_vmspace;
 	addr = round_page((vm_offset_t)vmspace->vm_daddr + lim_max(td,
 	    RLIMIT_DATA));
+#ifndef PAX_ASLR
+	if ((map->flags & MAP_ASLR) != 0) {
+		maxv1 = maxv / 2 + addr / 2;
+		MPASS(maxv1 >= addr);	/* No overflow */
+		map->anon_loc = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
+		    MAXPAGESIZES > 1 ? pagesizes[1] : pagesizes[0]);
+	} else {
+		map->anon_loc = addr;
+	}
+#endif /* PAX_ASLR */
+
 #ifdef PAX_ASLR
+	// XXXOP: Is the locking here really needed?!
+	PROC_LOCK(imgp->proc);
 	pax_aslr_rtld(imgp->proc, &addr);
-#endif
 	PROC_UNLOCK(imgp->proc);
+#endif
 	imgp->entry_addr = entry;
 
 	if (interp != NULL) {
 		VOP_UNLOCK(imgp->vp, 0);
+#ifndef PAX_ASLR
+		if ((map->flags & MAP_ASLR) != 0) {
+			/* Assume that interpeter fits into 1/4 of AS */
+			maxv1 = maxv / 2 + addr / 2;
+			MPASS(maxv1 >= addr);	/* No overflow */
+			addr = __CONCAT(rnd_, __elfN(base))(map, addr,
+			    maxv1, PAGE_SIZE);
+		}
+#endif /* PAX_ASLR */
 		error = __elfN(load_interp)(imgp, brand_info, interp, &addr,
 		    &imgp->entry_addr);
 		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
