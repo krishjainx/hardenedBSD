@@ -3353,8 +3353,13 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 		    uap->com, PTRIN(uap->data)));
 
 	switch (uap->com) {
+#ifndef PAX_ASLR
+	case PROC_ASLR_CTL:
+#endif
 	case PROC_SPROTECT:
+#ifndef PAX_ASLR
 	case PROC_STACKGAP_CTL:
+#endif
 	case PROC_TRACE_CTL:
 	case PROC_TRAPCAP_CTL:
 		error = copyin(PTRIN(uap->data), &flags, sizeof(flags));
@@ -3385,11 +3390,10 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 			return (error);
 		data = &x.rk;
 		break;
-<<<<<<< HEAD
-=======
+#ifndef PAX_ASLR
 	case PROC_ASLR_STATUS:
 	case PROC_STACKGAP_STATUS:
->>>>>>> origin/freebsd/12-stable/master
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 		data = &flags;
@@ -3418,11 +3422,10 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 		if (error == 0)
 			error = error1;
 		break;
-<<<<<<< HEAD
-=======
+#ifndef PAX_ASLR
 	case PROC_ASLR_STATUS:
 	case PROC_STACKGAP_STATUS:
->>>>>>> origin/freebsd/12-stable/master
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 		if (error == 0)
