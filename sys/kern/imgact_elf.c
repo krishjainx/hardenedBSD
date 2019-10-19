@@ -839,6 +839,7 @@ fail:
 	return (error);
 }
 
+#ifndef PAX_ASLR
 static u_long
 __CONCAT(rnd_, __elfN(base))(vm_map_t map __unused, u_long minv, u_long maxv,
     u_int align)
@@ -862,6 +863,7 @@ __CONCAT(rnd_, __elfN(base))(vm_map_t map __unused, u_long minv, u_long maxv,
 	    res, maxv, minv, rbase));
 	return (res);
 }
+#endif /* PAX_ASLR */
 
 static int
 __elfN(enforce_limits)(struct image_params *imgp, const Elf_Ehdr *hdr,
