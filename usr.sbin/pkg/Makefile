@@ -12,14 +12,10 @@ PKGCONFBRANCH?=	quarterly
 PKGCONFBRANCH?=	quarterly
 .  else
 PKGCONFBRANCH?=	latest
-<<<<<<< HEAD
-CONFS=		FreeBSD.conf.${PKGCONFBRANCH} HardenedBSD.conf
-=======
 .  endif
 . endif
 .endif
-CONFS=		FreeBSD.conf.${PKGCONFBRANCH}
->>>>>>> origin/freebsd/12-stable/master
+CONFS=		FreeBSD.conf.${PKGCONFBRANCH} HardenedBSD.conf
 CONFSNAME=	FreeBSD.conf
 CONFSDIR=	/etc/pkg
 CONFSMODE=	644
