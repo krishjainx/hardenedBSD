@@ -15,8 +15,7 @@ PKGCONFBRANCH?=	latest
 .  endif
 . endif
 .endif
-CONFS=		FreeBSD.conf.${PKGCONFBRANCH} HardenedBSD.conf
-CONFSNAME=	FreeBSD.conf HardenedBSD.conf
+CONFS=		HardenedBSD.conf
 CONFSDIR=	/etc/pkg
 CONFSMODE=	644
 PROG=	pkg
