@@ -590,7 +590,7 @@ zfs_probe_dev(const char *devname, uint64_t *pool_guid)
 		int slice = dev->d_slice;
 
 		free(dev);
-		if (partition != -1 && slice != -1) {
+		if (partition != D_PARTNONE && slice != D_SLICENONE) {
 			ret = zfs_probe(pa.fd, pool_guid);
 			if (ret == 0)
 				return (0);
@@ -769,11 +769,16 @@ zfs_fmtdev(void *vdev)
 	if (dev->dd.d_dev->dv_type != DEVT_ZFS)
 		return (buf);
 
-	if (dev->pool_guid == 0) {
-		spa = STAILQ_FIRST(&zfs_pools);
+	/* Do we have any pools? */
+	spa = STAILQ_FIRST(&zfs_pools);
+	if (spa == NULL)
+		return (buf);
+
+	if (dev->pool_guid == 0)
 		dev->pool_guid = spa->spa_guid;
-	} else
+	else
 		spa = spa_find_by_guid(dev->pool_guid);
+
 	if (spa == NULL) {
 		printf("ZFS: can't find pool by guid\n");
 		return (buf);
