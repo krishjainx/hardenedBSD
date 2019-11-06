@@ -36,7 +36,7 @@ MAN=	devd.8 devd.conf.5
 NO_SHARED?=YES
 .endif
 
-LIBADD=	l util
+LIBADD=	util
 
 YFLAGS+=-v
 CFLAGS+=-I. -I${.CURDIR}

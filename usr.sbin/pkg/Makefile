@@ -1,10 +1,25 @@
 # $FreeBSD$
 
-.if ${MACHINE} != "amd64" && ${MACHINE} != "i386"
-PKGCONFBRANCH?=	quarterly
-.endif
+_BRANCH!=	${MAKE} -C ${SRCTOP}/release -V BRANCH
+BRANCH?=	${_BRANCH}
+.if ${BRANCH:MCURRENT} != ""
 PKGCONFBRANCH?=	latest
+.else
+. if ${BRANCH:MBETA*} || ${BRANCH:MRC*} || ${BRANCH:MRELEASE*}
+PKGCONFBRANCH?=	quarterly
+. else
+.  if ${MACHINE} != "amd64" && ${MACHINE} != "i386"
+PKGCONFBRANCH?=	quarterly
+.  else
+PKGCONFBRANCH?=	latest
+<<<<<<< HEAD
 CONFS=		FreeBSD.conf.${PKGCONFBRANCH} HardenedBSD.conf
+=======
+.  endif
+. endif
+.endif
+CONFS=		FreeBSD.conf.${PKGCONFBRANCH}
+>>>>>>> freebsd/12.1-releng/master
 CONFSNAME=	FreeBSD.conf
 CONFSDIR=	/etc/pkg
 CONFSMODE=	644

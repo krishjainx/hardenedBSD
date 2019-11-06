@@ -4883,35 +4883,36 @@ dodata:				/* XXX */
 			thflags = tcp_reass(tp, th, &temp, &tlen, m);
 			tp->t_flags |= TF_ACKNOW;
 		}
-		if (((tlen == 0) && (save_tlen > 0) &&
-		    (SEQ_LT(save_start, save_rnxt)))) {
-			/*
-			 * DSACK actually handled in the fastpath
-			 * above.
-			 */
-			tcp_update_sack_list(tp, save_start,
-			    save_start + save_tlen);
-		} else if ((tlen > 0) && SEQ_GT(tp->rcv_nxt, save_rnxt)) {
-			/*
-			 * Cleaning sackblks by using zero length
-			 * update.
-			 */
-			if ((tp->rcv_numsacks >= 1) &&
-			    (tp->sackblks[0].end == save_start)) {
-				/* partial overlap, recorded at todrop above */
-				tcp_update_sack_list(tp, tp->sackblks[0].start,
-				    tp->sackblks[0].end);
-			} else {
+		if ((tp->t_flags & TF_SACK_PERMIT) && (save_tlen > 0)) {
+			if ((tlen == 0) && (SEQ_LT(save_start, save_rnxt))) {
+				/*
+				 * DSACK actually handled in the fastpath
+				 * above.
+				 */
+				tcp_update_sack_list(tp, save_start,
+				    save_start + save_tlen);
+			} else if ((tlen > 0) && SEQ_GT(tp->rcv_nxt, save_rnxt)) {
+				if ((tp->rcv_numsacks >= 1) &&
+				    (tp->sackblks[0].end == save_start)) {
+					/*
+					 * Partial overlap, recorded at todrop
+					 * above.
+					 */
+					tcp_update_sack_list(tp,
+					    tp->sackblks[0].start,
+					    tp->sackblks[0].end);
+				} else {
+					tcp_update_dsack_list(tp, save_start,
+					    save_start + save_tlen);
+				}
+			} else if (tlen >= save_tlen) {
+				/* Update of sackblks. */
 				tcp_update_dsack_list(tp, save_start,
 				    save_start + save_tlen);
+			} else if (tlen > 0) {
+				tcp_update_dsack_list(tp, save_start,
+				    save_start + tlen);
 			}
-		} else if ((tlen > 0) && (tlen >= save_tlen)) {
-			/* Update of sackblks. */
-			tcp_update_dsack_list(tp, save_start,
-			    save_start + save_tlen);
-		} else if (tlen > 0) {
-			tcp_update_dsack_list(tp, save_start,
-			    save_start + tlen);
 		}
 	} else {
 		m_freem(m);
@@ -7871,7 +7872,16 @@ send:
 		hdrlen += sizeof(struct udphdr);
 	}
 #endif
-	ipoptlen = 0;
+#ifdef INET6
+	if (isipv6)
+		ipoptlen = ip6_optlen(tp->t_inpcb);
+	else
+#endif
+	if (tp->t_inpcb->inp_options)
+		ipoptlen = tp->t_inpcb->inp_options->m_len -
+		    offsetof(struct ipoption, ipopt_list);
+	else
+		ipoptlen = 0;
 #if defined(IPSEC) || defined(IPSEC_SUPPORT)
 	ipoptlen += ipsec_optlen;
 #endif
@@ -7944,6 +7954,20 @@ send:
 				sendalot = 1;
 
 		} else {
+			if (optlen + ipoptlen >= tp->t_maxseg) {
+				/*
+				 * Since we don't have enough space to put
+				 * the IP header chain and the TCP header in
+				 * one packet as required by RFC 7112, don't
+				 * send it. Also ensure that at least one
+				 * byte of the payload can be put into the
+				 * TCP segment.
+				 */
+				SOCKBUF_UNLOCK(&so->so_snd);
+				error = EMSGSIZE;
+				sack_rxmit = 0;
+				goto out;
+			}
 			len = tp->t_maxseg - optlen - ipoptlen;
 			sendalot = 1;
 		}
@@ -8437,15 +8461,9 @@ send:
 		m->m_pkthdr.csum_flags |= CSUM_TSO;
 		m->m_pkthdr.tso_segsz = tp->t_maxseg - optlen;
 	}
-#if defined(IPSEC) || defined(IPSEC_SUPPORT)
-	KASSERT(len + hdrlen + ipoptlen - ipsec_optlen == m_length(m, NULL),
-	    ("%s: mbuf chain shorter than expected: %d + %u + %u - %u != %u",
-	    __func__, len, hdrlen, ipoptlen, ipsec_optlen, m_length(m, NULL)));
-#else
-	KASSERT(len + hdrlen + ipoptlen == m_length(m, NULL),
-	    ("%s: mbuf chain shorter than expected: %d + %u + %u != %u",
-	    __func__, len, hdrlen, ipoptlen, m_length(m, NULL)));
-#endif
+	KASSERT(len + hdrlen == m_length(m, NULL),
+	    ("%s: mbuf chain different than expected: %d + %u != %u",
+	    __func__, len, hdrlen, m_length(m, NULL)));
 
 #ifdef TCP_HHOOK
 	/* Run HHOOK_TCP_ESTABLISHED_OUT helper hooks. */

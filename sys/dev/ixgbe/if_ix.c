@@ -1011,12 +1011,13 @@ ixgbe_if_attach_pre(if_ctx_t ctx)
 	    CSUM_IP6_TCP | CSUM_IP6_UDP | CSUM_IP6_TSO;
 	if (adapter->hw.mac.type == ixgbe_mac_82598EB) {
 		scctx->isc_tx_nsegments = IXGBE_82598_SCATTER;
-		scctx->isc_msix_bar = PCIR_BAR(MSIX_82598_BAR);
 	} else {
 		scctx->isc_tx_csum_flags |= CSUM_SCTP |CSUM_IP6_SCTP;
 		scctx->isc_tx_nsegments = IXGBE_82599_SCATTER;
-		scctx->isc_msix_bar = PCIR_BAR(MSIX_82599_BAR);
 	}
+
+	scctx->isc_msix_bar = pci_msix_table_bar(dev);
+
 	scctx->isc_tx_tso_segments_max = scctx->isc_tx_nsegments;
 	scctx->isc_tx_tso_size_max = IXGBE_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = PAGE_SIZE;
@@ -4415,7 +4416,7 @@ ixgbe_sysctl_eee_state(SYSCTL_HANDLER_ARGS)
 	if ((new_eee < 0) || (new_eee > 1))
 		return (EINVAL);
 
-	retval = adapter->hw.mac.ops.setup_eee(&adapter->hw, new_eee);
+	retval = ixgbe_setup_eee(&adapter->hw, new_eee);
 	if (retval) {
 		device_printf(dev, "Error in EEE setup: 0x%08X\n", retval);
 		return (EINVAL);
@@ -4468,8 +4469,6 @@ ixgbe_init_device_features(struct adapter *adapter)
 	case ixgbe_mac_X550EM_x:
 		adapter->feat_cap |= IXGBE_FEATURE_SRIOV;
 		adapter->feat_cap |= IXGBE_FEATURE_FDIR;
-		if (adapter->hw.device_id == IXGBE_DEV_ID_X550EM_X_KR)
-			adapter->feat_cap |= IXGBE_FEATURE_EEE;
 		break;
 	case ixgbe_mac_X550EM_a:
 		adapter->feat_cap |= IXGBE_FEATURE_SRIOV;

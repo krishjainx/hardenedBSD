@@ -69,6 +69,19 @@ TAGS+=		package=${PACKAGE:Uruntime}
 TAG_ARGS=	-T ${TAGS:[*]:S/ /,/g}
 .endif
 
+<<<<<<< HEAD
+=======
+# ELF hardening knobs
+.if ${MK_BIND_NOW} != "no"
+LDFLAGS+= -Wl,-znow
+.endif
+.if ${MK_RETPOLINE} != "no"
+CFLAGS+= -mretpoline
+CXXFLAGS+= -mretpoline
+LDFLAGS+= -Wl,-zretpolineplt
+.endif
+
+>>>>>>> freebsd/12.1-releng/master
 .if ${MK_DEBUG_FILES} != "no" && empty(DEBUG_FLAGS:M-g) && \
     empty(DEBUG_FLAGS:M-gdwarf*)
 CFLAGS+= ${DEBUG_FILES_CFLAGS}
@@ -81,10 +94,18 @@ CTFFLAGS+= -g
 # prefer .s to a .c, add .po, remove stuff not used in the BSD libraries
 # .pico used for PIC object files
 # .nossppico used for NOSSP PIC object files
-.SUFFIXES: .out .o .bc .ll .po .pico .nossppico .S .asm .s .c .cc .cpp .cxx .C .f .y .l .ln
+# .pieo used for PIE object files
+.SUFFIXES: .out .o .bc .ll .po .pico .nossppico .pieo .S .asm .s .c .cc .cpp .cxx .C .f .y .l .ln
 
 .if !defined(PICFLAG)
 PICFLAG=-fPIC
+<<<<<<< HEAD
+=======
+PIEFLAG=-fPIE
+.else
+PICFLAG=-fpic
+PIEFLAG=-fpie
+>>>>>>> freebsd/12.1-releng/master
 .endif
 
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
@@ -140,6 +161,10 @@ PO_FLAG=-pg
 	${CC} ${PICFLAG} -DPIC ${SHARED_CFLAGS:C/^-fstack-protector.*$//} ${CFLAGS:C/^-fstack-protector.*$//} -c ${.IMPSRC} -o ${.TARGET}
 	${CTFCONVERT_CMD}
 
+.c.pieo:
+	${CC} ${PIEFLAG} -DPIC ${SHARED_CFLAGS} ${CFLAGS} -c ${.IMPSRC} -o ${.TARGET}
+	${CTFCONVERT_CMD}
+
 .cc.po .C.po .cpp.po .cxx.po:
 	${CXX} ${PO_FLAG} ${STATIC_CXXFLAGS} ${PO_CXXFLAGS} -c ${.IMPSRC} -o ${.TARGET}
 
@@ -148,6 +173,9 @@ PO_FLAG=-pg
 
 .cc.nossppico .C.nossppico .cpp.nossppico .cxx.nossppico:
 	${CXX} ${PICFLAG} -DPIC ${SHARED_CXXFLAGS:C/^-fstack-protector.*$//} ${CXXFLAGS:C/^-fstack-protector.*$//} -c ${.IMPSRC} -o ${.TARGET}
+
+.cc.pieo .C.pieo .cpp.pieo .cxx.pieo:
+	${CXX} ${PIEFLAG} ${SHARED_CXXFLAGS} ${CXXFLAGS} -c ${.IMPSRC} -o ${.TARGET}
 
 .f.po:
 	${FC} -pg ${FFLAGS} -o ${.TARGET} -c ${.IMPSRC}
@@ -161,7 +189,7 @@ PO_FLAG=-pg
 	${FC} ${PICFLAG} -DPIC ${FFLAGS:C/^-fstack-protector.*$//} -o ${.TARGET} -c ${.IMPSRC}
 	${CTFCONVERT_CMD}
 
-.s.po .s.pico .s.nossppico:
+.s.po .s.pico .s.nossppico .s.pieo:
 	${AS} ${AFLAGS} -o ${.TARGET} ${.IMPSRC}
 	${CTFCONVERT_CMD}
 
@@ -180,6 +208,11 @@ PO_FLAG=-pg
 	    ${CFLAGS:C/^-fstack-protector.*$//} ${ACFLAGS} -c ${.IMPSRC} -o ${.TARGET}
 	${CTFCONVERT_CMD}
 
+.asm.pieo:
+	${CC:N${CCACHE_BIN}} -x assembler-with-cpp ${PIEFLAG} -DPIC \
+	    ${CFLAGS} ${ACFLAGS} -c ${.IMPSRC} -o ${.TARGET}
+	${CTFCONVERT_CMD}
+
 .S.po:
 	${CC:N${CCACHE_BIN}} -DPROF ${PO_CFLAGS} ${ACFLAGS} -c ${.IMPSRC} \
 	    -o ${.TARGET}
@@ -192,6 +225,11 @@ PO_FLAG=-pg
 
 .S.nossppico:
 	${CC:N${CCACHE_BIN}} ${PICFLAG} -DPIC ${CFLAGS:C/^-fstack-protector.*$//} ${ACFLAGS} \
+	    -c ${.IMPSRC} -o ${.TARGET}
+	${CTFCONVERT_CMD}
+
+.S.pieo:
+	${CC:N${CCACHE_BIN}} ${PIEFLAG} -DPIC ${CFLAGS} ${ACFLAGS} \
 	    -c ${.IMPSRC} -o ${.TARGET}
 	${CTFCONVERT_CMD}
 
@@ -358,6 +396,20 @@ lib${LIB_PRIVATE}${LIB}_nossp_pic.a: ${NOSSPSOBJS}
 .endif
 
 .endif # !defined(INTERNALLIB)
+
+.if defined(INTERNALLIB) && ${MK_PIE} != "no"
+PIEOBJS+=	${OBJS:.o=.pieo}
+DEPENDOBJS+=	${PIEOBJS}
+CLEANFILES+=	${PIEOBJS}
+
+_LIBS+=		lib${LIB_PRIVATE}${LIB}_pie.a
+
+lib${LIB_PRIVATE}${LIB}_pie.a: ${PIEOBJS}
+	@${ECHO} building pie ${LIB} library
+	@rm -f ${.TARGET}
+	${AR} ${ARFLAGS} ${.TARGET} ${PIEOBJS} ${ARADD}
+	${RANLIB} ${RANLIBFLAGS} ${.TARGET}
+.endif
 
 .if defined(_SKIP_BUILD)
 all:
