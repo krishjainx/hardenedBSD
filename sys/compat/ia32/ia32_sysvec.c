@@ -133,7 +133,9 @@ struct sysentvec ia32_freebsd_sysvec = {
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
 	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
+#if !defined(PAX_ASLR)
 	.sv_stackgap	= elf32_stackgap,
+#endif
 };
 INIT_SYSENTVEC(elf_ia32_sysvec, &ia32_freebsd_sysvec);
 
