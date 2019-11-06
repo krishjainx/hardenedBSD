@@ -69,8 +69,6 @@ TAGS+=		package=${PACKAGE:Uruntime}
 TAG_ARGS=	-T ${TAGS:[*]:S/ /,/g}
 .endif
 
-<<<<<<< HEAD
-=======
 # ELF hardening knobs
 .if ${MK_BIND_NOW} != "no"
 LDFLAGS+= -Wl,-znow
@@ -81,7 +79,6 @@ CXXFLAGS+= -mretpoline
 LDFLAGS+= -Wl,-zretpolineplt
 .endif
 
->>>>>>> freebsd/12.1-releng/master
 .if ${MK_DEBUG_FILES} != "no" && empty(DEBUG_FLAGS:M-g) && \
     empty(DEBUG_FLAGS:M-gdwarf*)
 CFLAGS+= ${DEBUG_FILES_CFLAGS}
@@ -99,13 +96,10 @@ CTFFLAGS+= -g
 
 .if !defined(PICFLAG)
 PICFLAG=-fPIC
-<<<<<<< HEAD
-=======
 PIEFLAG=-fPIE
 .else
 PICFLAG=-fpic
 PIEFLAG=-fpie
->>>>>>> freebsd/12.1-releng/master
 .endif
 
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"

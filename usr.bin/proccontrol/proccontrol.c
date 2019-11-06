@@ -72,13 +72,8 @@ static void __dead2
 usage(void)
 {
 
-<<<<<<< HEAD
-	fprintf(stderr, "Usage: proccontrol -m (trace|trapcap"
-	    KPTI_USAGE") [-q] "
-=======
-	fprintf(stderr, "Usage: proccontrol -m (aslr|trace|trapcap|"
+	fprintf(stderr, "Usage: proccontrol -m (trace|trapcap|"
 	    "stackgap"KPTI_USAGE") [-q] "
->>>>>>> freebsd/12.1-releng/master
 	    "[-s (enable|disable)] [-p pid | command]\n");
 	exit(1);
 }

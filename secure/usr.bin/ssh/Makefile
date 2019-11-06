@@ -37,7 +37,6 @@ LIBADD+=	crypto
 CFLAGS+= -DXAUTH_PATH=\"${LOCALBASE}/bin/xauth\"
 .endif
 
-
 .include <bsd.prog.mk>
 
 .PATH:	${SSHDIR}

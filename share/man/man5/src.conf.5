@@ -1634,17 +1634,9 @@ When set, it enforces these options:
 .It
 .Va WITHOUT_AUTHPF
 .El
-<<<<<<< HEAD
-.It Va WITHOUT_PIE
-Disable building of Position-Independent Executables (PIEs).
-.Pp
-This is a default setting on
-arm/arm, arm/armv6, arm/armv7, mips/mipsel, mips/mips, mips/mips64el, mips/mips64, mips/mipsn32, mips/mipselhf, mips/mipshf, mips/mips64elhf, mips/mips64hf, powerpc/powerpc, powerpc/powerpc64, powerpc/powerpcspe, riscv/riscv64 and sparc64/sparc64.
-=======
 .It Va WITH_PIE
 Build dynamically linked binaries as
 Position-Independent Executable (PIE).
->>>>>>> freebsd/12.1-releng/master
 .It Va WITHOUT_PKGBOOTSTRAP
 Set to not build
 .Xr pkg 7
@@ -1707,9 +1699,6 @@ Set to not build
 .It Va WITH_RETPOLINE
 Set to build the base system with the retpoline speculative execution
 vulnerability mitigation for CVE-2017-5715.
-.Pp
-This is a default setting on
-amd64/amd64.
 .It Va WITHOUT_ROUTED
 Set to not build
 .Xr routed 8

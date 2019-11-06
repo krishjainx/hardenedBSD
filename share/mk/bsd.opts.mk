@@ -73,11 +73,8 @@ __DEFAULT_NO_OPTIONS = \
     CCACHE_BUILD \
     CTF \
     INSTALL_AS_USER \
-<<<<<<< HEAD
-=======
     PIE \
     RETPOLINE \
->>>>>>> freebsd/12.1-releng/master
     STALE_STAGED
 
 __DEFAULT_DEPENDENT_OPTIONS = \
@@ -85,6 +82,7 @@ __DEFAULT_DEPENDENT_OPTIONS = \
     STAGING_MAN/STAGING \
     STAGING_PROG/STAGING \
     STALE_STAGED/STAGING \
+
 
 .include <bsd.mkopt.mk>
 

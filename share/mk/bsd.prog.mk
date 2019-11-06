@@ -34,8 +34,6 @@ PROG=	${PROG_CXX}
 MK_DEBUG_FILES=	no
 .endif
 
-<<<<<<< HEAD
-=======
 # ELF hardening knobs
 .if ${MK_BIND_NOW} != "no"
 LDFLAGS+= -Wl,-znow
@@ -54,7 +52,6 @@ LDFLAGS+= -Wl,-zretpolineplt
 .endif
 .endif
 
->>>>>>> freebsd/12.1-releng/master
 .if defined(CRUNCH_CFLAGS)
 CFLAGS+=${CRUNCH_CFLAGS}
 .else
