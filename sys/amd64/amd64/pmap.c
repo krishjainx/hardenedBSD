@@ -2944,16 +2944,16 @@ pmap_force_invalidate_cache_range(vm_offset_t sva, vm_offset_t eva)
 
 	if ((cpu_stdext_feature & CPUID_STDEXT_CLFLUSHOPT) != 0) {
 		/*
-		 * Do per-cache line flush.  Use the sfence
+		 * Do per-cache line flush.  Use a locked
 		 * instruction to insure that previous stores are
 		 * included in the write-back.  The processor
 		 * propagates flush to other processors in the cache
 		 * coherence domain.
 		 */
-		sfence();
+		atomic_thread_fence_seq_cst();
 		for (; sva < eva; sva += cpu_clflush_line_size)
 			clflushopt(sva);
-		sfence();
+		atomic_thread_fence_seq_cst();
 	} else {
 		/*
 		 * Writes are ordered by CLFLUSH on Intel CPUs.
@@ -2995,7 +2995,7 @@ pmap_invalidate_cache_pages(vm_page_t *pages, int count)
 		pmap_invalidate_cache();
 	else {
 		if (useclflushopt)
-			sfence();
+			atomic_thread_fence_seq_cst();
 		else if (cpu_vendor_id != CPU_VENDOR_INTEL)
 			mfence();
 		for (i = 0; i < count; i++) {
@@ -3009,7 +3009,7 @@ pmap_invalidate_cache_pages(vm_page_t *pages, int count)
 			}
 		}
 		if (useclflushopt)
-			sfence();
+			atomic_thread_fence_seq_cst();
 		else if (cpu_vendor_id != CPU_VENDOR_INTEL)
 			mfence();
 	}
@@ -3030,10 +3030,10 @@ pmap_flush_cache_range(vm_offset_t sva, vm_offset_t eva)
 	if (pmap_kextract(sva) == lapic_paddr)
 		return;
 
-	sfence();
+	atomic_thread_fence_seq_cst();
 	for (; sva < eva; sva += cpu_clflush_line_size)
 		clwb(sva);
-	sfence();
+	atomic_thread_fence_seq_cst();
 }
 
 void
@@ -3066,7 +3066,7 @@ pmap_flush_cache_phys_range(vm_paddr_t spa, vm_paddr_t epa, vm_memattr_t mattr)
 		sched_pin();
 		pte_store(pte, spa | pte_bits);
 		invlpg(vaddr);
-		/* XXXKIB sfences inside flush_cache_range are excessive */
+		/* XXXKIB atomic inside flush_cache_range are excessive */
 		pmap_flush_cache_range(vaddr, vaddr + PAGE_SIZE);
 		sched_unpin();
 	}
@@ -8598,8 +8598,11 @@ pmap_activate_sw(struct thread *td)
 
 	oldpmap = PCPU_GET(curpmap);
 	pmap = vmspace_pmap(td->td_proc->p_vmspace);
-	if (oldpmap == pmap)
+	if (oldpmap == pmap) {
+		if (cpu_vendor_id != CPU_VENDOR_INTEL)
+			mfence();
 		return;
+	}
 	cpuid = PCPU_GET(cpuid);
 #ifdef SMP
 	CPU_SET_ATOMIC(cpuid, &pmap->pm_active);
@@ -9292,10 +9295,10 @@ pmap_large_map_wb_fence_mfence(void)
 }
 
 static void
-pmap_large_map_wb_fence_sfence(void)
+pmap_large_map_wb_fence_atomic(void)
 {
 
-	sfence();
+	atomic_thread_fence_seq_cst();
 }
 
 static void
@@ -9310,7 +9313,7 @@ DEFINE_IFUNC(static, void, pmap_large_map_wb_fence, (void), static)
 		return (pmap_large_map_wb_fence_mfence);
 	else if ((cpu_stdext_feature & (CPUID_STDEXT_CLWB |
 	    CPUID_STDEXT_CLFLUSHOPT)) == 0)
-		return (pmap_large_map_wb_fence_sfence);
+		return (pmap_large_map_wb_fence_atomic);
 	else
 		/* clflush is strongly enough ordered */
 		return (pmap_large_map_wb_fence_nop);

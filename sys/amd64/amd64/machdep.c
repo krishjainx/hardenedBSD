@@ -228,7 +228,7 @@ vm_paddr_t dump_avail[PHYSMAP_SIZE + 2];
 struct kva_md_info kmi;
 
 static struct trapframe proc0_tf;
-struct region_descriptor r_gdt, r_idt;
+struct region_descriptor r_idt;
 
 struct pcpu *__pcpu;
 struct pcpu temp_bsp_pcpu;
@@ -1625,6 +1625,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	struct xstate_hdr *xhdr;
 	u_int64_t rsp0;
 	char *env;
+	struct region_descriptor r_gdt;
 	size_t kstack0_sz;
 	int late_console;
 
@@ -1790,6 +1791,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	TUNABLE_INT_FETCH("machdep.syscall_ret_l1d_flush",
 	    &syscall_ret_l1d_flush_mode);
 	TUNABLE_INT_FETCH("hw.mds_disable", &hw_mds_disable);
+	TUNABLE_INT_FETCH("machdep.mitigations.taa.enable", &x86_taa_enable);
 
 	finishidentcpu();	/* Final stage of CPU initialization */
 	initializecpu();	/* Initialize CPU registers */
