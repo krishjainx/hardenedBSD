@@ -14,8 +14,6 @@ CONFS=	DAEMON \
 	abi \
 	addswap \
 	adjkerntz \
-	auditd \
-	auditdistd \
 	bgfsck \
 	${_blacklistd} \
 	${_bluetooth} \
