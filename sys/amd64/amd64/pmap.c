@@ -10169,6 +10169,7 @@ sysctl_kmaps_reinit(struct pmap_kernel_map_range *range, vm_offset_t va,
 	range->attrs = attrs;
 }
 
+#ifndef PAX_HARDENING
 /*
  * Given a leaf PTE, derive the mapping's attributes.  If they do not match
  * those of the current run, dump the address range and its attributes, and
@@ -10334,9 +10335,10 @@ restart:
 	return (error);
 }
 SYSCTL_OID(_vm_pmap, OID_AUTO, kernel_maps,
-    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE,
+    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE | CTLFLAG_ROOTONLY,
     NULL, 0, sysctl_kmaps, "A",
     "Dump kernel address layout");
+#endif /* !PAX_HARDENING */
 
 #ifdef DDB
 DB_SHOW_COMMAND(pte, pmap_print_pte)
