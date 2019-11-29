@@ -383,11 +383,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS,
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS, /* XXX */
-<<<<<<< HEAD
-	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE, /* XXX */
-=======
 	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
->>>>>>> origin/freebsd/12-stable/master
 	.sv_copyout_strings = linux_copyout_strings,
 	.sv_setregs	= linux_exec_setregs,
 	.sv_fixlimit	= NULL,
