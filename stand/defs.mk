@@ -7,9 +7,11 @@ __BOOT_DEFS_MK__=${MFILE}
 # because it includes bsd.own.mk which needs the right MK_ values,
 # espeically MK_CTF.
 
+MK_CFI=		no
 MK_CTF=		no
 MK_SSP=		no
 MK_PROFILE=	no
+MK_SAFESTACK=	no
 MK_SPECTREV1_FIX=	no
 MAN=
 .if !defined(PIC)
@@ -41,14 +43,9 @@ BOOTOBJ=	${OBJTOP}/stand
 # BINDIR is where we install
 BINDIR?=	/boot
 
-<<<<<<< HEAD
-MK_SAFESTACK=	no
-MK_CFI=		no
-=======
 # LUAPATH is where we search for and install lua scripts.
 LUAPATH?=	/boot/lua
 FLUASRC?=	${SRCTOP}/libexec/flua
->>>>>>> origin/freebsd/12-stable/master
 
 LIBSA=		${BOOTOBJ}/libsa/libsa.a
 .if ${MACHINE} == "i386"
