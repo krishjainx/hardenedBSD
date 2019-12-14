@@ -198,12 +198,14 @@ static struct bool_flags pr_flag_allow[NBBY * NBPW] = {
 	{"allow.read_msgbuf", "allow.noread_msgbuf", PR_ALLOW_READ_MSGBUF},
 	{"allow.unprivileged_proc_debug", "allow.nounprivileged_proc_debug",
 	 PR_ALLOW_UNPRIV_DEBUG},
+	{"allow.extattr", "allow.noextattr", PR_ALLOW_EXTATTR},
 };
 const size_t pr_flag_allow_size = sizeof(pr_flag_allow);
 
 #define	JAIL_DEFAULT_ALLOW		(PR_ALLOW_SET_HOSTNAME | \
 					 PR_ALLOW_RESERVED_PORTS | \
-					 PR_ALLOW_UNPRIV_DEBUG)
+					 PR_ALLOW_UNPRIV_DEBUG | \
+					 PR_ALLOW_EXTATTR)
 #define	JAIL_DEFAULT_ENFORCE_STATFS	2
 #define	JAIL_DEFAULT_DEVFS_RSNUM	0
 static unsigned jail_default_allow = JAIL_DEFAULT_ALLOW;
@@ -3387,6 +3389,12 @@ prison_priv_check(struct ucred *cred, int priv)
 			return (0);
 		return (EPERM);
 
+	case PRIV_VFS_EXTATTR_SYSTEM:
+		if (cred->cr_prison->pr_allow & PR_ALLOW_EXTATTR)
+			return (0);
+		else
+			return (EPERM);
+
 	default:
 		/*
 		 * In all remaining cases, deny the privilege request.  This
@@ -3811,6 +3819,8 @@ SYSCTL_JAIL_PARAM(_allow, read_msgbuf, CTLTYPE_INT | CTLFLAG_RW,
     "B", "Jail may read the kernel message buffer");
 SYSCTL_JAIL_PARAM(_allow, unprivileged_proc_debug, CTLTYPE_INT | CTLFLAG_RW,
     "B", "Unprivileged processes may use process debugging facilities");
+SYSCTL_JAIL_PARAM(_allow, extattr, CTLTYPE_INT | CTLFLAG_RW,
+    "B", "Jails may set system-level filesystem extended attributes");
 
 SYSCTL_JAIL_PARAM_SUBNODE(allow, mount, "Jail mount/unmount permission flags");
 SYSCTL_JAIL_PARAM(_allow_mount, , CTLTYPE_INT | CTLFLAG_RW,
