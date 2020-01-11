@@ -359,6 +359,7 @@ SRCS+=		Plugins/Language/CPlusPlus/MSVCUndecoratedNameParser.cpp
 SRCS+=		Plugins/Language/ClangCommon/ClangHighlighter.cpp
 SRCS+=		Plugins/Language/ObjC/CF.cpp
 SRCS+=		Plugins/Language/ObjC/Cocoa.cpp
+SRCS+=		Plugins/Language/ObjC/CoreMedia.cpp
 SRCS+=		Plugins/Language/ObjC/NSArray.cpp
 SRCS+=		Plugins/Language/ObjC/NSDictionary.cpp
 SRCS+=		Plugins/Language/ObjC/NSError.cpp

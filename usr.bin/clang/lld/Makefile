@@ -2,16 +2,11 @@
 
 .include <src.opts.mk>
 
-<<<<<<< HEAD
 MK_CFI=		no
 
-LLVM_SRCS=	${SRCTOP}/contrib/llvm
-LLD_SRCS=	${LLVM_SRCS}/tools/lld
-=======
 LLVM_BASE=	${SRCTOP}/contrib/llvm-project
 LLVM_SRCS=	${LLVM_BASE}/llvm
 LLD_SRCS=	${LLVM_BASE}/lld
->>>>>>> origin/freebsd/12-stable/master
 
 PACKAGE=	lld
 PROG_CXX=	ld.lld
