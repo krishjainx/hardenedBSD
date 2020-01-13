@@ -6,7 +6,7 @@ UNBOUNDDIR= ${.CURDIR}/../../../contrib/unbound
 
 PROG=	unbound-host
 SRCS=	unbound-host.c
-CFLAGS+=	-I${UNBOUNDDIR} -I${LDNSDIR}
+CFLAGS+=	-I${UNBOUNDDIR} -I${LDNSDIR} -I${SRCTOP}/usr.sbin/unbound
 LIBADD=	unbound crypto ssl pthread
 MAN=	unbound-host.1
 
