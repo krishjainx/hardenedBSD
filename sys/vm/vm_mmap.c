@@ -406,7 +406,6 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t size, int prot,
 			error = EINVAL;
 			goto done;
 		}
-<<<<<<< HEAD
 
 #ifdef PAX_NOEXEC
 		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, &cap_maxprot);
@@ -416,13 +415,11 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t size, int prot,
 		KASSERT((flags & MAP_FIXED) == MAP_FIXED || pax_aslr_done == 1,
 		    ("%s: ASLR reqiured ...", __func__));
 #endif
-=======
 		if (check_fp_fn != NULL) {
 			error = check_fp_fn(fp, prot, cap_maxprot, flags);
 			if (error != 0)
 				goto done;
 		}
->>>>>>> origin/freebsd/12-stable/master
 		/* This relies on VM_PROT_* matching PROT_*. */
 		error = fo_mmap(fp, &vms->vm_map, &addr, size, prot,
 		    cap_maxprot, flags, pos, td);
