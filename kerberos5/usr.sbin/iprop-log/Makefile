@@ -11,6 +11,8 @@ CFLAGS+=	-I${KRB5DIR}/lib/kadm5 \
 LIBADD=	kadm5srv hdb krb5 roken edit sl vers
 LDFLAGS=${LDAPLDFLAGS}
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CLEANFILES=	iprop-commands.h iprop-commands.c
 
 iprop-commands.h: iprop-commands.in

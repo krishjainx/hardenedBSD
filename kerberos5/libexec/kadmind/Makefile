@@ -7,6 +7,8 @@ SRCS=	rpc.c \
 	kadmind.c \
 	kadm_conn.c
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CFLAGS+=-I${KRB5DIR}/lib/krb5 -I${KRB5DIR}/lib/asn1 -I${KRB5DIR}/lib/roken \
 	-I${SRCTOP}/contrib/com_err ${LDAPCFLAGS}
 LIBADD=	kadm5srv gssapi hdb krb5 roken vers

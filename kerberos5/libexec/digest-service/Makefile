@@ -12,6 +12,8 @@ CFLAGS+=	-I${KRB5DIR}/kdc \
 LIBADD=	hdb kdc heimipcs krb5 roken asn1 crypto vers heimntlm
 LDFLAGS=${LDAPLDFLAGS}
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>
 
 .PATH: ${KRB5DIR}/kdc

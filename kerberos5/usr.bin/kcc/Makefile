@@ -16,6 +16,8 @@ SRCS=	kcc.c \
 	kswitch.c \
 	copy_cred_cache.c
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CLEANFILES=	kcc-commands.h kcc-commands.c
 
 kcc-commands.h: kcc-commands.in

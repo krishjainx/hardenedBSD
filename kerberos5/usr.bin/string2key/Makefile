@@ -10,6 +10,8 @@ CFLAGS+=	-I${KRB5DIR}/kdc \
 		-I${SRCTOP}/contrib/com_err
 LIBADD=	krb5 roken crypto vers
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>
 
 .PATH: ${KRB5DIR}/kdc

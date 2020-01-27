@@ -10,6 +10,8 @@ SRCS=	su.c
 CFLAGS+=-I${KRB5DIR}/lib/roken
 LIBADD=	kafs5 krb5 roken vers crypto crypt
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>
 
 .PATH: ${KRB5DIR}/appl/su
