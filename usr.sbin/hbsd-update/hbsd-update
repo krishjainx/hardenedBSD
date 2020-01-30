@@ -184,7 +184,7 @@ dnssec_check() {
 				${resolver_flag} \
 				-v \
 				-t txt \
-				-f ${mountpoint}/${l_dnssec_key} \
+				-f ${l_dnssec_key} \
 				${dnsrec} > ${tmpdir}/resolver.txt
 
 			val=$(${TAIL} -n 1 ${tmpdir}/resolver.txt)
