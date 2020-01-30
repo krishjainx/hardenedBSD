@@ -162,9 +162,17 @@ dnssec_check() {
 	local rec
 	local res
 	local val
+	local l_dnssec_key
 
 	if [ ${local_resolver} -gt 0 ]; then
 		resolver_flag="-r"
+	fi
+
+	# In an unpopulated mountpoint, the DNSSEC key doesn't exist.
+	# Fallback to the host-provided DNSSEC key in this case.
+	l_dnssec_key=${dnssec_key}
+	if [ -f ${mountpoint}/${dnssec_key} ]; then
+		l_dnssec_key=${mountpoint}/${dnssec_key}
 	fi
 
 	case "${dnssec}" in
@@ -176,7 +184,7 @@ dnssec_check() {
 				${resolver_flag} \
 				-v \
 				-t txt \
-				-f ${mountpoint}/${dnssec_key} \
+				-f ${mountpoint}/${l_dnssec_key} \
 				${dnsrec} > ${tmpdir}/resolver.txt
 
 			val=$(${TAIL} -n 1 ${tmpdir}/resolver.txt)
