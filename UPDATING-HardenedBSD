@@ -1,3 +1,19 @@
+[20200203] Jail parameter: {no}allow.extattr
+__HardenedBSD_version = 1200060
+
+	Provide a new jail configuration parameter: allow.extattr (and
+	noallow.extattr). Default: allow.
+	Allow setting system-level filesystem extended attributes by
+	default in a jailed environment.
+
+	Change the default system behavior to be more relaxed. Prior
+	to this change, privileged accounts in a jail cound not set
+	system-level filesystem extended attributes. This change now
+	enables that ability by default.
+
+	This is in preparation for hbsdcontrol integration with
+	ports/packages.
+
 [20190530] lot of fragile stuffs...
 __HardenedBSD_version = 1200059
 
