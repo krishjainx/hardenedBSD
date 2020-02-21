@@ -1180,7 +1180,11 @@
                 ..
                 man5
                 ..
+<<<<<<< HEAD
                 man8
+=======
+                man7
+>>>>>>> tor/freebsd/12-stable/master
                 ..
             ..
         ..
