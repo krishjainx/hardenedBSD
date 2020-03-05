@@ -856,15 +856,11 @@ nmi_handle_intr(u_int type, struct trapframe *frame)
 	nmi_call_kdb(PCPU_GET(cpuid), type, frame);
 }
 
-<<<<<<< HEAD
-int hw_ibrs_active;
+static int hw_ibrs_active;
+int hw_ibrs_ibpb_active;
 #ifdef PAX
 int hw_ibrs_disable = 0;
 #else
-=======
-static int hw_ibrs_active;
-int hw_ibrs_ibpb_active;
->>>>>>> tor/freebsd/12-stable/master
 int hw_ibrs_disable = 1;
 #endif
 

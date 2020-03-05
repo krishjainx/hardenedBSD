@@ -49,15 +49,8 @@
 
 TYPE="FreeBSD"
 REVISION="12.1"
-<<<<<<< HEAD
-BRANCH="STABLE"
-if [ -n "${BRANCH_OVERRIDE}" ]; then
-	BRANCH=${BRANCH_OVERRIDE}
-fi
-BRANCH="${BRANCH}-HBSD"
-=======
 BRANCH=${BRANCH_OVERRIDE:-STABLE}
->>>>>>> tor/freebsd/12-stable/master
+BRANCH="${BRANCH}-HBSD"
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
 
