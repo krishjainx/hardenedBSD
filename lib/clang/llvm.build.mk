@@ -111,13 +111,4 @@ CXXFLAGS+=	-fno-exceptions
 CXXFLAGS+=	-fno-rtti
 CXXFLAGS.clang+= -stdlib=libc++
 
-<<<<<<< HEAD
-.if ${MACHINE_CPUARCH} == "arm"
-STATIC_CFLAGS+= -mlong-calls
-STATIC_CXXFLAGS+= -mlong-calls
-.endif
-
-.include "${SRCTOP}/lib/clang/llvm.cfi.mk"
-=======
 NOCFI=		yes
->>>>>>> origin/hardened/current/master

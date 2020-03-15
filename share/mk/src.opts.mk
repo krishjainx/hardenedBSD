@@ -580,22 +580,10 @@ MK_CFI:=	no
 MK_RETPOLINE:=	no
 .endif
 
-<<<<<<< HEAD
 .if ${MK_CFI} == "no"
 MK_CROSS_DSO_CFI:=	no
 .endif
 
-.if ${MK_LIBRESSL} == "no"
-MK_OPENNTPD:=	no
-.endif
-
-.if ${MK_OPENNTPD} != "no"
-MK_NTP:=	no
-.endif
-
-.if ${MK_NTP} != "no"
-MK_OPENNTPD:=	no
-.endif
 
 .if ${MK_CROSS_DSO_CFI} != "no"
 # XXX devd crashes when Cross-DSO CFI is enabled and devd is not built
@@ -617,8 +605,6 @@ MK_DEVD_PIE:=	yes
 MK_PMC:=	no
 .endif
 
-=======
->>>>>>> origin/hardened/current/master
 .if ${MK_LOADER_VERIEXEC} == "no"
 MK_LOADER_VERIEXEC_PASS_MANIFEST := no
 .endif
