@@ -202,37 +202,50 @@ int
 kern_mmap(struct thread *td, uintptr_t addr0, size_t len, int prot, int flags,
     int fd, off_t pos)
 {
+	struct mmap_req mr = {
+		.mr_hint = addr0,
+		.mr_len = len,
+		.mr_prot = prot,
+		.mr_flags = flags,
+		.mr_fd = fd,
+		.mr_pos = pos
+	};
 
-	return (kern_mmap_fpcheck(td, addr0, len, prot, flags, fd, pos, NULL));
+	return (kern_mmap_req(td, &mr));
 }
 
-/*
- * When mmap'ing a file, check_fp_fn may be used for the caller to do any
- * last-minute validation based on the referenced file in a non-racy way.
- */
 int
-kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t len, int prot,
-    int flags, int fd, off_t pos, mmap_check_fp_fn check_fp_fn)
+kern_mmap_req(struct thread *td, const struct mmap_req *mrp)
 {
 	struct vmspace *vms;
 	struct file *fp;
 	struct proc *p;
+	off_t pos;
 	vm_offset_t addr;
-	vm_size_t pageoff, size;
-	vm_prot_t cap_maxprot, max_prot;
-	int align, error;
+	vm_size_t len, pageoff, size;
+	vm_prot_t cap_maxprot;
+	int align, error, fd, flags, max_prot, prot;
 	cap_rights_t rights;
+	mmap_check_fp_fn check_fp_fn;
 #ifdef PAX_ASLR
 	vm_offset_t orig_addr;
 	int pax_aslr_done;
 #endif
+
+	addr  = mrp->mr_hint;
+	len = mrp->mr_len;
+	prot = mrp->mr_prot;
+	flags = mrp->mr_flags;
+	fd = mrp->mr_fd;
+	pos = mrp->mr_pos;
+	check_fp_fn = mrp->mr_check_fp_fn;
 
 	if ((prot & ~(_PROT_ALL | PROT_MAX(_PROT_ALL))) != 0)
 		return (EINVAL);
 	max_prot = PROT_MAX_EXTRACT(prot);
 	prot = PROT_EXTRACT(prot);
 	if (max_prot != 0 && (max_prot & prot) != prot)
-		return (EINVAL);
+		return (ENOTSUP);
 
 	p = td->td_proc;
 
@@ -246,7 +259,6 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t len, int prot,
 	vms = p->p_vmspace;
 	fp = NULL;
 	AUDIT_ARG_FD(fd);
-	addr = addr0;
 
 #ifdef PAX_ASLR
 	orig_addr = addr;
@@ -409,10 +421,10 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t len, int prot,
 #ifdef PAX_NOEXEC
 		cap_maxprot = VM_PROT_ALL;
 
-		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, &cap_maxprot);
-		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, &cap_maxprot);
-		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, &max_prot);
-		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, &max_prot);
+		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&cap_maxprot);
+		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&cap_maxprot);
+		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&max_prot);
+		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&max_prot);
 
 		error = vm_mmap_object(&vms->vm_map, &addr, size, prot,
 		    cap_maxprot, flags, NULL, pos, FALSE, td);
@@ -446,10 +458,10 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t len, int prot,
 		}
 
 #ifdef PAX_NOEXEC
-		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, &cap_maxprot);
-		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, &cap_maxprot);
-		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, &max_prot);
-		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, &max_prot);
+		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&cap_maxprot);
+		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&cap_maxprot);
+		pax_pageexec(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&max_prot);
+		pax_mprotect(td->td_proc, (vm_prot_t *)&prot, (vm_prot_t *)&max_prot);
 #endif
 #ifdef PAX_ASLR
 		KASSERT((flags & MAP_FIXED) == MAP_FIXED || pax_aslr_done == 1,
@@ -712,7 +724,7 @@ kern_mprotect(struct thread *td, uintptr_t addr0, size_t size, int prot)
 	vm_error = KERN_SUCCESS;
 	if (max_prot != 0) {
 		if ((max_prot & prot) != prot)
-			return (EINVAL);
+			return (ENOTSUP);
 		vm_error = vm_map_protect(&td->td_proc->p_vmspace->vm_map,
 		    addr, addr + size, max_prot, TRUE);
 	}

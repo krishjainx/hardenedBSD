@@ -97,8 +97,6 @@ CFLAGS += -mno-relax
 
 .if !defined(PICFLAG)
 PICFLAG=-fPIC
-.else
-PICFLAG=-fpic
 .endif
 
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
@@ -145,10 +143,6 @@ LDFLAGS+=	-Wl,-z,now
 
 .if defined(MK_SPECTREV1_FIX) && ${MK_SPECTREV1_FIX} != "no"
 CFLAGS+=	-mspeculative-load-hardening
-.endif
-
-.if defined(MK_LIBRESSL) && ${MK_LIBRESSL} != "no"
-CFLAGS+=	-DHAVE_LIBRESSL
 .endif
 
 PO_FLAG=-pg

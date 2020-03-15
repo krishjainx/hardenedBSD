@@ -873,8 +873,12 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 			    "osrelease cannot be changed after creation");
 			goto done_errmsg;
 		}
-		if (len == 0 || len >= OSRELEASELEN) {
+		if (len == 0 || osrelstr[len - 1] != '\0') {
 			error = EINVAL;
+			goto done_free;
+		}
+		if (len >= OSRELEASELEN) {
+			error = ENAMETOOLONG;
 			vfs_opterror(opts,
 			    "osrelease string must be 1-%d bytes long",
 			    OSRELEASELEN - 1);
@@ -1249,9 +1253,11 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 
 		pr->pr_osreldate = osreldt ? osreldt : ppr->pr_osreldate;
 		if (osrelstr == NULL)
-		    strcpy(pr->pr_osrelease, ppr->pr_osrelease);
+			strlcpy(pr->pr_osrelease, ppr->pr_osrelease,
+			    sizeof(pr->pr_osrelease));
 		else
-		    strcpy(pr->pr_osrelease, osrelstr);
+			strlcpy(pr->pr_osrelease, osrelstr,
+			    sizeof(pr->pr_osrelease));
 
 		LIST_INIT(&pr->pr_children);
 		mtx_init(&pr->pr_mtx, "jail mutex", NULL, MTX_DEF | MTX_DUPOK);
@@ -3432,7 +3438,7 @@ prison_path(struct prison *pr1, struct prison *pr2)
 /*
  * Jail-related sysctls.
  */
-static SYSCTL_NODE(_security, OID_AUTO, jail, CTLFLAG_RW, 0,
+static SYSCTL_NODE(_security, OID_AUTO, jail, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "Jails");
 
 static int
@@ -3671,7 +3677,7 @@ SYSCTL_PROC(_security_jail, OID_AUTO, devfs_ruleset,
  * is returned in the string itself, and the other parameters exist merely
  * to make themselves and their types known.
  */
-SYSCTL_NODE(_security_jail, OID_AUTO, param, CTLFLAG_RW, 0,
+SYSCTL_NODE(_security_jail, OID_AUTO, param, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "Jail parameters");
 
 int
@@ -3883,7 +3889,7 @@ prison_add_allow(const char *prefix, const char *name, const char *prefix_descr,
 	parent = prefix
 	    ? SYSCTL_ADD_NODE(NULL,
 		  SYSCTL_CHILDREN(&sysctl___security_jail_param_allow),
-		  OID_AUTO, prefix, 0, 0, prefix_descr)
+		  OID_AUTO, prefix, CTLFLAG_MPSAFE, 0, prefix_descr)
 	    : &sysctl___security_jail_param_allow;
 	(void)SYSCTL_ADD_PROC(NULL, SYSCTL_CHILDREN(parent), OID_AUTO,
 	    name, CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_MPSAFE,

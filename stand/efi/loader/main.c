@@ -722,7 +722,8 @@ parse_uefi_con_out(void)
 	while ((char *)node < ep) {
 		pci_pending = false;
 		if (DevicePathType(node) == ACPI_DEVICE_PATH &&
-		    DevicePathSubType(node) == ACPI_DP) {
+		    (DevicePathSubType(node) == ACPI_DP ||
+		    DevicePathSubType(node) == ACPI_EXTENDED_DP)) {
 			/* Check for Serial node */
 			acpi = (void *)node;
 			if (EISA_ID_TO_NUM(acpi->HID) == 0x501) {
@@ -731,7 +732,7 @@ parse_uefi_con_out(void)
 			}
 		} else if (DevicePathType(node) == MESSAGING_DEVICE_PATH &&
 		    DevicePathSubType(node) == MSG_UART_DP) {
-
+			com_seen = ++seen;
 			uart = (void *)node;
 			setenv_int("efi_com_speed", uart->BaudRate);
 		} else if (DevicePathType(node) == ACPI_DEVICE_PATH &&
@@ -852,7 +853,11 @@ read_loader_env(const char *name, char *def_fn, bool once)
 	}
 }
 
-
+caddr_t
+ptov(uintptr_t x)
+{
+	return ((caddr_t)x);
+}
 
 EFI_STATUS
 main(int argc, CHAR16 *argv[])
@@ -893,6 +898,11 @@ main(int argc, CHAR16 *argv[])
 	 * changes to take effect, regardless of where they come from.
 	 */
 	setenv("console", "efi", 1);
+	uhowto = parse_uefi_con_out();
+#if defined(__aarch64__) || defined(__arm__)
+	if ((uhowto & RB_SERIAL) != 0)
+		setenv("console", "comconsole", 1);
+#endif
 	cons_probe();
 
 	/* Init the time source */
@@ -926,7 +936,6 @@ main(int argc, CHAR16 *argv[])
 	if (!has_kbd && (howto & RB_PROBE))
 		howto |= RB_SERIAL | RB_MULTIPLE;
 	howto &= ~RB_PROBE;
-	uhowto = parse_uefi_con_out();
 
 	/*
 	 * Read additional environment variables from the boot device's
@@ -1456,7 +1465,7 @@ command_chain(int argc, char *argv[])
 	}
 
 #ifdef LOADER_VERIEXEC
-	if (verify_file(fd, name, 0, VE_MUST) < 0) {
+	if (verify_file(fd, name, 0, VE_MUST, __func__) < 0) {
 		sprintf(command_errbuf, "can't verify: %s", name);
 		close(fd);
 		return (CMD_ERROR);

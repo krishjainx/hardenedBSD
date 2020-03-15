@@ -57,7 +57,6 @@ __FBSDID("$FreeBSD$");
 #include <cam/cam_periph.h>
 #include <cam/cam_debug.h>
 #include <cam/cam_sim.h>
-#include <cam/cam_xpt_internal.h>	/* For KASSERTs only */
 
 #include <cam/scsi/scsi_all.h>
 #include <cam/scsi/scsi_message.h>
@@ -650,7 +649,7 @@ cam_periph_invalidate(struct cam_periph *periph)
 
 	cam_periph_assert(periph, MA_OWNED);
 	/*
-	 * We only call this routine the first time a peripheral is
+	 * We only tear down the device the first time a peripheral is
 	 * invalidated.
 	 */
 	if ((periph->flags & CAM_PERIPH_INVALID) != 0)
@@ -682,10 +681,6 @@ camperiphfree(struct cam_periph *periph)
 	cam_periph_assert(periph, MA_OWNED);
 	KASSERT(periph->periph_allocating == 0, ("%s%d: freed while allocating",
 	    periph->periph_name, periph->unit_number));
-	KASSERT(periph->path->device->ccbq.dev_active == 0,
-	    ("%s%d: freed with %d active CCBs\n",
-		periph->periph_name, periph->unit_number,
-		periph->path->device->ccbq.dev_active));
 	for (p_drv = periph_drivers; *p_drv != NULL; p_drv++) {
 		if (strcmp((*p_drv)->driver_name, periph->periph_name) == 0)
 			break;
@@ -734,7 +729,9 @@ camperiphfree(struct cam_periph *periph)
 		periph->periph_dtor(periph);
 
 	/*
-	 * The peripheral list is protected by the topology lock.
+	 * The peripheral list is protected by the topology lock. We have to
+	 * remove the periph from the drv list before we call deferred_ac. The
+	 * AC_FOUND_DEVICE callback won't create a new periph if it's still there.
 	 */
 	xpt_lock_buses();
 

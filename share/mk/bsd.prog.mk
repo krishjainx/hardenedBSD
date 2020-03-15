@@ -128,9 +128,6 @@ LDFLAGS+=	-Wl,-z,now
 CFLAGS+=	-mspeculative-load-hardening
 .endif
 
-.if defined(MK_LIBRESSL) && ${MK_LIBRESSL} != "no"
-CFLAGS+=	-DHAVE_LIBRESSL
-.endif
 #
 # clang currently defaults to dynamic TLS for mips64 binaries
 .if ${MACHINE_ARCH:Mmips64*} && ${COMPILER_TYPE} == "clang"

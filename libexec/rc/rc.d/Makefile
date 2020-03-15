@@ -140,12 +140,6 @@ ACPIPACKAGE=	acpi
 CONFS+=		powerd
 .endif
 
-.if ${MK_AMD} != "no"
-CONFGROUPS+=	AMD
-AMD+=		amd
-AMDPACKAGE=	amd
-.endif
-
 .if ${MK_APM} != "no"
 CONFGROUPS+=	APM
 APM+=		apm
@@ -268,10 +262,6 @@ _nscd=		nscd
 
 .if ${MK_NTP} != "no"
 CONFS+=		ntpd
-.endif
-
-.if ${MK_OPENNTPD} != "no"
-CONFS+=		local_openntpd
 .endif
 
 .if ${MK_OFED} != "no"

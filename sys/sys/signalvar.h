@@ -273,6 +273,7 @@ int __sys_sigfastblock(int cmd, void *ptr);
 
 #ifdef _KERNEL
 extern sigset_t fastblock_mask;
+extern bool sigfastblock_fetch_always;
 
 /* Return nonzero if process p has an unmasked pending signal. */
 #define	SIGPENDING(td)							\
@@ -281,20 +282,20 @@ extern sigset_t fastblock_mask;
 	 (!SIGISEMPTY((td)->td_proc->p_siglist) &&			\
 	    !sigsetmasked(&(td)->td_proc->p_siglist, &(td)->td_sigmask)))
 /*
- * Return the value of the pseudo-expression ((*set & ~*mask) != 0).  This
+ * Return the value of the pseudo-expression ((*set & ~*mask) == 0).  This
  * is an optimized version of SIGISEMPTY() on a temporary variable
  * containing SIGSETNAND(*set, *mask).
  */
-static __inline int
+static __inline bool
 sigsetmasked(sigset_t *set, sigset_t *mask)
 {
 	int i;
 
 	for (i = 0; i < _SIG_WORDS; i++) {
 		if (set->__bits[i] & ~mask->__bits[i])
-			return (0);
+			return (false);
 	}
-	return (1);
+	return (true);
 }
 
 #define	ksiginfo_init(ksi)			\
@@ -382,10 +383,8 @@ sigallowstop(int prev)
 
 int	cursig(struct thread *td);
 void	execsigs(struct proc *p);
-void	fetch_sigfastblock(struct thread *td);
-void	fetch_sigfastblock_failed(struct thread *td, bool write);
 void	gsignal(int pgid, int sig, ksiginfo_t *ksi);
-void	killproc(struct proc *p, char *why);
+void	killproc(struct proc *p, const char *why);
 ksiginfo_t * ksiginfo_alloc(int wait);
 void	ksiginfo_free(ksiginfo_t *ksi);
 int	pksignal(struct proc *p, int sig, ksiginfo_t *ksi);
@@ -394,7 +393,6 @@ void	pgsignal(struct pgrp *pgrp, int sig, int checkctty, ksiginfo_t *ksi);
 int	postsig(int sig);
 void	kern_psignal(struct proc *p, int sig);
 int	ptracestop(struct thread *td, int sig, ksiginfo_t *si);
-void	reschedule_signals(struct proc *p, sigset_t block, int flags);
 void	sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *retmask);
 struct sigacts *sigacts_alloc(void);
 void	sigacts_copy(struct sigacts *dest, struct sigacts *src);
@@ -405,6 +403,9 @@ void	sig_drop_caught(struct proc *p);
 void	sigexit(struct thread *td, int sig) __dead2;
 int	sigev_findtd(struct proc *p, struct sigevent *sigev, struct thread **);
 int	sig_ffs(sigset_t *set);
+void	sigfastblock_clear(struct thread *td);
+void	sigfastblock_fetch(struct thread *td);
+void	sigfastblock_setpend(struct thread *td, bool resched);
 void	siginit(struct proc *p);
 void	signotify(struct thread *td);
 void	sigqueue_delete(struct sigqueue *queue, int sig);

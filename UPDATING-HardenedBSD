@@ -1,3 +1,10 @@
+[20200221] Removal of LibreSSL and OpenNTPD
+__HardenedBSD_version = 1300061
+
+	LibreSSL and OpenNTPD were removed from the HardenedBSD base
+	system. Users who set WITH_LIBRESSL or WITH_OPENNTPD will need
+	to rebuild ports.
+
 [20191214] Jail parameter: {no}allow.extattr
 __HardenedBSD_version = 1300060
 

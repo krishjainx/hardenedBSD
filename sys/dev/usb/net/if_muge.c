@@ -54,9 +54,7 @@ __FBSDID("$FreeBSD$");
  * A number of features supported by the lan78xx are not yet implemented in
  * this driver:
  *
- * - RX/TX checksum offloading: Nothing has been implemented yet for
- *   TX checksumming. RX checksumming works with ICMP messages, but is broken
- *   for TCP/UDP packets.
+ * - TX checksum offloading: Nothing has been implemented yet.
  * - Direct address translation filtering: Implemented but untested.
  * - VLAN tag removal.
  * - Support for USB interrupt endpoints.
@@ -122,15 +120,14 @@ __FBSDID("$FreeBSD$");
 #ifdef USB_DEBUG
 static int muge_debug = 0;
 
-SYSCTL_NODE(_hw_usb, OID_AUTO, muge, CTLFLAG_RW, 0,
+SYSCTL_NODE(_hw_usb, OID_AUTO, muge, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "Microchip LAN78xx USB-GigE");
 SYSCTL_INT(_hw_usb_muge, OID_AUTO, debug, CTLFLAG_RWTUN, &muge_debug, 0,
     "Debug level");
 #endif
 
-#define MUGE_DEFAULT_RX_CSUM_ENABLE (false)
 #define MUGE_DEFAULT_TX_CSUM_ENABLE (false)
-#define MUGE_DEFAULT_TSO_CSUM_ENABLE (false)
+#define MUGE_DEFAULT_TSO_ENABLE (false)
 
 /* Supported Vendor and Product IDs. */
 static const struct usb_device_id lan78xx_devs[] = {
@@ -1262,7 +1259,7 @@ muge_bulk_read_callback(struct usb_xfer *xfer, usb_error_t error)
 				 * Check if RX checksums are computed, and
 				 * offload them
 				 */
-				if ((ifp->if_capabilities & IFCAP_RXCSUM) &&
+				if ((ifp->if_capenable & IFCAP_RXCSUM) &&
 				    !(rx_cmd_a & RX_CMD_A_ICSM_)) {
 					struct ether_header *eh;
 					eh = mtod(m, struct ether_header *);
@@ -1285,7 +1282,8 @@ muge_bulk_read_callback(struct usb_xfer *xfer, usb_error_t error)
 					 */
 					if (pktlen > ETHER_MIN_LEN) {
 						m->m_pkthdr.csum_flags |=
-						    CSUM_DATA_VALID;
+						    CSUM_DATA_VALID |
+						    CSUM_PSEUDO_HDR;
 
 						/*
 						 * Copy the checksum from the
@@ -1304,7 +1302,7 @@ muge_bulk_read_callback(struct usb_xfer *xfer, usb_error_t error)
 						 * be in host network order.
 						 */
 						m->m_pkthdr.csum_data =
-						   ntohs(m->m_pkthdr.csum_data);
+						   ntohs(0xffff);
 
 						muge_dbg_printf(sc,
 						    "RX checksum offloaded (0x%04x)\n",
@@ -1615,8 +1613,7 @@ muge_attach_post_sub(struct usb_ether *ue)
 	 */
 	ifp->if_capabilities |= IFCAP_VLAN_MTU;
 	ifp->if_hwassist = 0;
-	if (MUGE_DEFAULT_RX_CSUM_ENABLE)
-		ifp->if_capabilities |= IFCAP_RXCSUM;
+	ifp->if_capabilities |= IFCAP_RXCSUM;
 
 	if (MUGE_DEFAULT_TX_CSUM_ENABLE)
 		ifp->if_capabilities |= IFCAP_TXCSUM;
@@ -1626,7 +1623,7 @@ muge_attach_post_sub(struct usb_ether *ue)
 	 * here, that's something related to socket buffers used in Linux.
 	 * FreeBSD doesn't have that as an interface feature.
 	 */
-	if (MUGE_DEFAULT_TSO_CSUM_ENABLE)
+	if (MUGE_DEFAULT_TSO_ENABLE)
 		ifp->if_capabilities |= IFCAP_TSO4 | IFCAP_TSO6;
 
 #if 0
@@ -1970,7 +1967,7 @@ static int muge_sethwcsum(struct muge_softc *sc)
 
 	MUGE_LOCK_ASSERT(sc, MA_OWNED);
 
-	if (ifp->if_capabilities & IFCAP_RXCSUM) {
+	if (ifp->if_capenable & IFCAP_RXCSUM) {
 		sc->sc_rfe_ctl |= ETH_RFE_CTL_IGMP_COE_ | ETH_RFE_CTL_ICMP_COE_;
 		sc->sc_rfe_ctl |= ETH_RFE_CTL_TCPUDP_COE_ | ETH_RFE_CTL_IP_COE_;
 	} else {

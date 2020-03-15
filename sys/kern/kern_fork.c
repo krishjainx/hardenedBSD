@@ -209,8 +209,8 @@ SYSCTL_INT(_kern, OID_AUTO, lastpid, CTLFLAG_RD, &lastpid, 0,
 int randompid = 0;
 
 #ifdef PAX_HARDENING
-SYSCTL_INT(_kern, OID_AUTO, randompid, CTLFLAG_RD, &randompid, 0,
-    "Random PID modulus");
+SYSCTL_INT(_kern, OID_AUTO, randompid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+    &randompid, 0, "Random PID modulus");
 #else
 static int
 sysctl_kern_randompid(SYSCTL_HANDLER_ARGS)
@@ -242,8 +242,9 @@ sysctl_kern_randompid(SYSCTL_HANDLER_ARGS)
 	return (error);
 }
 
-SYSCTL_PROC(_kern, OID_AUTO, randompid, CTLTYPE_INT|CTLFLAG_RW,
-    0, 0, sysctl_kern_randompid, "I", "Random PID modulus");
+SYSCTL_PROC(_kern, OID_AUTO, randompid, CTLTYPE_INT | CTLFLAG_RW |
+    CTLFLAG_MPSAFE, 0, 0, sysctl_kern_randompid, "I",
+    "Random PID modulus");
 #endif
 
 extern bitstr_t proc_id_pidmap;

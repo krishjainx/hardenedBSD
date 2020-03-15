@@ -455,7 +455,7 @@ dsp_open(struct cdev *i_dev, int flags, int mode, struct thread *td)
 		return (ENODEV);
 
 	d = dsp_get_info(i_dev);
-	if (!PCM_REGISTERED(d))
+	if (PCM_DETACHING(d) || !PCM_REGISTERED(d))
 		return (EBADF);
 
 	PCM_GIANT_ENTER(d);
@@ -825,7 +825,7 @@ dsp_io_ops(struct cdev *i_dev, struct uio *buf)
 	    ("%s(): io train wreck!", __func__));
 
 	d = dsp_get_info(i_dev);
-	if (!DSP_REGISTERED(d, i_dev))
+	if (PCM_DETACHING(d) || !DSP_REGISTERED(d, i_dev))
 		return (EBADF);
 
 	PCM_GIANT_ENTER(d);
@@ -1070,7 +1070,7 @@ dsp_ioctl(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
 	int *arg_i, ret, tmp;
 
 	d = dsp_get_info(i_dev);
-	if (!DSP_REGISTERED(d, i_dev))
+	if (PCM_DETACHING(d) || !DSP_REGISTERED(d, i_dev))
 		return (EBADF);
 
 	PCM_GIANT_ENTER(d);
@@ -2165,9 +2165,11 @@ dsp_poll(struct cdev *i_dev, int events, struct thread *td)
 	int ret, e;
 
 	d = dsp_get_info(i_dev);
-	if (!DSP_REGISTERED(d, i_dev))
-		return (EBADF);
-
+	if (PCM_DETACHING(d) || !DSP_REGISTERED(d, i_dev)) {
+		/* XXX many clients don't understand POLLNVAL */
+		return (events & (POLLHUP | POLLPRI | POLLIN |
+		    POLLRDNORM | POLLOUT | POLLWRNORM));
+	}
 	PCM_GIANT_ENTER(d);
 
 	wrch = NULL;
@@ -2227,7 +2229,7 @@ dsp_mmap_single(struct cdev *i_dev, vm_ooffset_t *offset,
 		return (EINVAL);
 
 	d = dsp_get_info(i_dev);
-	if (!DSP_REGISTERED(d, i_dev))
+	if (PCM_DETACHING(d) || !DSP_REGISTERED(d, i_dev))
 		return (EINVAL);
 
 	PCM_GIANT_ENTER(d);
