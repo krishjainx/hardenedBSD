@@ -955,10 +955,15 @@ typedef struct {
 #define	AT_EHDRFLAGS	24	/* e_flags field from elf hdr */
 #define	AT_HWCAP	25	/* CPU feature flags. */
 #define	AT_HWCAP2	26	/* CPU feature flags 2. */
-#define	AT_PAXFLAGS 	27
-#define	AT_BSDFLAGS	28	/* ELF BSD Flags. */
+#define	AT_BSDFLAGS	27	/* ELF BSD Flags. */
+#define	AT_ARGC		28	/* Argument count */
+#define	AT_ARGV		29	/* Argument vector */
+#define	AT_ENVC		30	/* Environment count */
+#define	AT_ENVV		31	/* Environment vector */
+#define	AT_PS_STRINGS	32	/* struct ps_strings */
+#define	AT_PAXFLAGS 	33
 
-#define	AT_COUNT	29	/* Count of defined aux entry types. */
+#define	AT_COUNT	34	/* Count of defined aux entry types. */
 
 /*
  * Relocation types.

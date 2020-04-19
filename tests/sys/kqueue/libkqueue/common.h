@@ -40,8 +40,8 @@
 
 #include <sys/event.h>
 
-extern char *cur_test_id;
-int vnode_fd;
+extern int vnode_fd;
+extern int kqfd;
 
 extern char * kevent_to_str(struct kevent *);
 struct kevent * kevent_get(int);
@@ -75,5 +75,14 @@ extern void test_no_kevents_quietly(void);
 
 extern void test_begin(const char *);
 extern void success(void);
+
+extern void test_evfilt_read(void);
+extern void test_evfilt_signal(void);
+extern void test_evfilt_vnode(void);
+extern void test_evfilt_timer(void);
+extern void test_evfilt_proc(void);
+#if HAVE_EVFILT_USER
+extern void test_evfilt_user(void);
+#endif
 
 #endif  /* _COMMON_H */

@@ -213,6 +213,8 @@
             ..
             atf
             ..
+            kyua
+            ..
             legal
             ..
             llvm
@@ -308,6 +310,8 @@
                     test
                     ..
                 ..
+            ..
+            kyua
             ..
             libusb20
             ..
@@ -450,6 +454,12 @@
                 ..
                 trusted tags=package=runtime
                 ..
+            ..
+        ..
+        kyua
+            misc
+            ..
+            store
             ..
         ..
         locale
@@ -1247,15 +1257,25 @@
             ..
             Australia
             ..
+            Brazil
+            ..
+            Canada
+            ..
+            Chile
+            ..
             Etc
             ..
             Europe
             ..
             Indian
             ..
+            Mexico
+            ..
             Pacific
             ..
             SystemV
+            ..
+            US
             ..
         ..
     ..

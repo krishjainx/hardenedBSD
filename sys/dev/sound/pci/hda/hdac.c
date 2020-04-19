@@ -56,7 +56,6 @@ SND_DECLARE_FILE("$FreeBSD$");
 #define hdac_lock(sc)		snd_mtxlock((sc)->lock)
 #define hdac_unlock(sc)		snd_mtxunlock((sc)->lock)
 #define hdac_lockassert(sc)	snd_mtxassert((sc)->lock)
-#define hdac_lockowned(sc)	mtx_owned((sc)->lock)
 
 #define HDAC_QUIRK_64BIT	(1 << 0)
 #define HDAC_QUIRK_DMAPOS	(1 << 1)
@@ -440,9 +439,7 @@ hdac_reset(struct hdac_softc *sc, int wakeup)
 
 	/*
 	 * Wait for codecs to finish their own reset sequence. The delay here
-	 * should be of 250us but for some reasons, it's not enough on my
-	 * computer. Let's use twice as much as necessary to make sure that
-	 * it's reset properly.
+	 * must be at least 521us (HDA 1.0a section 4.3 Codec Discovery).
 	 */
 	DELAY(1000);
 
@@ -967,7 +964,7 @@ hdac_unsolq_flush(struct hdac_softc *sc)
 }
 
 /****************************************************************************
- * uint32_t hdac_command_sendone_internal
+ * uint32_t hdac_send_command
  *
  * Wrapper function that sends only one command to a given codec
  ****************************************************************************/
@@ -977,8 +974,7 @@ hdac_send_command(struct hdac_softc *sc, nid_t cad, uint32_t verb)
 	int timeout;
 	uint32_t *corb;
 
-	if (!hdac_lockowned(sc))
-		device_printf(sc->dev, "WARNING!!!! mtx not owned!!!!\n");
+	hdac_lockassert(sc);
 	verb &= ~HDA_CMD_CAD_MASK;
 	verb |= ((uint32_t)cad) << HDA_CMD_CAD_SHIFT;
 	sc->codecs[cad].response = HDA_INVALID;
@@ -1001,7 +997,8 @@ hdac_send_command(struct hdac_softc *sc, nid_t cad, uint32_t verb)
 	} while (sc->codecs[cad].pending != 0 && --timeout);
 
 	if (sc->codecs[cad].pending != 0) {
-		device_printf(sc->dev, "Command timeout on address %d\n", cad);
+		device_printf(sc->dev, "Command 0x%08x timeout on address %d\n",
+		    verb, cad);
 		sc->codecs[cad].pending = 0;
 	}
 
@@ -1413,21 +1410,11 @@ hdac_poll_reinit(struct hdac_softc *sc)
 		pollticks >>= 1;
 		if (pollticks > hz)
 			pollticks = hz;
-		if (pollticks < 1) {
-			HDA_BOOTVERBOSE(
-				device_printf(sc->dev,
-				    "poll interval < 1 tick !\n");
-			);
+		if (pollticks < 1)
 			pollticks = 1;
-		}
 		if (min > pollticks)
 			min = pollticks;
 	}
-	HDA_BOOTVERBOSE(
-		device_printf(sc->dev,
-		    "poll interval %d -> %d ticks\n",
-		    sc->poll_ival, min);
-	);
 	sc->poll_ival = min;
 	if (min == 1000000)
 		callout_stop(&sc->poll_callout);
@@ -1540,7 +1527,7 @@ hdac_attach2(void *arg)
 			if (vendorid == HDA_INVALID &&
 			    revisionid == HDA_INVALID) {
 				device_printf(sc->dev,
-				    "CODEC is not responding!\n");
+				    "CODEC at address %d not responding!\n", i);
 				continue;
 			}
 			sc->codecs[i].vendor_id =

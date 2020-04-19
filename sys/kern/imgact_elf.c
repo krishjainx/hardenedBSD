@@ -53,7 +53,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/mman.h>
 #include <sys/namei.h>
 #include <sys/pax.h>
-#include <sys/pioctl.h>
 #include <sys/proc.h>
 #include <sys/procfs.h>
 #include <sys/ptrace.h>
@@ -1176,10 +1175,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		 * non-zero for some reason.
 		 */
 		if (baddr == 0) {
-			if ((sv->sv_flags & SV_ASLR) == 0 ||
-			    (fctl0 & NT_FREEBSD_FCTL_ASLR_DISABLE) != 0)
-				do_asr = 1;
-			else if ((__elfN(pie_aslr_enabled) &&
+			if ((__elfN(pie_aslr_enabled) &&
 			    (imgp->proc->p_flag2 & P2_ASLR_DISABLE) == 0) ||
 			    (imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0)
 				do_asr = 1;
@@ -1214,8 +1210,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		PROC_UNLOCK(imgp->proc);
 	}
 
-	if ((imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0 ||
-	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC) ||
+	if (((imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0 ||
+	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC)) &&
 	    do_asr) {
 		imgp->map_flags |= MAP_ASLR;
 		/*
@@ -1369,16 +1365,16 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintptr_t base)
 	AUXARGS_ENTRY(pos, AT_PAXFLAGS, args->pax_flags);
 	AUXARGS_ENTRY(pos, AT_EHDRFLAGS, args->hdr_eflags);
 	if (imgp->execpathp != 0)
-		AUXARGS_ENTRY(pos, AT_EXECPATH, imgp->execpathp);
+		AUXARGS_ENTRY_PTR(pos, AT_EXECPATH, imgp->execpathp);
 	AUXARGS_ENTRY(pos, AT_OSRELDATE,
 	    imgp->proc->p_ucred->cr_prison->pr_osreldate);
 	if (imgp->canary != 0) {
-		AUXARGS_ENTRY(pos, AT_CANARY, imgp->canary);
+		AUXARGS_ENTRY_PTR(pos, AT_CANARY, imgp->canary);
 		AUXARGS_ENTRY(pos, AT_CANARYLEN, imgp->canarylen);
 	}
 	AUXARGS_ENTRY(pos, AT_NCPUS, mp_ncpus);
 	if (imgp->pagesizes != 0) {
-		AUXARGS_ENTRY(pos, AT_PAGESIZES, imgp->pagesizes);
+		AUXARGS_ENTRY_PTR(pos, AT_PAGESIZES, imgp->pagesizes);
 		AUXARGS_ENTRY(pos, AT_PAGESIZESLEN, imgp->pagesizeslen);
 	}
 	if (imgp->sysent->sv_timekeep_base != 0) {
@@ -1394,6 +1390,11 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintptr_t base)
 		AUXARGS_ENTRY(pos, AT_HWCAP2, *imgp->sysent->sv_hwcap2);
 	AUXARGS_ENTRY(pos, AT_BSDFLAGS, __elfN(sigfastblock) ?
 	    ELF_BSDF_SIGFASTBLK : 0);
+	AUXARGS_ENTRY(pos, AT_ARGC, imgp->args->argc);
+	AUXARGS_ENTRY_PTR(pos, AT_ARGV, imgp->argv);
+	AUXARGS_ENTRY(pos, AT_ENVC, imgp->args->envc);
+	AUXARGS_ENTRY_PTR(pos, AT_ENVV, imgp->envv);
+	AUXARGS_ENTRY_PTR(pos, AT_PS_STRINGS, imgp->ps_strings);
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 
 	free(imgp->auxargs, M_TEMP);

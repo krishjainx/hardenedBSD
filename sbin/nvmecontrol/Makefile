@@ -13,6 +13,8 @@ MAN=	nvmecontrol.8
 LDFLAGS+= -rdynamic
 LIBADD+= util
 SUBDIR=	modules
+HAS_TESTS=
+SUBDIR.${MK_TESTS}+= tests
 
 MK_CROSS_DSO_CFI=	no
 

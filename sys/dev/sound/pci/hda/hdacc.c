@@ -65,7 +65,6 @@ struct hdacc_softc {
 #define hdacc_lock(codec)	snd_mtxlock((codec)->lock)
 #define hdacc_unlock(codec)	snd_mtxunlock((codec)->lock)
 #define hdacc_lockassert(codec)	snd_mtxassert((codec)->lock)
-#define hdacc_lockowned(codec)	mtx_owned((codec)->lock)
 
 MALLOC_DEFINE(M_HDACC, "hdacc", "HDA CODEC");
 
@@ -86,6 +85,7 @@ static const struct {
 	{ HDA_CODEC_ALC235, 0,		"Realtek ALC235" },
 	{ HDA_CODEC_ALC255, 0,		"Realtek ALC255" },
 	{ HDA_CODEC_ALC256, 0,		"Realtek ALC256" },
+	{ HDA_CODEC_ALC257, 0,		"Realtek ALC257" },
 	{ HDA_CODEC_ALC260, 0,		"Realtek ALC260" },
 	{ HDA_CODEC_ALC262, 0,		"Realtek ALC262" },
 	{ HDA_CODEC_ALC267, 0,		"Realtek ALC267" },
