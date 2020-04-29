@@ -232,11 +232,9 @@ prison0_init(void)
 	prison0.pr_osreldate = osreldate;
 	strlcpy(prison0.pr_osrelease, osrelease, sizeof(prison0.pr_osrelease));
 
-<<<<<<< HEAD
 #ifdef PAX
 	(void)pax_init_prison(&prison0, NULL);
 #endif
-=======
 	/* If we have a preloaded hostuuid, use it. */
 	file = preload_search_by_type(PRISON0_HOSTUUID_MODULE);
 	if (file != NULL) {
