@@ -1323,7 +1323,6 @@ OLD_FILES+=usr/bin/llvm-objdump
 OLD_FILES+=usr/bin/llvm-ranlib
 OLD_FILES+=usr/bin/llvm-symbolizer
 OLD_FILES+=usr/bin/llvm-tblgen
-<<<<<<< HEAD
 OLD_FILES+=usr/lib/clang/8.0.1/include/sanitizer/allocator_interface.h
 OLD_FILES+=usr/lib/clang/8.0.1/include/sanitizer/asan_interface.h
 OLD_FILES+=usr/lib/clang/8.0.1/include/sanitizer/common_interface_defs.h
@@ -1726,7 +1725,6 @@ OLD_FILES+=usr/lib/clang/9.0.1/lib/freebsd/libclang_rt.xray-x86_64.a
 OLD_DIRS+=usr/lib/clang/9.0.1/lib/freebsd
 OLD_DIRS+=usr/lib/clang/9.0.1/lib
 OLD_DIRS+=usr/lib/clang/9.0.1
-=======
 OLD_FILES+=usr/lib/clang/10.0.0/include/cuda_wrappers/algorithm
 OLD_FILES+=usr/lib/clang/10.0.0/include/cuda_wrappers/complex
 OLD_FILES+=usr/lib/clang/10.0.0/include/cuda_wrappers/new
@@ -1994,7 +1992,6 @@ OLD_FILES+=usr/lib/clang/10.0.0/lib/freebsd/libclang_rt.xray-x86_64.a
 OLD_DIRS+=usr/lib/clang/10.0.0/lib/freebsd
 OLD_DIRS+=usr/lib/clang/10.0.0/lib
 OLD_DIRS+=usr/lib/clang/10.0.0
->>>>>>> freebsd/stable/12
 OLD_DIRS+=usr/lib/clang
 OLD_FILES+=usr/share/doc/llvm/clang/LICENSE.TXT
 OLD_DIRS+=usr/share/doc/llvm/clang

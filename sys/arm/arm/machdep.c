@@ -66,11 +66,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/kernel.h>
 #include <sys/linker.h>
 #include <sys/msgbuf.h>
-<<<<<<< HEAD
 #include <sys/pax.h>
-=======
 #include <sys/physmem.h>
->>>>>>> freebsd/stable/12
 #include <sys/reboot.h>
 #include <sys/rwlock.h>
 #include <sys/sched.h>
