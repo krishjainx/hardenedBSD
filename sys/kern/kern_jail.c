@@ -260,7 +260,6 @@ prison0_init(void)
 	}
 	if (bootverbose)
 		printf("hostuuid: using %s\n", prison0.pr_hostuuid);
->>>>>>> origin/freebsd/12-stable/master
 }
 
 /*
