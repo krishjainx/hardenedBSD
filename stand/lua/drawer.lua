@@ -259,6 +259,11 @@ local function drawlogo()
 		else
 			logodef = getLogodef(drawer.default_bw_logodef)
 		end
+
+		-- Something has gone terribly wrong.
+		if logodef == nil then
+			logodef = getLogodef(drawer.default_fallback_logodef)
+		end
 	end
 
 	if logodef ~= nil and logodef.graphic == none then
@@ -364,9 +369,18 @@ default_shift = {x = 0, y = 0}
 shift = default_shift
 
 -- Module exports
+<<<<<<< HEAD
 drawer.default_brand = 'hbsd'
 drawer.default_color_logodef = 'hardenedbsd'
 drawer.default_bw_logodef = 'hardenedbsdbw'
+=======
+drawer.default_brand = 'fbsd'
+drawer.default_color_logodef = 'orb'
+drawer.default_bw_logodef = 'orbbw'
+-- For when things go terribly wrong; this def should be present here in the
+-- drawer module in case it's a filesystem issue.
+drawer.default_fallback_logodef = 'none'
+>>>>>>> origin/freebsd/12-stable/master
 
 function drawer.addBrand(name, def)
 	branddefs[name] = def
