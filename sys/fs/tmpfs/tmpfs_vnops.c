@@ -70,6 +70,15 @@ SYSCTL_INT(_vfs_tmpfs, OID_AUTO, rename_restarts, CTLFLAG_RD,
     __DEVOLATILE(int *, &tmpfs_rename_restarts), 0,
     "Times rename had to restart due to lock contention");
 
+static struct tmpfs_extattr_list_entry *tmpfs_node_has_extattr(
+    struct tmpfs_node *, int, const char *);
+
+static int tmpfs_extattr_set(struct vnode *, int, const char *,
+    struct uio *, struct ucred *, struct thread *);
+
+static int tmpfs_extattr_get(struct vnode *, int, const char *,
+    struct uio *, size_t *, struct ucred *, struct thread *);
+
 static int
 tmpfs_vn_get_ino_alloc(struct mount *mp, void *arg, int lkflags,
     struct vnode **rvp)
@@ -1585,6 +1594,87 @@ restart:
 	return (ENOENT);
 }
 
+static struct tmpfs_extattr_list_entry *
+tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
+    const char *name)
+{
+	struct tmpfs_extattr_list_entry *entry, *tentry;
+
+	LIST_FOREACH_SAFE(entry, &(node->tn_reg.tn_extattr_list),
+	    tele_entries, tentry) {
+		if (attrnamespace != entry->tele_attrnamespace) {
+			continue;
+		}
+
+		if (strcmp(name, entry->tele_attrname)) {
+			return (entry);
+		}
+	}
+
+	return (NULL);
+}
+
+static int
+tmpfs_getextattr(struct vop_getextattr_args *ap)
+{
+
+	return (tmpfs_extattr_get(ap->a_vp, ap->a_attrnamespace,
+	    ap->a_name, ap->a_uio, ap->a_size, ap->a_cred, ap->a_td));
+}
+
+static int
+tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
+    struct uio *uio, size_t *size, struct ucred *cred, struct thread *td)
+{
+	struct tmpfs_extattr_list_entry *attr;
+	struct tmpfs_node *node;
+
+	if (vp->v_type != VREG) {
+		return (EOPNOTSUPP);
+	}
+
+	node = VP_TO_TMPFS_NODE(vp);
+
+	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
+
+	return (0);
+}
+
+static int
+tmpfs_setextattr(struct vop_setextattr_args *ap)
+{
+
+	return (tmpfs_extattr_set(ap->a_vp, ap->a_attrnamespace,
+	    ap->a_name, ap->a_uio, ap->a_cred, ap->a_td));
+}
+
+static int
+tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
+    struct uio *uio, struct ucred *cred, struct thread *td)
+{
+	struct tmpfs_extattr_list_entry *attr;
+	struct tmpfs_node *node;
+
+	if (vp->v_type != VREG) {
+		return (EOPNOTSUPP);
+	}
+
+	node = VP_TO_TMPFS_NODE(vp);
+
+	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
+	if (attr == NULL) {
+		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK);
+		memset(attr, 0, sizeof(*attr));
+		LIST_INSERT_HEAD(&(node->tn_reg.tn_extattr_list),
+		    attr, tele_entries);
+	}
+
+	attr->tele_attrnamespace = attrnamespace;
+	strncpy(attr->tele_attrname, name, sizeof(attr->tele_attrname));
+
+	return (0);
+}
+
 /*
  * Vnode operations vector used for files stored in a tmpfs file system.
  */
@@ -1599,6 +1689,8 @@ struct vop_vector tmpfs_vnodeop_entries = {
 	.vop_access =			tmpfs_access,
 	.vop_getattr =			tmpfs_getattr,
 	.vop_setattr =			tmpfs_setattr,
+	.vop_getextattr =		tmpfs_getextattr,
+	.vop_setextattr =		tmpfs_setextattr,
 	.vop_read =			tmpfs_read,
 	.vop_write =			tmpfs_write,
 	.vop_fsync =			tmpfs_fsync,
