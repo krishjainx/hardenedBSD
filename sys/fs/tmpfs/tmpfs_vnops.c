@@ -1628,6 +1628,10 @@ tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 {
 	struct tmpfs_extattr_list_entry *attr;
 	struct tmpfs_node *node;
+	size_t len;
+	int error;
+
+	error = 0;
 
 	if (vp->v_type != VREG) {
 		return (EOPNOTSUPP);
@@ -1640,13 +1644,18 @@ tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 		return (ENOATTR);
 	}
 
-	if (0 == 1) {
-		uiomove(attr->tele_value,
-		    MIN(attr->tele_value_size, uio->uio_resid),
-		    uio);
+	if (size) {
+		*size = attr->tele_value_size;
 	}
 
-	return (0);
+	if (uio != NULL) {
+		len = MIN(attr->tele_value_size, uio->uio_resid);
+		uio->uio_resid = len;
+		uio->uio_offset = 0;
+		error = uiomove(attr->tele_value, len, uio);
+	}
+
+	return (error);
 }
 
 static int
