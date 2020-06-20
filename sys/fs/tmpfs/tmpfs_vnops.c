@@ -1606,7 +1606,7 @@ tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
 			continue;
 		}
 
-		if (strcmp(name, entry->tele_attrname)) {
+		if (!strcmp(name, entry->tele_attrname)) {
 			return (entry);
 		}
 	}
@@ -1636,6 +1636,15 @@ tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 	node = VP_TO_TMPFS_NODE(vp);
 
 	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
+	if (attr == NULL) {
+		return (ENOATTR);
+	}
+
+	if (0 == 1) {
+		uiomove(attr->tele_value,
+		    MIN(attr->tele_value_size, uio->uio_resid),
+		    uio);
+	}
 
 	return (0);
 }
@@ -1654,23 +1663,35 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 {
 	struct tmpfs_extattr_list_entry *attr;
 	struct tmpfs_node *node;
+	size_t sz;
 
 	if (vp->v_type != VREG) {
 		return (EOPNOTSUPP);
+	}
+
+	if (uio->uio_resid > TMPFS_EXTATTR_MAXVALUESIZE) {
+		return (EINVAL);
 	}
 
 	node = VP_TO_TMPFS_NODE(vp);
 
 	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
 	if (attr == NULL) {
+		sz = MIN(TMPFS_EXTATTR_MAXVALUESIZE, uio->uio_resid);
 		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK);
 		memset(attr, 0, sizeof(*attr));
+
+		attr->tele_value = malloc(sz, M_TEMP, M_WAITOK);
+		attr->tele_value_size = sz;
+		attr->tele_attrnamespace = attrnamespace;
+		strncpy(attr->tele_attrname, name,
+		    sizeof(attr->tele_attrname));
+
+		uiomove(attr->tele_value, sz, uio);
+
 		LIST_INSERT_HEAD(&(node->tn_reg.tn_extattr_list),
 		    attr, tele_entries);
 	}
-
-	attr->tele_attrnamespace = attrnamespace;
-	strncpy(attr->tele_attrname, name, sizeof(attr->tele_attrname));
 
 	return (0);
 }
