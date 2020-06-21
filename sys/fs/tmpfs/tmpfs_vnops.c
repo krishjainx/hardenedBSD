@@ -1701,7 +1701,6 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	if (attr == NULL) {
 		sz = MIN(TMPFS_EXTATTR_MAXVALUESIZE, uio->uio_resid);
 		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK|M_ZERO);
-		memset(attr, 0, sizeof(*attr));
 
 		attr->tele_value = malloc(sz, M_TEMP, M_WAITOK);
 		attr->tele_value_size = sz;
