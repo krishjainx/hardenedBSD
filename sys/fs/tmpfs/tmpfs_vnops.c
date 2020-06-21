@@ -1732,6 +1732,7 @@ tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
 	struct tmpfs_extattr_list_entry *attr, *tattr;
 	struct tmpfs_node *node;
 	size_t namelen;
+	uint8_t namelen8;
 	int error;
 
 	error = 0;
@@ -1754,10 +1755,14 @@ tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
 
 		namelen = strlen(attr->tele_attrname);
 		if (size) {
-			*size += namelen + 1;
+			*size += namelen + namelen8;
 		} else if (uio != NULL) {
-			error = uiomove(&(attr->tele_attrname), namelen + 1,
-			    uio);
+			namelen8 = namelen;
+			error = uiomove(&namelen8, sizeof(namelen8), uio);
+			if (error) {
+				break;
+			}
+			error = uiomove(attr->tele_attrname, namelen, uio);
 		}
 
 		if (error) {
