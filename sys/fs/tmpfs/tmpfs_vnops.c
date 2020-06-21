@@ -79,6 +79,11 @@ static int tmpfs_extattr_set(struct vnode *, int, const char *,
 static int tmpfs_extattr_get(struct vnode *, int, const char *,
     struct uio *, size_t *, struct ucred *, struct thread *);
 
+static int tmpfs_listextattr(struct vop_listextattr_args *);
+
+static int tmpfs_extattr_list(struct vnode *, int, struct uio *,
+    size_t *, struct ucred *, struct thread *);
+
 static int
 tmpfs_vn_get_ino_alloc(struct mount *mp, void *arg, int lkflags,
     struct vnode **rvp)
@@ -1682,19 +1687,27 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 		return (EINVAL);
 	}
 
+	if (strlen(name) == 0) {
+		return (EINVAL);
+	}
+
+	if (strlen(name) >= TMPFS_EXTATTR_MAXNAME) {
+		return (EINVAL);
+	}
+
 	node = VP_TO_TMPFS_NODE(vp);
 
 	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
 	if (attr == NULL) {
 		sz = MIN(TMPFS_EXTATTR_MAXVALUESIZE, uio->uio_resid);
-		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK);
+		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK|M_ZERO);
 		memset(attr, 0, sizeof(*attr));
 
 		attr->tele_value = malloc(sz, M_TEMP, M_WAITOK);
 		attr->tele_value_size = sz;
 		attr->tele_attrnamespace = attrnamespace;
 		strncpy(attr->tele_attrname, name,
-		    sizeof(attr->tele_attrname));
+		    sizeof(attr->tele_attrname)-1);
 
 		uiomove(attr->tele_value, sz, uio);
 
@@ -1703,6 +1716,57 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	}
 
 	return (0);
+}
+
+static int
+tmpfs_listextattr(struct vop_listextattr_args *ap)
+{
+
+	return tmpfs_extattr_list(ap->a_vp, ap->a_attrnamespace,
+	    ap->a_uio, ap->a_size, ap->a_cred, ap->a_td);
+}
+
+static int
+tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
+    size_t *size, struct ucred *cred, struct thread *td)
+{
+	struct tmpfs_extattr_list_entry *attr, *tattr;
+	struct tmpfs_node *node;
+	size_t namelen;
+	int error;
+
+	error = 0;
+
+	if (vp->v_type != VREG) {
+		return (EOPNOTSUPP);
+	}
+
+	node = VP_TO_TMPFS_NODE(vp);
+
+	if (size) {
+		*size = 0;
+	}
+
+	LIST_FOREACH_SAFE(attr, &(node->tn_reg.tn_extattr_list),
+	    tele_entries, tattr) {
+		if (attr->tele_attrnamespace != attrnamespace) {
+			continue;
+		}
+
+		namelen = strlen(attr->tele_attrname);
+		if (size) {
+			*size += namelen + 1;
+		} else if (uio != NULL) {
+			error = uiomove(&(attr->tele_attrname), namelen + 1,
+			    uio);
+		}
+
+		if (error) {
+			break;
+		}
+	}
+
+	return (error);
 }
 
 /*
@@ -1721,6 +1785,7 @@ struct vop_vector tmpfs_vnodeop_entries = {
 	.vop_setattr =			tmpfs_setattr,
 	.vop_getextattr =		tmpfs_getextattr,
 	.vop_setextattr =		tmpfs_setextattr,
+	.vop_listextattr =		tmpfs_listextattr,
 	.vop_read =			tmpfs_read,
 	.vop_write =			tmpfs_write,
 	.vop_fsync =			tmpfs_fsync,
