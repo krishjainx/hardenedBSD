@@ -58,6 +58,8 @@ __FBSDID("$FreeBSD$");
 
 #include "linker_if.h"
 
+u_long elf_hwcap;
+
 static struct sysentvec elf64_freebsd_sysvec = {
 	.sv_size	= SYS_MAXSYSCALL,
 	.sv_table	= sysent,
@@ -91,7 +93,11 @@ static struct sysentvec elf64_freebsd_sysvec = {
 	.sv_schedtail	= NULL,
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
+<<<<<<< HEAD
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
+=======
+	.sv_hwcap	= &elf_hwcap,
+>>>>>>> origin/freebsd/12-stable/master
 };
 INIT_SYSENTVEC(elf64_sysvec, &elf64_freebsd_sysvec);
 
