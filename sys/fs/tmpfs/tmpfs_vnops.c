@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/dirent.h>
+#include <sys/extattr.h>
 #include <sys/fcntl.h>
 #include <sys/limits.h>
 #include <sys/lockf.h>
@@ -1605,6 +1606,9 @@ tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
 {
 	struct tmpfs_extattr_list_entry *entry, *tentry;
 
+	entry = NULL;
+
+	TMPFS_NODE_LOCK(node);
 	LIST_FOREACH_SAFE(entry, &(node->tn_reg.tn_extattr_list),
 	    tele_entries, tentry) {
 		if (attrnamespace != entry->tele_attrnamespace) {
@@ -1612,11 +1616,12 @@ tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
 		}
 
 		if (!strcmp(name, entry->tele_attrname)) {
-			return (entry);
+			break;
 		}
 	}
+	TMPFS_NODE_UNLOCK(node);
 
-	return (NULL);
+	return (entry);
 }
 
 static int
@@ -1636,10 +1641,13 @@ tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 	size_t len;
 	int error;
 
-	error = 0;
-
 	if (vp->v_type != VREG) {
 		return (EOPNOTSUPP);
+	}
+
+	error = extattr_check_cred(vp, attrnamespace, cred, td, VREAD);
+	if (error) {
+		return (error);
 	}
 
 	node = VP_TO_TMPFS_NODE(vp);
@@ -1678,9 +1686,15 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	struct tmpfs_extattr_list_entry *attr;
 	struct tmpfs_node *node;
 	size_t sz;
+	int error;
 
 	if (vp->v_type != VREG) {
 		return (EOPNOTSUPP);
+	}
+
+	error = extattr_check_cred(vp, attrnamespace, cred, td, VWRITE);
+	if (error) {
+		return (error);
 	}
 
 	if (uio->uio_resid > TMPFS_EXTATTR_MAXVALUESIZE) {
@@ -1710,8 +1724,10 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 
 		uiomove(attr->tele_value, sz, uio);
 
+		TMPFS_NODE_LOCK(node);
 		LIST_INSERT_HEAD(&(node->tn_reg.tn_extattr_list),
 		    attr, tele_entries);
+		TMPFS_NODE_UNLOCK(node);
 	}
 
 	return (0);
@@ -1735,10 +1751,13 @@ tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
 	uint8_t namelen8;
 	int error;
 
-	error = 0;
-
 	if (vp->v_type != VREG) {
 		return (EOPNOTSUPP);
+	}
+
+	error = extattr_check_cred(vp, attrnamespace, cred, td, VREAD);
+	if (error) {
+		return (error);
 	}
 
 	node = VP_TO_TMPFS_NODE(vp);
