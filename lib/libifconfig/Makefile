@@ -6,9 +6,14 @@ PRIVATELIB=	true
 
 SHLIBDIR?=	/lib
 SHLIB_MAJOR=	1
-SRCS=		libifconfig.c libifconfig_carp.c libifconfig_inet.c
-SRCS+=		libifconfig_inet6.c libifconfig_internal.c libifconfig_lagg.c
-SRCS+=		libifconfig_media.c
+SRCS=		libifconfig.c \
+		libifconfig_bridge.c \
+		libifconfig_carp.c \
+		libifconfig_inet.c \
+		libifconfig_inet6.c \
+		libifconfig_internal.c \
+		libifconfig_lagg.c \
+		libifconfig_media.c
 
 INCSDIR=	${INCLUDEDIR}
 INCS=		libifconfig.h
