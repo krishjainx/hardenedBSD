@@ -42,11 +42,7 @@ __DEFAULT_YES_OPTIONS = \
     MODULE_DRM2 \
     NETGRAPH \
     PF \
-<<<<<<< HEAD
-=======
-    REPRODUCIBLE_BUILD \
     SCTP_SUPPORT \
->>>>>>> origin/freebsd/12-stable/master
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
     TESTS \
