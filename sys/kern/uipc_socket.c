@@ -793,7 +793,7 @@ sonewconn(struct socket *head, int connstatus)
 	return (so);
 }
 
-#ifdef SCTP
+#if defined(SCTP) || defined(SCTP_SUPPORT)
 /*
  * Socket part of sctp_peeloff().  Detach a new socket from an
  * association.  The new socket is returned with a reference.
@@ -1557,8 +1557,10 @@ sosend_generic(struct socket *so, struct sockaddr *addr, struct uio *uio,
 #endif
 	if (uio != NULL)
 		resid = uio->uio_resid;
-	else
+	else if ((top->m_flags & M_PKTHDR) != 0)
 		resid = top->m_pkthdr.len;
+	else
+		resid = m_length(top, NULL);
 	/*
 	 * In theory resid should be unsigned.  However, space must be
 	 * signed, as it might be less than 0 if we over-committed, and we
@@ -1676,6 +1678,13 @@ restart:
 				resid = 0;
 				if (flags & MSG_EOR)
 					top->m_flags |= M_EOR;
+#ifdef KERN_TLS
+				if (tls != NULL) {
+					ktls_frame(top, tls, &tls_enq_cnt,
+					    tls_rtype);
+					tls_rtype = TLS_RLTYPE_APP;
+				}
+#endif
 			} else {
 				/*
 				 * Copy the data from userland into a mbuf
@@ -1689,7 +1698,7 @@ restart:
 				if (tls != NULL) {
 					top = m_uiotombuf(uio, M_WAITOK, space,
 					    tls->params.max_frame_len,
-					    M_NOMAP |
+					    M_EXTPG |
 					    ((flags & MSG_EOR) ? M_EOR : 0));
 					if (top != NULL) {
 						ktls_frame(top, tls,
@@ -1967,8 +1976,9 @@ restart:
 				m = so->so_rcv.sb_mb;
 				goto dontblock;
 			}
-		if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0 &&
-		    (so->so_proto->pr_flags & PR_CONNREQUIRED)) {
+		if ((so->so_state & (SS_ISCONNECTING | SS_ISCONNECTED |
+		    SS_ISDISCONNECTING | SS_ISDISCONNECTED)) == 0 &&
+		    (so->so_proto->pr_flags & PR_CONNREQUIRED) != 0) {
 			SOCKBUF_UNLOCK(&so->so_rcv);
 			error = ENOTCONN;
 			goto release;
@@ -2157,7 +2167,7 @@ dontblock:
 			SBLASTRECORDCHK(&so->so_rcv);
 			SBLASTMBUFCHK(&so->so_rcv);
 			SOCKBUF_UNLOCK(&so->so_rcv);
-			if ((m->m_flags & M_NOMAP) != 0)
+			if ((m->m_flags & M_EXTPG) != 0)
 				error = m_unmappedtouio(m, moff, uio, (int)len);
 			else
 				error = uiomove(mtod(m, char *) + moff,
@@ -2372,11 +2382,33 @@ soreceive_stream(struct socket *so, struct sockaddr **psa, struct uio *uio,
 
 	sb = &so->so_rcv;
 
+#ifdef KERN_TLS
+	/*
+	 * KTLS store TLS records as records with a control message to
+	 * describe the framing.
+	 *
+	 * We check once here before acquiring locks to optimize the
+	 * common case.
+	 */
+	if (sb->sb_tls_info != NULL)
+		return (soreceive_generic(so, psa, uio, mp0, controlp,
+		    flagsp));
+#endif
+
 	/* Prevent other readers from entering the socket. */
 	error = sblock(sb, SBLOCKWAIT(flags));
 	if (error)
 		return (error);
 	SOCKBUF_LOCK(sb);
+
+#ifdef KERN_TLS
+	if (sb->sb_tls_info != NULL) {
+		SOCKBUF_UNLOCK(sb);
+		sbunlock(sb);
+		return (soreceive_generic(so, psa, uio, mp0, controlp,
+		    flagsp));
+	}
+#endif
 
 	/* Easy one, no space to copyout anything. */
 	if (uio->uio_resid == 0) {
@@ -3199,6 +3231,8 @@ sogetopt(struct socket *so, struct sockopt *sopt)
 		case SO_TIMESTAMP:
 		case SO_BINTIME:
 		case SO_NOSIGPIPE:
+		case SO_NO_DDP:
+		case SO_NO_OFFLOAD:
 			optval = so->so_options & sopt->sopt_name;
 integer:
 			error = sooptcopyout(sopt, &optval, sizeof optval);
@@ -3991,8 +4025,17 @@ soisdisconnected(struct socket *so)
 {
 
 	SOCK_LOCK(so);
-	so->so_state &= ~(SS_ISCONNECTING|SS_ISCONNECTED|SS_ISDISCONNECTING);
+
+	/*
+	 * There is at least one reader of so_state that does not
+	 * acquire socket lock, namely soreceive_generic().  Ensure
+	 * that it never sees all flags that track connection status
+	 * cleared, by ordering the update with a barrier semantic of
+	 * our release thread fence.
+	 */
 	so->so_state |= SS_ISDISCONNECTED;
+	atomic_thread_fence_rel();
+	so->so_state &= ~(SS_ISCONNECTING|SS_ISCONNECTED|SS_ISDISCONNECTING);
 
 	if (!SOLISTENING(so)) {
 		SOCK_UNLOCK(so);

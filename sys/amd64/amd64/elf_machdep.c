@@ -192,7 +192,7 @@ elf_is_ifunc_reloc(Elf_Size r_info)
 /* Process one elf relocation with addend. */
 static int
 elf_reloc_internal(linker_file_t lf, Elf_Addr relocbase, const void *data,
-    int type, elf_lookup_fn lookup)
+    int type, bool late_ifunc, elf_lookup_fn lookup)
 {
 	Elf64_Addr *where, val;
 	Elf32_Addr *where32, val32;
@@ -230,6 +230,13 @@ elf_reloc_internal(linker_file_t lf, Elf_Addr relocbase, const void *data,
 		break;
 	default:
 		panic("unknown reloc type %d\n", type);
+	}
+
+	if (late_ifunc) {
+		KASSERT(type == ELF_RELOC_RELA,
+		    ("Only RELA ifunc relocations are supported"));
+		if (rtype != R_X86_64_IRELATIVE)
+			return (0);
 	}
 
 	switch (rtype) {
@@ -311,7 +318,7 @@ elf_reloc(linker_file_t lf, Elf_Addr relocbase, const void *data, int type,
     elf_lookup_fn lookup)
 {
 
-	return (elf_reloc_internal(lf, relocbase, data, type, lookup));
+	return (elf_reloc_internal(lf, relocbase, data, type, false, lookup));
 }
 
 int
@@ -319,7 +326,15 @@ elf_reloc_local(linker_file_t lf, Elf_Addr relocbase, const void *data,
     int type, elf_lookup_fn lookup)
 {
 
-	return (elf_reloc_internal(lf, relocbase, data, type, lookup));
+	return (elf_reloc_internal(lf, relocbase, data, type, false, lookup));
+}
+
+int
+elf_reloc_late(linker_file_t lf, Elf_Addr relocbase, const void *data,
+    int type, elf_lookup_fn lookup)
+{
+
+	return (elf_reloc_internal(lf, relocbase, data, type, true, lookup));
 }
 
 int

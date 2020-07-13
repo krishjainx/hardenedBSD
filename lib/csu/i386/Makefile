@@ -4,13 +4,10 @@
 
 .PATH: ${.CURDIR:H}/common
 
-SRCS=		crti.S crtn.S
-OBJS=		${SRCS:N*.h:R:S/$/.o/g}
-OBJS+=		gcrt1.o crt1.o Scrt1.o
-CFLAGS+=	-I${.CURDIR} -I${.CURDIR:H}/common \
-		-I${SRCTOP}/lib/libc/include
+CFLAGS+=	-I${.CURDIR}
 CFLAGS+=	-DCRT_IRELOC_REL
 
+<<<<<<< HEAD
 MK_CROSS_DSO_CFI=	no
 
 FILES=		${OBJS}
@@ -58,5 +55,8 @@ Scrt1_c.o: Scrt1_c.s
 Scrt1.o: Scrt1_c.o crt1_s.o
 	${LD} ${_LDFLAGS} -o Scrt1.o -r crt1_s.o Scrt1_c.o
 	${OBJCOPY} --localize-symbol _start1 Scrt1.o
+=======
+CRT1OBJS+=	crt1_s.o
+>>>>>>> origin/hardened/current/master
 
 .include <bsd.lib.mk>

@@ -49,6 +49,7 @@ MLINKS?=	rtld.1 ld-elf.so.1.1 \
 		rtld.1 ld.so.1
 
 CFLAGS+=	-fpic -DPIC $(DEBUG)
+
 LDFLAGS+=	-shared -Wl,-Bsymbolic -Wl,-z,defs -nostdlib -e ${RTLD_ENTRY}
 # Pull in the dependencies that we use from libc
 .include "rtld-libc/Makefile.inc"
@@ -96,8 +97,4 @@ ${PROG_FULL}:	${VERSION_MAP}
 # GCC warns about redeclarations even though they have __exported
 # and are therefore not identical to the ones from the system headers.
 CFLAGS+=	-Wno-redundant-decls
-.if ${COMPILER_VERSION} < 40300
-# Silence -Wshadow false positives in ancient GCC
-CFLAGS+=	-Wno-shadow
-.endif
 .endif

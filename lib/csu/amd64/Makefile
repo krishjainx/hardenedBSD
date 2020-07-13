@@ -4,13 +4,10 @@
 
 .PATH: ${.CURDIR:H}/common
 
-SRCS=		crt1.c crti.S crtn.S
-OBJS=		${SRCS:N*.h:R:S/$/.o/g}
-OBJS+=		Scrt1.o gcrt1.o
-CFLAGS+=	-I${.CURDIR} -I${.CURDIR:H}/common \
-		-I${SRCTOP}/lib/libc/include
+CFLAGS+=	-I${.CURDIR}
 CFLAGS+=	-fno-omit-frame-pointer -DCRT_IRELOC_RELA
 
+<<<<<<< HEAD
 NOCFI=			yes
 MK_CFI=			no
 MK_CROSS_DSO_CFI=	no
@@ -50,4 +47,6 @@ Scrt1.s: crt1.c
 Scrt1.o: Scrt1.s
 	${CC} ${CFLAGS:N-g} ${ACFLAGS} -c -o ${.TARGET} Scrt1.s
 
+=======
+>>>>>>> origin/hardened/current/master
 .include <bsd.lib.mk>

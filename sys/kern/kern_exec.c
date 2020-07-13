@@ -231,7 +231,7 @@ struct fexecve_args {
 	int	fd;
 	char	**argv;
 	char	**envv;
-}
+};
 #endif
 int
 sys_fexecve(struct thread *td, struct fexecve_args *uap)

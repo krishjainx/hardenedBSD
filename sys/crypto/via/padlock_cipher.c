@@ -209,13 +209,7 @@ padlock_cipher_process(struct padlock_session *ses, struct cryptop *crp,
 	cw->cw_filler2 = 0;
 	cw->cw_filler3 = 0;
 
-	if (crp->crp_flags & CRYPTO_F_IV_GENERATE) {
-		arc4rand(iv, AES_BLOCK_LEN, 0);
-		crypto_copyback(crp, crp->crp_iv_start, AES_BLOCK_LEN, iv);
-	} else if (crp->crp_flags & CRYPTO_F_IV_SEPARATE)
-		memcpy(iv, crp->crp_iv, AES_BLOCK_LEN);
-	else
-		crypto_copydata(crp, crp->crp_iv_start, AES_BLOCK_LEN, iv);
+	crypto_read_iv(crp, iv);
 
 	if (CRYPTO_OP_IS_ENCRYPT(crp->crp_op)) {
 		cw->cw_direction = PADLOCK_DIRECTION_ENCRYPT;
@@ -240,8 +234,7 @@ padlock_cipher_process(struct padlock_session *ses, struct cryptop *crp,
 		crypto_copyback(crp, crp->crp_payload_start,
 		    crp->crp_payload_length, abuf);
 
-		explicit_bzero(buf, crp->crp_payload_length + 16);
-		free(buf, M_PADLOCK);
+		zfree(buf, M_PADLOCK);
 	}
 	return (0);
 }

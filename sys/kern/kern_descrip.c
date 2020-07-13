@@ -795,7 +795,7 @@ kern_fcntl(struct thread *td, int fd, int cmd, intptr_t arg)
 		if (arg >= 0) {
 			bsize = fp->f_vnode->v_mount->mnt_stat.f_iosize;
 			arg = MIN(arg, INT_MAX - bsize + 1);
-			fp->f_seqcount = MIN(IO_SEQMAX,
+			fp->f_seqcount[UIO_READ] = MIN(IO_SEQMAX,
 			    (arg + bsize - 1) / bsize);
 			atomic_set_int(&fp->f_flag, FRDAHEAD);
 		} else {
@@ -3470,6 +3470,27 @@ pwd_ensure_dirs(void)
 		vrefact(rootvnode);
 		newpwd->pwd_rdir = rootvnode;
 	}
+	pwd_set(fdp, newpwd);
+	FILEDESC_XUNLOCK(fdp);
+	pwd_drop(oldpwd);
+}
+
+void
+pwd_set_rootvnode(void)
+{
+	struct filedesc *fdp;
+	struct pwd *oldpwd, *newpwd;
+
+	fdp = curproc->p_fd;
+
+	newpwd = pwd_alloc();
+	FILEDESC_XLOCK(fdp);
+	oldpwd = FILEDESC_XLOCKED_LOAD_PWD(fdp);
+	vrefact(rootvnode);
+	newpwd->pwd_cdir = rootvnode;
+	vrefact(rootvnode);
+	newpwd->pwd_rdir = rootvnode;
+	pwd_fill(oldpwd, newpwd);
 	pwd_set(fdp, newpwd);
 	FILEDESC_XUNLOCK(fdp);
 	pwd_drop(oldpwd);

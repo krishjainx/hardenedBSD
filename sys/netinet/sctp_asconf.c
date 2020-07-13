@@ -51,7 +51,6 @@ __FBSDID("$FreeBSD$");
  * SCTP_DEBUG_ASCONF2: detailed info
  */
 
-
 /*
  * RFC 5061
  *
@@ -980,8 +979,7 @@ sctp_asconf_nets_cleanup(struct sctp_tcb *stcb, struct sctp_ifn *ifn)
 		    ((ifn == NULL) ||
 		    (SCTP_GET_IF_INDEX_FROM_ROUTE(&net->ro) != ifn->ifn_index))) {
 			/* clear any cached route */
-			RTFREE(net->ro.ro_rt);
-			net->ro.ro_rt = NULL;
+			RO_NHFREE(&net->ro);
 		}
 		/* clear any cached source address */
 		if (net->src_addr_selected) {
@@ -1033,9 +1031,14 @@ sctp_assoc_immediate_retrans(struct sctp_tcb *stcb, struct sctp_nets *dstnet)
 		    (stcb->asoc.sent_queue_cnt > 0)) {
 			struct sctp_tmit_chunk *chk;
 
-			chk = TAILQ_FIRST(&stcb->asoc.sent_queue);
-			sctp_timer_start(SCTP_TIMER_TYPE_SEND, stcb->sctp_ep,
-			    stcb, chk->whoTo);
+			TAILQ_FOREACH(chk, &stcb->asoc.sent_queue, sctp_next) {
+				if (chk->whoTo != NULL) {
+					break;
+				}
+			}
+			if (chk != NULL) {
+				sctp_timer_start(SCTP_TIMER_TYPE_SEND, stcb->sctp_ep, stcb, chk->whoTo);
+			}
 		}
 	}
 	return;
@@ -1090,10 +1093,7 @@ sctp_path_check_and_react(struct sctp_tcb *stcb, struct sctp_ifa *newifa)
 	if (addrnum == 1) {
 		TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
 			/* clear any cached route and source address */
-			if (net->ro.ro_rt) {
-				RTFREE(net->ro.ro_rt);
-				net->ro.ro_rt = NULL;
-			}
+			RO_NHFREE(&net->ro);
 			if (net->src_addr_selected) {
 				sctp_free_ifa(net->ro._s_addr);
 				net->ro._s_addr = NULL;
@@ -1112,10 +1112,7 @@ sctp_path_check_and_react(struct sctp_tcb *stcb, struct sctp_ifa *newifa)
 	/* Multiple local addresses exsist in the association.  */
 	TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
 		/* clear any cached route and source address */
-		if (net->ro.ro_rt) {
-			RTFREE(net->ro.ro_rt);
-			net->ro.ro_rt = NULL;
-		}
+		RO_NHFREE(&net->ro);
 		if (net->src_addr_selected) {
 			sctp_free_ifa(net->ro._s_addr);
 			net->ro._s_addr = NULL;
@@ -1131,7 +1128,7 @@ sctp_path_check_and_react(struct sctp_tcb *stcb, struct sctp_ifa *newifa)
 		SCTP_RTALLOC((sctp_route_t *)&net->ro,
 		    stcb->sctp_ep->def_vrf_id,
 		    stcb->sctp_ep->fibnum);
-		if (net->ro.ro_rt == NULL)
+		if (net->ro.ro_nh == NULL)
 			continue;
 
 		changed = 0;
@@ -1708,8 +1705,7 @@ sctp_handle_asconf_ack(struct mbuf *m, int offset,
 		char msg[SCTP_DIAG_INFO_LEN];
 
 		SCTPDBG(SCTP_DEBUG_ASCONF1, "handle_asconf_ack: got unexpected next serial number! Aborting asoc!\n");
-		snprintf(msg, sizeof(msg), "Never sent serial number %8.8x",
-		    serial_num);
+		SCTP_SNPRINTF(msg, sizeof(msg), "Never sent serial number %8.8x", serial_num);
 		op_err = sctp_generate_cause(SCTP_CAUSE_PROTOCOL_VIOLATION, msg);
 		sctp_abort_an_association(stcb->sctp_ep, stcb, op_err, SCTP_SO_NOT_LOCKED);
 		*abort_no_unlock = 1;
@@ -1798,9 +1794,9 @@ sctp_handle_asconf_ack(struct mbuf *m, int offset,
 		}		/* switch */
 
 		/* update remaining ASCONF-ACK message length to process */
-		ack_length -= SCTP_SIZE32(param_length);
-		if (ack_length <= 0) {
-			/* no more data in the mbuf chain */
+		if (ack_length > SCTP_SIZE32(param_length)) {
+			ack_length -= SCTP_SIZE32(param_length);
+		} else {
 			break;
 		}
 		offset += SCTP_SIZE32(param_length);
@@ -2214,18 +2210,12 @@ sctp_asconf_iterator_stcb(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 			struct sctp_nets *net;
 
 			TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
-				sctp_rtentry_t *rt;
-
 				/* delete this address if cached */
 				if (net->ro._s_addr == ifa) {
 					sctp_free_ifa(net->ro._s_addr);
 					net->ro._s_addr = NULL;
 					net->src_addr_selected = 0;
-					rt = net->ro.ro_rt;
-					if (rt) {
-						RTFREE(rt);
-						net->ro.ro_rt = NULL;
-					}
+					RO_NHFREE(&net->ro);
 					/*
 					 * Now we deleted our src address,
 					 * should we not also now reset the
@@ -3033,10 +3023,6 @@ sctp_check_address_list_ep(struct sctp_tcb *stcb, struct mbuf *m, int offset,
 			    "check_addr_list_ep: laddr->ifa is NULL");
 			continue;
 		}
-		if (laddr->ifa == NULL) {
-			SCTPDBG(SCTP_DEBUG_ASCONF1, "check_addr_list_ep: laddr->ifa->ifa_addr is NULL");
-			continue;
-		}
 		/* do i have it implicitly? */
 		if (sctp_cmpaddr(&laddr->ifa->address.sa, init_addr)) {
 			continue;
@@ -3179,7 +3165,7 @@ sctp_check_address_list(struct sctp_tcb *stcb, struct mbuf *m, int offset,
  */
 uint32_t
 sctp_addr_mgmt_ep_sa(struct sctp_inpcb *inp, struct sockaddr *sa,
-    uint32_t type, uint32_t vrf_id, struct sctp_ifa *sctp_ifap)
+    uint32_t type, uint32_t vrf_id)
 {
 	struct sctp_ifa *ifa;
 	struct sctp_laddr *laddr, *nladdr;
@@ -3188,9 +3174,7 @@ sctp_addr_mgmt_ep_sa(struct sctp_inpcb *inp, struct sockaddr *sa,
 		SCTP_LTRACE_ERR_RET(inp, NULL, NULL, SCTP_FROM_SCTP_ASCONF, EINVAL);
 		return (EINVAL);
 	}
-	if (sctp_ifap) {
-		ifa = sctp_ifap;
-	} else if (type == SCTP_ADD_IP_ADDRESS) {
+	if (type == SCTP_ADD_IP_ADDRESS) {
 		/* For an add the address MUST be on the system */
 		ifa = sctp_find_ifa_by_addr(sa, vrf_id, SCTP_ADDR_NOT_LOCKED);
 	} else if (type == SCTP_DEL_IP_ADDRESS) {

@@ -72,6 +72,7 @@ MAN=	accept_filter.9 \
 	cr_seeotheruids.9 \
 	crypto.9 \
 	crypto_asym.9 \
+	crypto_buffer.9 \
 	crypto_driver.9 \
 	crypto_request.9 \
 	crypto_session.9 \
@@ -648,6 +649,8 @@ MLINKS+=bus_dma.9 busdma.9 \
 	bus_dma.9 bus_dmamap_load.9 \
 	bus_dma.9 bus_dmamap_load_bio.9 \
 	bus_dma.9 bus_dmamap_load_ccb.9 \
+	bus_dma.9 bus_dmamap_load_crp.9 \
+	bus_dma.9 bus_dmamap_load_crp_buffer.9 \
 	bus_dma.9 bus_dmamap_load_mbuf.9 \
 	bus_dma.9 bus_dmamap_load_mbuf_sg.9 \
 	bus_dma.9 bus_dmamap_load_uio.9 \
@@ -897,13 +900,25 @@ MLINKS+=crypto_asym.9 crypto_kdispatch.9 \
 	crypto_asym.9 crypto_kdone.9 \
 	crypto_asym.9 crypto_kregister.9 \
 	crypto_asym.9 CRYPTODEV_KPROCESS.9
-MLINKS+=crypto_driver.9 crypto_apply.9 \
-	crypto_driver.9 crypto_contiguous_segment.9 \
-	crypto_driver.9 crypto_copyback.9 \
+MLINKS+=crypto_buffer.9 crypto_apply.9 \
+	crypto_buffer.9 crypto_apply_buf.9 \
+	crypto_buffer.9 crypto_buffer_contiguous_segment.9 \
+	crypto_buffer.9 crypto_buffer_len.9 \
+	crypto_buffer.9 crypto_contiguous_segment.9 \
+	crypto_buffer.9 crypto_cursor_init.9 \
+	crypto_buffer.9 crypto_cursor_advance.9 \
+	crypto_buffer.9 crypto_cursor_copyback.9 \
+	crypto_buffer.9 crypto_cursor_copydata.9 \
+	crypto_buffer.9 crypto_cursor_copydata_noadv.9 \
+	crypto_buffer.9 crypto_cursor_segbase.9 \
+	crypto_buffer.9 crypto_cursor_seglen.9 \
+	crypto_buffer.9 CRYPTO_HAS_OUTPUT_BUFFER.9
+MLINKS+=crypto_driver.9 crypto_copyback.9 \
 	crypto_driver.9 crypto_copydata.9 \
 	crypto_driver.9 crypto_done.9 \
 	crypto_driver.9 crypto_get_driverid.9 \
 	crypto_driver.9 crypto_get_driver_session.9 \
+	crypto_driver.9 crypto_read_iv.9 \
 	crypto_driver.9 crypto_unblock.9 \
 	crypto_driver.9 crypto_unregister_all.9 \
 	crypto_driver.9 CRYPTODEV_FREESESSION.9 \
@@ -914,7 +929,13 @@ MLINKS+=crypto_driver.9 crypto_apply.9 \
 	crypto_driver.9 hmac_init_opad.9
 MLINKS+=crypto_request.9 crypto_dispatch.9 \
 	crypto_request.9 crypto_freereq.9 \
-	crypto_request.9 crypto_getreq.9
+	crypto_request.9 crypto_getreq.9 \
+	crypto_request.9 crypto_use_buf.9 \
+	crypto_request.9 crypto_use_mbuf.9 \
+	crypto_request.9 crypto_use_output_buf.9 \
+	crypto_request.9 crypto_use_output_mbuf.9 \
+	crypto_request.9 crypto_use_output_uio.9 \
+	crypto_request.9 crypto_use_uio.9
 MLINKS+=crypto_session.9 crypto_auth_hash.9 \
 	crypto_session.9 crypto_cipher.9 \
 	crypto_session.9 crypto_get_params.9 \
@@ -1881,9 +1902,8 @@ MLINKS+=sf_buf.9 sf_buf_alloc.9 \
 MLINKS+=sglist.9 sglist_alloc.9 \
 	sglist.9 sglist_append.9 \
 	sglist.9 sglist_append_bio.9 \
-	sglist.9 sglist_append_ext_pgs.9 \
-	sglist.9 sglist_append_mb_ext_pgs.9 \
 	sglist.9 sglist_append_mbuf.9 \
+	sglist.9 sglist_append_mbuf_epg.9 \
 	sglist.9 sglist_append_phys.9 \
 	sglist.9 sglist_append_sglist.9 \
 	sglist.9 sglist_append_uio.9 \
@@ -1893,8 +1913,7 @@ MLINKS+=sglist.9 sglist_alloc.9 \
 	sglist.9 sglist_clone.9 \
 	sglist.9 sglist_consume_uio.9 \
 	sglist.9 sglist_count.9 \
-	sglist.9 sglist_count_ext_pgs.9 \
-	sglist.9 sglist_count_mb_ext_pgs.9 \
+	sglist.9 sglist_count_mbuf_epg.9 \
 	sglist.9 sglist_count_vmpages.9 \
 	sglist.9 sglist_free.9 \
 	sglist.9 sglist_hold.9 \

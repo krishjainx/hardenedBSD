@@ -88,7 +88,6 @@ MAN=	aac.4 \
 	bwi.4 \
 	bwn.4 \
 	${_bytgpio.4} \
-	${_chvgpio.4} \
 	capsicum.4 \
 	cardbus.4 \
 	carp.4 \
@@ -110,6 +109,7 @@ MAN=	aac.4 \
 	cfumass.4 \
 	ch.4 \
 	chromebook_platform.4 \
+	${_chvgpio.4} \
 	ciss.4 \
 	cloudabi.4 \
 	cmx.4 \
@@ -968,7 +968,6 @@ MAN+=	\
 	uart.4 \
 	uath.4 \
 	ubsa.4 \
-	ubsec.4 \
 	ubser.4 \
 	ubtbcmfw.4 \
 	uchcom.4 \

@@ -35,7 +35,6 @@ PROG=	${PROG_CXX}
 MK_DEBUG_FILES=	no
 .endif
 
-
 .if ${MACHINE_CPUARCH} == "riscv" && ${LINKER_FEATURES:Mriscv-relaxations} == ""
 CFLAGS += -mno-relax
 .endif
@@ -115,9 +114,6 @@ LDFLAGS+=	-fsanitize-cfi-cross-dso
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
 CFLAGS+=	-mretpoline
 CXXFLAGS+=	-mretpoline
-.if !defined(NOPIE)
-LDFLAGS+=	-Wl,-z,retpolineplt
-.endif
 .endif
 
 .if defined(MK_BIND_NOW) && ${MK_BIND_NOW} != "no"
@@ -313,9 +309,9 @@ _proginstall:
 	    ${_INSTALLFLAGS} ${PROG} ${DESTDIR}${BINDIR}/${PROGNAME}
 .if ${MK_DEBUG_FILES} != "no"
 .if defined(DEBUGMKDIR)
-	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},debug} -d ${DESTDIR}${DEBUGFILEDIR}/
+	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},dbg} -d ${DESTDIR}${DEBUGFILEDIR}/
 .endif
-	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},debug} -o ${BINOWN} -g ${BINGRP} -m ${DEBUGMODE} \
+	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},dbg} -o ${BINOWN} -g ${BINGRP} -m ${DEBUGMODE} \
 	    ${PROGNAME}.debug ${DESTDIR}${DEBUGFILEDIR}/${PROGNAME}.debug
 .endif
 .endif

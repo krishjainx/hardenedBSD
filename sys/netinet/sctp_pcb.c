@@ -57,9 +57,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/smp.h>
 #include <sys/unistd.h>
 
-
-VNET_DEFINE(struct sctp_base_info, system_base_info);
-
 /* FIX: we don't handle multiple link local scopes */
 /* "scopeless" replacement IN6_ARE_ADDR_EQUAL */
 #ifdef INET6
@@ -302,8 +299,6 @@ sctp_delete_ifn(struct sctp_ifn *sctp_ifnp, int hold_addr_lock)
 		SCTP_IPI_ADDR_WLOCK();
 	LIST_REMOVE(sctp_ifnp, next_bucket);
 	LIST_REMOVE(sctp_ifnp, next_ifn);
-	SCTP_DEREGISTER_INTERFACE(sctp_ifnp->ifn_index,
-	    sctp_ifnp->registered_af);
 	if (hold_addr_lock == 0)
 		SCTP_IPI_ADDR_WUNLOCK();
 	/* Take away the reference, and possibly free it */
@@ -431,7 +426,6 @@ sctp_add_ifa_to_ifn(struct sctp_ifn *sctp_ifnp, struct sctp_ifa *sctp_ifap)
 	}
 	if (sctp_ifnp->ifa_count == 1) {
 		/* register the new interface */
-		SCTP_REGISTER_INTERFACE(sctp_ifnp->ifn_index, ifa_af);
 		sctp_ifnp->registered_af = ifa_af;
 	}
 }
@@ -472,13 +466,9 @@ sctp_remove_ifa_from_ifn(struct sctp_ifa *sctp_ifap)
 			/* re-register address family type, if needed */
 			if ((sctp_ifap->ifn_p->num_v6 == 0) &&
 			    (sctp_ifap->ifn_p->registered_af == AF_INET6)) {
-				SCTP_DEREGISTER_INTERFACE(sctp_ifap->ifn_p->ifn_index, AF_INET6);
-				SCTP_REGISTER_INTERFACE(sctp_ifap->ifn_p->ifn_index, AF_INET);
 				sctp_ifap->ifn_p->registered_af = AF_INET;
 			} else if ((sctp_ifap->ifn_p->num_v4 == 0) &&
 			    (sctp_ifap->ifn_p->registered_af == AF_INET)) {
-				SCTP_DEREGISTER_INTERFACE(sctp_ifap->ifn_p->ifn_index, AF_INET);
-				SCTP_REGISTER_INTERFACE(sctp_ifap->ifn_p->ifn_index, AF_INET6);
 				sctp_ifap->ifn_p->registered_af = AF_INET6;
 			}
 			/* free the ifn refcount */
@@ -544,9 +534,9 @@ sctp_add_addr_to_vrf(uint32_t vrf_id, void *ifn, uint32_t ifn_index,
 		atomic_add_int(&vrf->refcount, 1);
 		sctp_ifnp->ifn_mtu = SCTP_GATHER_MTU_FROM_IFN_INFO(ifn, ifn_index, addr->sa_family);
 		if (if_name != NULL) {
-			snprintf(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", if_name);
+			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", if_name);
 		} else {
-			snprintf(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "unknown");
+			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "unknown");
 		}
 		hash_ifn_head = &SCTP_BASE_INFO(vrf_ifn_hash)[(ifn_index & SCTP_BASE_INFO(vrf_ifn_hashmark))];
 		LIST_INIT(&sctp_ifnp->ifalist);
@@ -679,7 +669,6 @@ sctp_add_addr_to_vrf(uint32_t vrf_id, void *ifn, uint32_t ifn_index,
 	vrf->total_ifa_count++;
 	atomic_add_int(&SCTP_BASE_INFO(ipi_count_ifas), 1);
 	if (new_ifn_af) {
-		SCTP_REGISTER_INTERFACE(ifn_index, new_ifn_af);
 		sctp_ifnp->registered_af = new_ifn_af;
 	}
 	SCTP_IPI_ADDR_WUNLOCK();
@@ -749,8 +738,7 @@ sctp_del_addr_from_vrf(uint32_t vrf_id, struct sockaddr *addr,
 
 			/*-
 			 * The name has priority over the ifn_index
-			 * if its given. We do this especially for
-			 * panda who might recycle indexes fast.
+			 * if its given.
 			 */
 			if (if_name) {
 				if (strncmp(if_name, sctp_ifap->ifn_p->ifn_name, SCTP_IFNAMSIZ) == 0) {
@@ -3157,8 +3145,7 @@ continue_anyway:
 		} else {
 			/*
 			 * Note for BSD we hit here always other O/S's will
-			 * pass things in via the sctp_ifap argument
-			 * (Panda).
+			 * pass things in via the sctp_ifap argument.
 			 */
 			ifa = sctp_find_ifa_by_addr(&store.sa,
 			    vrf_id, SCTP_ADDR_NOT_LOCKED);
@@ -3976,17 +3963,9 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 			} else {
 				imtu = 0;
 			}
-			rmtu = SCTP_GATHER_MTU_FROM_ROUTE(net->ro._s_addr, &net->ro._l_addr.sa, net->ro.ro_rt);
+			rmtu = SCTP_GATHER_MTU_FROM_ROUTE(net->ro._s_addr, &net->ro._l_addr.sa, net->ro.ro_nh);
 			hcmtu = sctp_hc_get_mtu(&net->ro._l_addr, stcb->sctp_ep->fibnum);
 			net->mtu = sctp_min_mtu(hcmtu, rmtu, imtu);
-			if (rmtu == 0) {
-				/*
-				 * Start things off to match mtu of
-				 * interface please.
-				 */
-				SCTP_SET_MTU_OF_ROUTE(&net->ro._l_addr.sa,
-				    net->ro.ro_rt, net->mtu);
-			}
 		}
 	}
 	if (net->mtu == 0) {
@@ -4067,19 +4046,19 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 		*netp = net;
 	}
 	netfirst = TAILQ_FIRST(&stcb->asoc.nets);
-	if (net->ro.ro_rt == NULL) {
+	if (net->ro.ro_nh == NULL) {
 		/* Since we have no route put it at the back */
 		TAILQ_INSERT_TAIL(&stcb->asoc.nets, net, sctp_next);
 	} else if (netfirst == NULL) {
 		/* We are the first one in the pool. */
 		TAILQ_INSERT_HEAD(&stcb->asoc.nets, net, sctp_next);
-	} else if (netfirst->ro.ro_rt == NULL) {
+	} else if (netfirst->ro.ro_nh == NULL) {
 		/*
 		 * First one has NO route. Place this one ahead of the first
 		 * one.
 		 */
 		TAILQ_INSERT_HEAD(&stcb->asoc.nets, net, sctp_next);
-	} else if (net->ro.ro_rt->rt_ifp != netfirst->ro.ro_rt->rt_ifp) {
+	} else if (net->ro.ro_nh->nh_ifp != netfirst->ro.ro_nh->nh_ifp) {
 		/*
 		 * This one has a different interface than the one at the
 		 * top of the list. Place it ahead.
@@ -4100,11 +4079,11 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 				/* End of the list */
 				TAILQ_INSERT_TAIL(&stcb->asoc.nets, net, sctp_next);
 				break;
-			} else if (netlook->ro.ro_rt == NULL) {
+			} else if (netlook->ro.ro_nh == NULL) {
 				/* next one has NO route */
 				TAILQ_INSERT_BEFORE(netfirst, net, sctp_next);
 				break;
-			} else if (netlook->ro.ro_rt->rt_ifp != net->ro.ro_rt->rt_ifp) {
+			} else if (netlook->ro.ro_nh->nh_ifp != net->ro.ro_nh->nh_ifp) {
 				TAILQ_INSERT_AFTER(&stcb->asoc.nets, netlook,
 				    net, sctp_next);
 				break;
@@ -4117,8 +4096,8 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 	/* got to have a primary set */
 	if (stcb->asoc.primary_destination == 0) {
 		stcb->asoc.primary_destination = net;
-	} else if ((stcb->asoc.primary_destination->ro.ro_rt == NULL) &&
-		    (net->ro.ro_rt) &&
+	} else if ((stcb->asoc.primary_destination->ro.ro_nh == NULL) &&
+		    (net->ro.ro_nh) &&
 	    ((net->dest_state & SCTP_ADDR_UNCONFIRMED) == 0)) {
 		/* No route to current primary adopt new primary */
 		stcb->asoc.primary_destination = net;
@@ -4310,11 +4289,7 @@ sctp_aloc_assoc(struct sctp_inpcb *inp, struct sockaddr *firstaddr,
 		 * If you have not performed a bind, then we need to do the
 		 * ephemeral bind for you.
 		 */
-		if ((err = sctp_inpcb_bind(inp->sctp_socket,
-		    (struct sockaddr *)NULL,
-		    (struct sctp_ifa *)NULL,
-		    p
-		    ))) {
+		if ((err = sctp_inpcb_bind(inp->sctp_socket, NULL, NULL, p))) {
 			/* bind error, probably perm */
 			*error = err;
 			return (NULL);
@@ -4682,7 +4657,6 @@ sctp_clean_up_stream(struct sctp_tcb *stcb, struct sctp_readhead *rh)
 		}
 	}
 }
-
 
 /*-
  * Free the association after un-hashing the remote port. This
@@ -5207,16 +5181,12 @@ sctp_free_assoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb, int from_inpcbfre
 			    SCTP_FREE_SHOULD_USE_GRACEFUL_CLOSE,
 			    SCTP_CALLED_DIRECTLY_NOCMPSET);
 			SCTP_INP_DECR_REF(inp);
-			goto out_of;
 		} else {
 			/* The socket is still open. */
 			SCTP_INP_DECR_REF(inp);
+			SCTP_INP_RUNLOCK(inp);
 		}
 	}
-	if (from_inpcbfree == SCTP_NORMAL_PROC) {
-		SCTP_INP_RUNLOCK(inp);
-	}
-out_of:
 	/* destroyed the asoc */
 #ifdef SCTP_LOG_CLOSING
 	sctp_log_closing(inp, NULL, 11);
@@ -5459,14 +5429,7 @@ sctp_del_local_addr_ep(struct sctp_inpcb *inp, struct sctp_ifa *ifa)
 			TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
 				if (net->ro._s_addr == laddr->ifa) {
 					/* Yep, purge src address selected */
-					sctp_rtentry_t *rt;
-
-					/* delete this address if cached */
-					rt = net->ro.ro_rt;
-					if (rt != NULL) {
-						RTFREE(rt);
-						net->ro.ro_rt = NULL;
-					}
+					RO_NHFREE(&net->ro);
 					sctp_free_ifa(net->ro._s_addr);
 					net->ro._s_addr = NULL;
 					net->src_addr_selected = 0;
@@ -5562,18 +5525,14 @@ sctp_del_local_addr_restricted(struct sctp_tcb *stcb, struct sctp_ifa *ifa)
 	return;
 }
 
-/*
- * Temporarily remove for __APPLE__ until we use the Tiger equivalents
- */
 /* sysctl */
 static int sctp_max_number_of_assoc = SCTP_MAX_NUM_OF_ASOC;
 static int sctp_scale_up_for_address = SCTP_SCALE_FOR_ADDR;
 
-
-
-#if defined(__FreeBSD__) && defined(SCTP_MCORE_INPUT) && defined(SMP)
+#if defined(SCTP_MCORE_INPUT) && defined(SMP)
 struct sctp_mcore_ctrl *sctp_mcore_workers = NULL;
 int *sctp_cpuarry = NULL;
+
 void
 sctp_queue_to_mcore(struct mbuf *m, int off, int cpu_to_use)
 {
@@ -5712,7 +5671,6 @@ sctp_startup_mcore_threads(void)
 			i++;
 		}
 	}
-
 	/* Now start them all */
 	CPU_FOREACH(cpu) {
 		(void)kproc_create(sctp_mcore_thread,
@@ -5721,7 +5679,6 @@ sctp_startup_mcore_threads(void)
 		    RFPROC,
 		    SCTP_KTHREAD_PAGES,
 		    SCTP_MCORE_NAME);
-
 	}
 }
 #endif
@@ -5745,13 +5702,13 @@ sctp_pcb_init(void)
 #if defined(SCTP_LOCAL_TRACE_BUF)
 	memset(&SCTP_BASE_SYSCTL(sctp_log), 0, sizeof(struct sctp_log));
 #endif
-#if defined(__FreeBSD__) && defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
+#if defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
 	SCTP_MALLOC(SCTP_BASE_STATS, struct sctpstat *,
 	    ((mp_maxid + 1) * sizeof(struct sctpstat)),
 	    SCTP_M_MCORE);
 #endif
 	(void)SCTP_GETTIME_TIMEVAL(&tv);
-#if defined(__FreeBSD__) && defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
+#if defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
 	memset(SCTP_BASE_STATS, 0, sizeof(struct sctpstat) * (mp_maxid + 1));
 	SCTP_BASE_STATS[PCPU_GET(cpuid)].sctps_discontinuitytime.tv_sec = (uint32_t)tv.tv_sec;
 	SCTP_BASE_STATS[PCPU_GET(cpuid)].sctps_discontinuitytime.tv_usec = (uint32_t)tv.tv_usec;
@@ -5862,7 +5819,7 @@ sctp_pcb_init(void)
 	}
 	sctp_startup_iterator();
 
-#if defined(__FreeBSD__) && defined(SCTP_MCORE_INPUT) && defined(SMP)
+#if defined(SCTP_MCORE_INPUT) && defined(SMP)
 	sctp_startup_mcore_threads();
 #endif
 
@@ -5907,7 +5864,7 @@ retry:
 	 * holding the lock.  We won't find it on the list either and
 	 * continue and free/destroy it.  While holding the lock, spin, to
 	 * avoid the race condition as sctp_iterator_worker() will have to
-	 * wait to re-aquire the lock.
+	 * wait to re-acquire the lock.
 	 */
 	if (sctp_it_ctl.iterator_running != 0 || sctp_it_ctl.cur_it != NULL) {
 		SCTP_IPI_ITERATOR_WQ_UNLOCK();
@@ -6017,7 +5974,7 @@ retry:
 	SCTP_ZONE_DESTROY(SCTP_BASE_INFO(ipi_zone_strmoq));
 	SCTP_ZONE_DESTROY(SCTP_BASE_INFO(ipi_zone_asconf));
 	SCTP_ZONE_DESTROY(SCTP_BASE_INFO(ipi_zone_asconf_ack));
-#if defined(__FreeBSD__) && defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
+#if defined(SMP) && defined(SCTP_USE_PERCPU_STAT)
 	SCTP_FREE(SCTP_BASE_STATS, SCTP_M_MCORE);
 #endif
 }
@@ -6236,7 +6193,7 @@ sctp_load_addresses_from_init(struct sctp_tcb *stcb, struct mbuf *m,
 							 * in setup state we
 							 * abort this guy
 							 */
-							snprintf(msg, sizeof(msg),
+							SCTP_SNPRINTF(msg, sizeof(msg),
 							    "%s:%d at %s", __FILE__, __LINE__, __func__);
 							op_err = sctp_generate_cause(SCTP_BASE_SYSCTL(sctp_diag_info_code),
 							    msg);
@@ -6336,7 +6293,7 @@ sctp_load_addresses_from_init(struct sctp_tcb *stcb, struct mbuf *m,
 							 * in setup state we
 							 * abort this guy
 							 */
-							snprintf(msg, sizeof(msg),
+							SCTP_SNPRINTF(msg, sizeof(msg),
 							    "%s:%d at %s", __FILE__, __LINE__, __func__);
 							op_err = sctp_generate_cause(SCTP_BASE_SYSCTL(sctp_diag_info_code),
 							    msg);
