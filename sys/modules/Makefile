@@ -336,6 +336,7 @@ SUBDIR=	\
 	${_rtwnfw} \
 	${_s3} \
 	${_safe} \
+	safexcel \
 	${_sbni} \
 	scc \
 	${_scsi_low} \
