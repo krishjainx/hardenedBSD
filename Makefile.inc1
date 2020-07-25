@@ -659,9 +659,15 @@ BSARGS= 	DESTDIR= \
 		MK_HTML=no NO_LINT=yes MK_MAN=no \
 		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
 		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no \
+<<<<<<< HEAD
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_LLDB=no MK_TESTS=no \
 		MK_INCLUDES=yes MK_CFI=no MK_RETPOLINE=no
+=======
+		MK_CLANG_EXTRAS=no MK_CLANG_FORMAT=no MK_CLANG_FULL=no \
+		MK_LLDB=no MK_RETPOLINE=no MK_TESTS=no \
+		MK_INCLUDES=yes
+>>>>>>> origin/freebsd/12-stable/master
 
 BMAKE=		\
 		${BMAKEENV} ${MAKE} ${WORLD_FLAGS} -f Makefile.inc1 \
@@ -680,8 +686,13 @@ TMAKE=		\
 		SSP_CFLAGS= \
 		-DNO_LINT \
 		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no \
+<<<<<<< HEAD
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_LLDB=no MK_TESTS=no MK_CFI=no MK_RETPOLINE=no
+=======
+		MK_CLANG_EXTRAS=no MK_CLANG_FORMAT=no MK_CLANG_FULL=no \
+		MK_LLDB=no MK_RETPOLINE=no MK_TESTS=no
+>>>>>>> origin/freebsd/12-stable/master
 
 # cross-tools stage
 # TOOLS_PREFIX set in BMAKE
@@ -2445,7 +2456,12 @@ NXBMAKEARGS+= \
 	-DNO_CPU_CFLAGS \
 	-DNO_PIC \
 	SSP_CFLAGS= \
+<<<<<<< HEAD
 	MK_CLANG_EXTRAS=yes \
+=======
+	MK_CLANG_EXTRAS=no \
+	MK_CLANG_FORMAT=no \
+>>>>>>> origin/freebsd/12-stable/master
 	MK_CLANG_FULL=no \
 	MK_CTF=no \
 	MK_DEBUG_FILES=no \

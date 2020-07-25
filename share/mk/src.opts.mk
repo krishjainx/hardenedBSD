@@ -197,8 +197,13 @@ __DEFAULT_NO_OPTIONS = \
     BEARSSL \
     BSD_CRTBEGIN \
     BSD_GREP \
+<<<<<<< HEAD
     BSD_GREP_FASTMATCH \
     DEVD_PIE \
+=======
+    CLANG_EXTRAS \
+    CLANG_FORMAT \
+>>>>>>> origin/freebsd/12-stable/master
     DTRACE_TESTS \
     FREEBSD_UPDATE \
     GNU_GREP_COMPAT \
@@ -606,6 +611,7 @@ MK_LOADER_VERIEXEC_PASS_MANIFEST := no
 
 .if ${MK_CLANG} == "no"
 MK_CLANG_EXTRAS:= no
+MK_CLANG_FORMAT:= no
 MK_CLANG_FULL:= no
 MK_LLVM_COV:= no
 MK_SAFESTACK:=	no
