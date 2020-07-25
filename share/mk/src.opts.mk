@@ -197,13 +197,9 @@ __DEFAULT_NO_OPTIONS = \
     BEARSSL \
     BSD_CRTBEGIN \
     BSD_GREP \
-<<<<<<< HEAD
     BSD_GREP_FASTMATCH \
     DEVD_PIE \
-=======
-    CLANG_EXTRAS \
     CLANG_FORMAT \
->>>>>>> origin/freebsd/12-stable/master
     DTRACE_TESTS \
     FREEBSD_UPDATE \
     GNU_GREP_COMPAT \
