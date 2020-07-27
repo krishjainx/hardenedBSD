@@ -340,6 +340,7 @@ SUBDIR=	\
 	${_sbni} \
 	scc \
 	${_scsi_low} \
+	${_sctp} \
 	sdhci \
 	${_sdhci_acpi} \
 	sdhci_pci \
@@ -457,6 +458,9 @@ _if_gre=	if_gre
 _ipfw_pmod=	ipfw_pmod
 .if ${MK_IPSEC_SUPPORT} != "no"
 _ipsec=		ipsec
+.endif
+.if ${MK_SCTP_SUPPORT} != "no" || ${MK_SCTP} != "no"
+_sctp=		sctp
 .endif
 .endif
 
