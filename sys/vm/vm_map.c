@@ -3840,12 +3840,9 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 		return (NULL);
 	}
 
-<<<<<<< HEAD
-=======
 	new_map->anon_loc = old_map->anon_loc;
 	new_map->flags |= old_map->flags & (MAP_ASLR | MAP_ASLR_IGNSTART);
 
->>>>>>> origin/freebsd/12-stable/master
 	old_entry = old_map->header.next;
 
 	while (old_entry != &old_map->header) {
