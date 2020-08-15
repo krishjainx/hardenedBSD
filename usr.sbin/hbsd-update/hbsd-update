@@ -51,7 +51,8 @@ no_obsolete=0
 interactive=0
 install_src=0
 keeptmp=0
-local_resolver=0
+local_resolver=0 # This really should've been named "remote-resolver"
+remote_resolver=0
 nodownload=0
 fetchonly=0
 nobase=0
@@ -99,6 +100,7 @@ usage() {
 	debug_print "\t-n\t\tDo not install kernel"
 	debug_print "\t-o\t\tDo not remove obsolete files/directories"
 	debug_print "\t-r path\tBootstrap root directory <path>"
+	debug_print "\t-R\tUse the remote resolver"
 	debug_print "\t-s\t\tInstall sources (if present)"
 	debug_print "\t-t tmpdir\tTemporary directory"
 	debug_print "\t-U\t\tAllow unsigned updates"
@@ -164,7 +166,7 @@ dnssec_check() {
 	local val
 	local l_dnssec_key
 
-	if [ ${local_resolver} -gt 0 ]; then
+	if [ ${remote_resolver} -gt 0 ]; then
 		resolver_flag="-r"
 	fi
 
@@ -969,6 +971,10 @@ check_sanity() {
 
 	. ${configfile}
 
+	if [ ${local_resolver} != ${remote_resolver} ]; then
+		remote_resolver=${local_resolver}
+	fi
+
 	if [ -z "${baseurl}" ]; then
 		debug_print "[-] Missing setting: baseurl"
 		exit 1
@@ -1045,7 +1051,7 @@ main() {
 	local_kernel=""
 	no_kernel=0
 
-	while getopts 'dfhinosBCDITUVb:c:j:K:k:r:t:u:v:' opt; do
+	while getopts 'dfhinosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
 		case "${opt}" in
 			b)
 				zfsbe="${OPTARG}"
@@ -1091,6 +1097,10 @@ main() {
 				;;
 			r)
 				mountpoint="${OPTARG}"
+				;;
+			R)
+				local_resolver=1
+				remote_resolver=1
 				;;
 			s)
 				install_src=1
