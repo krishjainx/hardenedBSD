@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/msgbuf.h>
 #include <sys/mutex.h>
 #include <sys/namei.h>
 #include <sys/priv.h>
@@ -984,27 +985,53 @@ linux_futimesat(struct thread *td, struct linux_futimesat_args *args)
 }
 #endif
 
-int
-linux_common_wait(struct thread *td, int pid, int *status,
-    int options, struct rusage *ru)
+static int
+linux_common_wait(struct thread *td, int pid, int *statusp,
+    int options, struct __wrusage *wrup)
 {
-	int error, tmpstat;
+	siginfo_t siginfo;
+	idtype_t idtype;
+	id_t id;
+	int error, status, tmpstat;
 
-	error = kern_wait(td, pid, &tmpstat, options, ru);
+	if (pid == WAIT_ANY) {
+		idtype = P_ALL;
+		id = 0;
+	} else if (pid < 0) {
+		idtype = P_PGID;
+		id = (id_t)-pid;
+	} else {
+		idtype = P_PID;
+		id = (id_t)pid;
+	}
+
+	/*
+	 * For backward compatibility we implicitly add flags WEXITED
+	 * and WTRAPPED here.
+	 */
+	options |= WEXITED | WTRAPPED;
+	error = kern_wait6(td, idtype, id, &status, options, wrup, &siginfo);
 	if (error)
 		return (error);
 
-	if (status) {
-		tmpstat &= 0xffff;
-		if (WIFSIGNALED(tmpstat))
+	if (statusp) {
+		tmpstat = status & 0xffff;
+		if (WIFSIGNALED(tmpstat)) {
 			tmpstat = (tmpstat & 0xffffff80) |
 			    bsd_to_linux_signal(WTERMSIG(tmpstat));
-		else if (WIFSTOPPED(tmpstat))
+		} else if (WIFSTOPPED(tmpstat)) {
 			tmpstat = (tmpstat & 0xffff00ff) |
 			    (bsd_to_linux_signal(WSTOPSIG(tmpstat)) << 8);
-		else if (WIFCONTINUED(tmpstat))
+#if defined(__amd64__) && !defined(COMPAT_LINUX32)
+			if (WSTOPSIG(status) == SIGTRAP) {
+				tmpstat = linux_ptrace_status(td,
+				    siginfo.si_pid, tmpstat);
+			}
+#endif
+		} else if (WIFCONTINUED(tmpstat)) {
 			tmpstat = 0xffff;
-		error = copyout(&tmpstat, status, sizeof(int));
+		}
+		error = copyout(&tmpstat, statusp, sizeof(int));
 	}
 
 	return (error);
@@ -1035,7 +1062,7 @@ int
 linux_wait4(struct thread *td, struct linux_wait4_args *args)
 {
 	int error, options;
-	struct rusage ru, *rup;
+	struct __wrusage wru, *wrup;
 
 #ifdef DEBUG
 	if (ldebug(wait4))
@@ -1051,14 +1078,14 @@ linux_wait4(struct thread *td, struct linux_wait4_args *args)
 	linux_to_bsd_waitopts(args->options, &options);
 
 	if (args->rusage != NULL)
-		rup = &ru;
+		wrup = &wru;
 	else
-		rup = NULL;
-	error = linux_common_wait(td, args->pid, args->status, options, rup);
+		wrup = NULL;
+	error = linux_common_wait(td, args->pid, args->status, options, wrup);
 	if (error != 0)
 		return (error);
 	if (args->rusage != NULL)
-		error = linux_copyout_rusage(&ru, args->rusage);
+		error = linux_copyout_rusage(&wru.wru_self, args->rusage);
 	return (error);
 }
 
@@ -2600,4 +2627,83 @@ linux_mincore(struct thread *td, struct linux_mincore_args *args)
 	if (args->start & PAGE_MASK)
 		return (EINVAL);
 	return (kern_mincore(td, args->start, args->len, args->vec));
+}
+
+#define	SYSLOG_TAG	"<6>"
+
+int
+linux_syslog(struct thread *td, struct linux_syslog_args *args)
+{
+	char buf[128], *src, *dst;
+	u_int seq;
+	int buflen, error;
+
+	if (args->type != LINUX_SYSLOG_ACTION_READ_ALL) {
+		linux_msg(td, "syslog unsupported type 0x%x", args->type);
+		return (EINVAL);
+	}
+
+	if (args->len < 6) {
+		td->td_retval[0] = 0;
+		return (0);
+	}
+
+	error = priv_check(td, PRIV_MSGBUF);
+	if (error)
+		return (error);
+
+	mtx_lock(&msgbuf_lock);
+	msgbuf_peekbytes(msgbufp, NULL, 0, &seq);
+	mtx_unlock(&msgbuf_lock);
+
+	dst = args->buf;
+	error = copyout(&SYSLOG_TAG, dst, sizeof(SYSLOG_TAG));
+	/* The -1 is to skip the trailing '\0'. */
+	dst += sizeof(SYSLOG_TAG) - 1;
+
+	while (error == 0) {
+		mtx_lock(&msgbuf_lock);
+		buflen = msgbuf_peekbytes(msgbufp, buf, sizeof(buf), &seq);
+		mtx_unlock(&msgbuf_lock);
+
+		if (buflen == 0)
+			break;
+
+		for (src = buf; src < buf + buflen && error == 0; src++) {
+			if (*src == '\0')
+				continue;
+
+			if (dst >= args->buf + args->len)
+				goto out;
+
+			error = copyout(src, dst, 1);
+			dst++;
+
+			if (*src == '\n' && *(src + 1) != '<' &&
+			    dst + sizeof(SYSLOG_TAG) < args->buf + args->len) {
+				error = copyout(&SYSLOG_TAG,
+				    dst, sizeof(SYSLOG_TAG));
+				dst += sizeof(SYSLOG_TAG) - 1;
+			}
+		}
+	}
+out:
+	td->td_retval[0] = dst - args->buf;
+	return (error);
+}
+
+int
+linux_getcpu(struct thread *td, struct linux_getcpu_args *args)
+{
+	int cpu, error, node;
+
+	cpu = td->td_oncpu; /* Make sure it doesn't change during copyout(9) */
+	error = 0;
+	node = 0; /* XXX: Fake NUMA node 0 for now */
+
+	if (args->cpu != NULL)
+		error = copyout(&cpu, args->cpu, sizeof(l_int));
+	if (args->node != NULL)
+		error = copyout(&node, args->node, sizeof(l_int));
+	return (error);
 }
