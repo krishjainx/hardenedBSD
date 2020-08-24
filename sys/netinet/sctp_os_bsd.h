@@ -266,12 +266,17 @@ typedef struct callout sctp_os_timer_t;
 
 
 #define SCTP_OS_TIMER_INIT(tmr)	callout_init(tmr, 1)
-#define SCTP_OS_TIMER_START	callout_reset
-#define SCTP_OS_TIMER_STOP	callout_stop
-#define SCTP_OS_TIMER_STOP_DRAIN callout_drain
-#define SCTP_OS_TIMER_PENDING	callout_pending
-#define SCTP_OS_TIMER_ACTIVE	callout_active
-#define SCTP_OS_TIMER_DEACTIVATE callout_deactivate
+/*
+ * NOTE: The next two shouldn't be called directly outside of sctp_timer_start()
+ * and sctp_timer_stop(), since they don't handle incrementing/decrementing
+ * relevant reference counts.
+ */
+#define SCTP_OS_TIMER_START		callout_reset
+#define SCTP_OS_TIMER_STOP		callout_stop
+#define SCTP_OS_TIMER_STOP_DRAIN	callout_drain
+#define SCTP_OS_TIMER_PENDING		callout_pending
+#define SCTP_OS_TIMER_ACTIVE		callout_active
+#define SCTP_OS_TIMER_DEACTIVATE	callout_deactivate
 
 #define sctp_get_tick_count() (ticks)
 
@@ -314,11 +319,6 @@ typedef struct callout sctp_os_timer_t;
                                               if (rt != NULL) \
                                                  rt->rt_mtu = mtu; \
                                            } while(0)
-
-/* (de-)register interface event notifications */
-#define SCTP_REGISTER_INTERFACE(ifhandle, af)
-#define SCTP_DEREGISTER_INTERFACE(ifhandle, af)
-
 
 /*************************/
 /* These are for logging */

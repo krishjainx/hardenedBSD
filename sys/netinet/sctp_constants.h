@@ -795,6 +795,7 @@ __FBSDID("$FreeBSD$");
 #define SCTP_LOC_34 0x00000022
 #define SCTP_LOC_35 0x00000023
 #define SCTP_LOC_36 0x00000024
+#define SCTP_LOC_37 0x00000025
 
 /* Free assoc codes */
 #define SCTP_NORMAL_PROC      0
@@ -992,7 +993,7 @@ do { \
 #define sctp_sowwakeup_locked(inp, so) \
 do { \
 	if (inp->sctp_flags & SCTP_PCB_FLAGS_DONT_WAKE) { \
-                SOCKBUF_UNLOCK(&((so)->so_snd)); \
+		SOCKBUF_UNLOCK(&((so)->so_snd)); \
 		inp->sctp_flags |= SCTP_PCB_FLAGS_WAKEOUTPUT; \
 	} else { \
 		sowwakeup_locked(so); \
@@ -1012,7 +1013,7 @@ do { \
 do { \
 	if (inp->sctp_flags & SCTP_PCB_FLAGS_DONT_WAKE) { \
 		inp->sctp_flags |= SCTP_PCB_FLAGS_WAKEINPUT; \
-                SOCKBUF_UNLOCK(&((so)->so_rcv)); \
+		SOCKBUF_UNLOCK(&((so)->so_rcv)); \
 	} else { \
 		sorwakeup_locked(so); \
 	} \
