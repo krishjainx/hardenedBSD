@@ -541,9 +541,9 @@ sctp_add_addr_to_vrf(uint32_t vrf_id, void *ifn, uint32_t ifn_index,
 		atomic_add_int(&vrf->refcount, 1);
 		sctp_ifnp->ifn_mtu = SCTP_GATHER_MTU_FROM_IFN_INFO(ifn, ifn_index, addr->sa_family);
 		if (if_name != NULL) {
-			snprintf(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", if_name);
+			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", if_name);
 		} else {
-			snprintf(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "unknown");
+			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "unknown");
 		}
 		hash_ifn_head = &SCTP_BASE_INFO(vrf_ifn_hash)[(ifn_index & SCTP_BASE_INFO(vrf_ifn_hashmark))];
 		LIST_INIT(&sctp_ifnp->ifalist);
@@ -746,8 +746,7 @@ sctp_del_addr_from_vrf(uint32_t vrf_id, struct sockaddr *addr,
 
 			/*-
 			 * The name has priority over the ifn_index
-			 * if its given. We do this especially for
-			 * panda who might recycle indexes fast.
+			 * if its given.
 			 */
 			if (if_name) {
 				if (strncmp(if_name, sctp_ifap->ifn_p->ifn_name, SCTP_IFNAMSIZ) == 0) {
@@ -2553,13 +2552,13 @@ sctp_inpcb_alloc(struct socket *so, uint32_t vrf_id)
 	m = &inp->sctp_ep;
 
 	/* setup the base timeout information */
-	m->sctp_timeoutticks[SCTP_TIMER_SEND] = SEC_TO_TICKS(SCTP_SEND_SEC);	/* needed ? */
-	m->sctp_timeoutticks[SCTP_TIMER_INIT] = SEC_TO_TICKS(SCTP_INIT_SEC);	/* needed ? */
-	m->sctp_timeoutticks[SCTP_TIMER_RECV] = MSEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_delayed_sack_time_default));
-	m->sctp_timeoutticks[SCTP_TIMER_HEARTBEAT] = MSEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_heartbeat_interval_default));
-	m->sctp_timeoutticks[SCTP_TIMER_PMTU] = SEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_pmtu_raise_time_default));
-	m->sctp_timeoutticks[SCTP_TIMER_MAXSHUTDOWN] = SEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_shutdown_guard_time_default));
-	m->sctp_timeoutticks[SCTP_TIMER_SIGNATURE] = SEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_secret_lifetime_default));
+	m->sctp_timeoutticks[SCTP_TIMER_SEND] = sctp_secs_to_ticks(SCTP_SEND_SEC);	/* needed ? */
+	m->sctp_timeoutticks[SCTP_TIMER_INIT] = sctp_secs_to_ticks(SCTP_INIT_SEC);	/* needed ? */
+	m->sctp_timeoutticks[SCTP_TIMER_RECV] = sctp_msecs_to_ticks(SCTP_BASE_SYSCTL(sctp_delayed_sack_time_default));
+	m->sctp_timeoutticks[SCTP_TIMER_HEARTBEAT] = sctp_msecs_to_ticks(SCTP_BASE_SYSCTL(sctp_heartbeat_interval_default));
+	m->sctp_timeoutticks[SCTP_TIMER_PMTU] = sctp_secs_to_ticks(SCTP_BASE_SYSCTL(sctp_pmtu_raise_time_default));
+	m->sctp_timeoutticks[SCTP_TIMER_MAXSHUTDOWN] = sctp_secs_to_ticks(SCTP_BASE_SYSCTL(sctp_shutdown_guard_time_default));
+	m->sctp_timeoutticks[SCTP_TIMER_SIGNATURE] = sctp_secs_to_ticks(SCTP_BASE_SYSCTL(sctp_secret_lifetime_default));
 	/* all max/min max are in ms */
 	m->sctp_maxrto = SCTP_BASE_SYSCTL(sctp_rto_max_default);
 	m->sctp_minrto = SCTP_BASE_SYSCTL(sctp_rto_min_default);
@@ -2607,7 +2606,7 @@ sctp_inpcb_alloc(struct socket *so, uint32_t vrf_id)
 	sctp_timer_start(SCTP_TIMER_TYPE_NEWCOOKIE, inp, NULL, NULL);
 
 	/* How long is a cookie good for ? */
-	m->def_cookie_life = MSEC_TO_TICKS(SCTP_BASE_SYSCTL(sctp_valid_cookie_life_default));
+	m->def_cookie_life = sctp_msecs_to_ticks(SCTP_BASE_SYSCTL(sctp_valid_cookie_life_default));
 	/*
 	 * Initialize authentication parameters
 	 */
@@ -3154,8 +3153,7 @@ continue_anyway:
 		} else {
 			/*
 			 * Note for BSD we hit here always other O/S's will
-			 * pass things in via the sctp_ifap argument
-			 * (Panda).
+			 * pass things in via the sctp_ifap argument.
 			 */
 			ifa = sctp_find_ifa_by_addr(&store.sa,
 			    vrf_id, SCTP_ADDR_NOT_LOCKED);
@@ -3441,15 +3439,13 @@ sctp_inpcb_free(struct sctp_inpcb *inp, int immediate, int from)
 					sctp_send_shutdown(asoc, netp);
 					sctp_timer_start(SCTP_TIMER_TYPE_SHUTDOWN, asoc->sctp_ep, asoc,
 					    netp);
-					sctp_timer_start(SCTP_TIMER_TYPE_SHUTDOWNGUARD, asoc->sctp_ep, asoc,
-					    asoc->asoc.primary_destination);
+					sctp_timer_start(SCTP_TIMER_TYPE_SHUTDOWNGUARD, asoc->sctp_ep, asoc, NULL);
 					sctp_chunk_output(inp, asoc, SCTP_OUTPUT_FROM_SHUT_TMR, SCTP_SO_LOCKED);
 				}
 			} else {
 				/* mark into shutdown pending */
 				SCTP_ADD_SUBSTATE(asoc, SCTP_STATE_SHUTDOWN_PENDING);
-				sctp_timer_start(SCTP_TIMER_TYPE_SHUTDOWNGUARD, asoc->sctp_ep, asoc,
-				    asoc->asoc.primary_destination);
+				sctp_timer_start(SCTP_TIMER_TYPE_SHUTDOWNGUARD, asoc->sctp_ep, asoc, NULL);
 				if ((*asoc->asoc.ss_functions.sctp_ss_is_user_msgs_incomplete) (asoc, &asoc->asoc)) {
 					SCTP_ADD_SUBSTATE(asoc, SCTP_STATE_PARTIAL_MSG_LEFT);
 				}
@@ -4309,11 +4305,7 @@ sctp_aloc_assoc(struct sctp_inpcb *inp, struct sockaddr *firstaddr,
 		 * If you have not performed a bind, then we need to do the
 		 * ephemeral bind for you.
 		 */
-		if ((err = sctp_inpcb_bind(inp->sctp_socket,
-		    (struct sockaddr *)NULL,
-		    (struct sctp_ifa *)NULL,
-		    p
-		    ))) {
+		if ((err = sctp_inpcb_bind(inp->sctp_socket, NULL, NULL, p))) {
 			/* bind error, probably perm */
 			*error = err;
 			return (NULL);
@@ -4681,7 +4673,6 @@ sctp_clean_up_stream(struct sctp_tcb *stcb, struct sctp_readhead *rh)
 		}
 	}
 }
-
 
 /*-
  * Free the association after un-hashing the remote port. This
@@ -5206,16 +5197,12 @@ sctp_free_assoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb, int from_inpcbfre
 			    SCTP_FREE_SHOULD_USE_GRACEFUL_CLOSE,
 			    SCTP_CALLED_DIRECTLY_NOCMPSET);
 			SCTP_INP_DECR_REF(inp);
-			goto out_of;
 		} else {
 			/* The socket is still open. */
 			SCTP_INP_DECR_REF(inp);
+			SCTP_INP_RUNLOCK(inp);
 		}
 	}
-	if (from_inpcbfree == SCTP_NORMAL_PROC) {
-		SCTP_INP_RUNLOCK(inp);
-	}
-out_of:
 	/* destroyed the asoc */
 #ifdef SCTP_LOG_CLOSING
 	sctp_log_closing(inp, NULL, 11);
@@ -5711,7 +5698,6 @@ sctp_startup_mcore_threads(void)
 			i++;
 		}
 	}
-
 	/* Now start them all */
 	CPU_FOREACH(cpu) {
 		(void)kproc_create(sctp_mcore_thread,
@@ -5720,7 +5706,6 @@ sctp_startup_mcore_threads(void)
 		    RFPROC,
 		    SCTP_KTHREAD_PAGES,
 		    SCTP_MCORE_NAME);
-
 	}
 }
 #endif
@@ -5906,7 +5891,7 @@ retry:
 	 * holding the lock.  We won't find it on the list either and
 	 * continue and free/destroy it.  While holding the lock, spin, to
 	 * avoid the race condition as sctp_iterator_worker() will have to
-	 * wait to re-aquire the lock.
+	 * wait to re-acquire the lock.
 	 */
 	if (sctp_it_ctl.iterator_running != 0 || sctp_it_ctl.cur_it != NULL) {
 		SCTP_IPI_ITERATOR_WQ_UNLOCK();
@@ -6235,7 +6220,7 @@ sctp_load_addresses_from_init(struct sctp_tcb *stcb, struct mbuf *m,
 							 * in setup state we
 							 * abort this guy
 							 */
-							snprintf(msg, sizeof(msg),
+							SCTP_SNPRINTF(msg, sizeof(msg),
 							    "%s:%d at %s", __FILE__, __LINE__, __func__);
 							op_err = sctp_generate_cause(SCTP_BASE_SYSCTL(sctp_diag_info_code),
 							    msg);
@@ -6335,7 +6320,7 @@ sctp_load_addresses_from_init(struct sctp_tcb *stcb, struct mbuf *m,
 							 * in setup state we
 							 * abort this guy
 							 */
-							snprintf(msg, sizeof(msg),
+							SCTP_SNPRINTF(msg, sizeof(msg),
 							    "%s:%d at %s", __FILE__, __LINE__, __func__);
 							op_err = sctp_generate_cause(SCTP_BASE_SYSCTL(sctp_diag_info_code),
 							    msg);

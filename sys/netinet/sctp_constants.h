@@ -576,17 +576,6 @@ __FBSDID("$FreeBSD$");
  */
 #define SCTP_ASOC_MAX_CHUNKS_ON_QUEUE 512
 
-
-/* The conversion from time to ticks and vice versa is done by rounding
- * upwards. This way we can test in the code the time to be positive and
- * know that this corresponds to a positive number of ticks.
- */
-#define MSEC_TO_TICKS(x) ((hz == 1000) ? x : ((((x) * hz) + 999) / 1000))
-#define TICKS_TO_MSEC(x) ((hz == 1000) ? x : ((((x) * 1000) + (hz - 1)) / hz))
-
-#define SEC_TO_TICKS(x) ((x) * hz)
-#define TICKS_TO_SEC(x) (((x) + (hz - 1)) / hz)
-
 /*
  * Basically the minimum amount of time before I do a early FR. Making this
  * value to low will cause duplicate retransmissions.
@@ -766,9 +755,8 @@ __FBSDID("$FreeBSD$");
 #define SCTP_FROM_SCTP_ASCONF       0x80000000
 #define SCTP_FROM_SCTP_OUTPUT       0x90000000
 #define SCTP_FROM_SCTP_PEELOFF      0xa0000000
-#define SCTP_FROM_SCTP_PANDA        0xb0000000
-#define SCTP_FROM_SCTP_SYSCTL       0xc0000000
-#define SCTP_FROM_SCTP_CC_FUNCTIONS 0xd0000000
+#define SCTP_FROM_SCTP_SYSCTL       0xb0000000
+#define SCTP_FROM_SCTP_CC_FUNCTIONS 0xc0000000
 
 /* Location ID's */
 #define SCTP_LOC_1  0x00000001
@@ -955,7 +943,7 @@ __FBSDID("$FreeBSD$");
 
 /*-
  * defines for socket lock states.
- * Used by __APPLE__ and SCTP_SO_LOCK_TESTING
+ * Used by __APPLE__
  */
 #define SCTP_SO_LOCKED		1
 #define SCTP_SO_NOT_LOCKED	0
