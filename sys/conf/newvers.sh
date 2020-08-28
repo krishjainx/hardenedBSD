@@ -48,9 +48,14 @@
 # upper case variables starting in column 1 are on one line w/o continuation.
 
 TYPE="FreeBSD"
+<<<<<<< HEAD
 REVISION="12.1"
 BRANCH=${BRANCH_OVERRIDE:-STABLE}
 BRANCH="${BRANCH}-HBSD"
+=======
+REVISION="12.2"
+BRANCH=${BRANCH_OVERRIDE:-PRERELEASE}
+>>>>>>> origin/freebsd/12-stable/master
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
 
