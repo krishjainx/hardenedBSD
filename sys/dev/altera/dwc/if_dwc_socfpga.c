@@ -1,6 +1,12 @@
 /*-
- * Copyright (c) 2015 Ganbold Tsagaankhuu <ganbold@FreeBSD.org>
- * All rights reserved.
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2019 Ruslan Bukin <br@bsdpad.com>
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,56 +49,65 @@ __FBSDID("$FreeBSD$");
 #include "if_dwc_if.h"
 
 static int
-aml8726_if_dwc_probe(device_t dev)
+if_dwc_socfpga_probe(device_t dev)
 {
 
 	if (!ofw_bus_status_okay(dev))
 		return (ENXIO);
-	if (!ofw_bus_is_compatible(dev, "amlogic,meson6-dwmac"))
+
+	if (!ofw_bus_is_compatible(dev, "altr,socfpga-stmmac"))
 		return (ENXIO);
-	device_set_desc(dev, "Amlogic Meson Gigabit Ethernet Controller");
+
+	device_set_desc(dev, "Altera SOCFPGA Ethernet MAC");
 
 	return (BUS_PROBE_DEFAULT);
 }
 
 static int
-aml8726_if_dwc_init(device_t dev)
+if_dwc_socfpga_init(device_t dev)
 {
 
 	return (0);
 }
 
 static int
-aml8726_if_dwc_mac_type(device_t dev)
+if_dwc_socfpga_mac_type(device_t dev)
 {
 
-	return (DWC_GMAC_NORMAL_DESC);
+	return (DWC_GMAC_EXT_DESC);
 }
 
 static int
-aml8726_if_dwc_mii_clk(device_t dev)
+if_dwc_socfpga_mii_clk(device_t dev)
 {
+	phandle_t root;
 
-	return (GMAC_MII_CLK_100_150M_DIV62);
+	root = OF_finddevice("/");
+
+	if (ofw_bus_node_is_compatible(root, "altr,socfpga-stratix10"))
+		return (GMAC_MII_CLK_35_60M_DIV26);
+
+	/* Default value. */
+	return (GMAC_MII_CLK_25_35M_DIV16);
 }
 
-static device_method_t aml8726_dwc_methods[] = {
-	DEVMETHOD(device_probe,		aml8726_if_dwc_probe),
+static device_method_t dwc_socfpga_methods[] = {
+	DEVMETHOD(device_probe,		if_dwc_socfpga_probe),
 
-	DEVMETHOD(if_dwc_init,		aml8726_if_dwc_init),
-	DEVMETHOD(if_dwc_mac_type,	aml8726_if_dwc_mac_type),
-	DEVMETHOD(if_dwc_mii_clk,	aml8726_if_dwc_mii_clk),
+	DEVMETHOD(if_dwc_init,		if_dwc_socfpga_init),
+	DEVMETHOD(if_dwc_mac_type,	if_dwc_socfpga_mac_type),
+	DEVMETHOD(if_dwc_mii_clk,	if_dwc_socfpga_mii_clk),
 
 	DEVMETHOD_END
 };
 
-static devclass_t aml8726_dwc_devclass;
+static devclass_t dwc_socfpga_devclass;
 
 extern driver_t dwc_driver;
 
-DEFINE_CLASS_1(dwc, aml8726_dwc_driver, aml8726_dwc_methods,
+DEFINE_CLASS_1(dwc, dwc_socfpga_driver, dwc_socfpga_methods,
     sizeof(struct dwc_softc), dwc_driver);
-DRIVER_MODULE(aml8726_dwc, simplebus, aml8726_dwc_driver,
-    aml8726_dwc_devclass, 0, 0);
+EARLY_DRIVER_MODULE(dwc_socfpga, simplebus, dwc_socfpga_driver,
+    dwc_socfpga_devclass, 0, 0, BUS_PASS_SUPPORTDEV + BUS_PASS_ORDER_MIDDLE);
 
-MODULE_DEPEND(aml8726_dwc, dwc, 1, 1, 1);
+MODULE_DEPEND(dwc_socfpga, dwc, 1, 1, 1);
