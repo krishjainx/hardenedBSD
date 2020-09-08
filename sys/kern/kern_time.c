@@ -259,7 +259,6 @@ kern_thread_cputime(struct thread *targettd, struct timespec *ats)
 
 	if (targettd == NULL) { /* current thread */
 		p = curthread->td_proc;
-		PROC_LOCK_ASSERT(p, MA_OWNED);
 		critical_enter();
 		switchtime = PCPU_GET(switchtime);
 		curtime = cpu_ticks();
@@ -268,7 +267,6 @@ kern_thread_cputime(struct thread *targettd, struct timespec *ats)
 		runtime += curtime - switchtime;
 	} else {
 		p = targettd->td_proc;
-		PROC_LOCK_ASSERT(p, MA_OWNED);
 		thread_lock(targettd);
 		runtime = targettd->td_runtime;
 		thread_unlock(targettd);
@@ -282,7 +280,6 @@ kern_process_cputime(struct proc *targetp, struct timespec *ats)
 	uint64_t runtime;
 	struct rusage ru;
 
-	PROC_LOCK_ASSERT(targetp, MA_OWNED);
 	PROC_STATLOCK(targetp);
 	rufetch(targetp, &ru);
 	runtime = targetp->p_rux.rux_runtime;
