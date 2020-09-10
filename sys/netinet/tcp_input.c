@@ -516,15 +516,12 @@ cc_ecnpkt_handler(struct tcpcb *tp, struct tcphdr *th, uint8_t iptos)
 		else
 			tp->ccv->flags &= ~CCF_TCPHDR_CWR;
 
-		if (tp->t_flags & TF_DELACK)
-			tp->ccv->flags |= CCF_DELACK;
-		else
-			tp->ccv->flags &= ~CCF_DELACK;
-
 		CC_ALGO(tp)->ecnpkt_handler(tp->ccv);
 
-		if (tp->ccv->flags & CCF_ACKNOW)
+		if (tp->ccv->flags & CCF_ACKNOW) {
 			tcp_timer_activate(tp, TT_DELACK, tcp_delacktime);
+			tp->t_flags |= TF_ACKNOW;
+		}
 	}
 }
 
@@ -1610,8 +1607,10 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 * TCP ECN processing.
 	 */
 	if (tp->t_flags & TF_ECN_PERMIT) {
-		if (thflags & TH_CWR)
+		if (thflags & TH_CWR) {
 			tp->t_flags &= ~TF_ECN_SND_ECE;
+			tp->t_flags |= TF_ACKNOW;
+		}
 		switch (iptos & IPTOS_ECN_MASK) {
 		case IPTOS_ECN_CE:
 			tp->t_flags |= TF_ECN_SND_ECE;
@@ -2045,7 +2044,7 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				tp->t_flags |= TF_ACKNOW;
 
 			if (((thflags & (TH_CWR | TH_ECE)) == TH_ECE) &&
-			    V_tcp_do_ecn) {
+			    (V_tcp_do_ecn == 1)) {
 				tp->t_flags |= TF_ECN_PERMIT;
 				TCPSTAT_INC(tcps_ecn_shs);
 			}

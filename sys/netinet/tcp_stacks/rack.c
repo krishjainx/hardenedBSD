@@ -2934,6 +2934,7 @@ rack_timeout_rxt(struct tcpcb *tp, struct tcp_rack *rack, uint32_t cts)
 	int32_t rexmt;
 	struct inpcb *inp;
 	int32_t retval = 0;
+	bool isipv6;
 
 	inp = tp->t_inpcb;
 	if (tp->t_timers->tt_flags & TT_STOPPED) {
@@ -3010,11 +3011,16 @@ rack_timeout_rxt(struct tcpcb *tp, struct tcp_rack *rack, uint32_t cts)
 	 * of packets and process straight to FIN. In that case we won't
 	 * catch ESTABLISHED state.
 	 */
-	if (V_tcp_pmtud_blackhole_detect && (((tp->t_state == TCPS_ESTABLISHED))
-	    || (tp->t_state == TCPS_FIN_WAIT_1))) {
 #ifdef INET6
-		int32_t isipv6;
+	isipv6 = (tp->t_inpcb->inp_vflag & INP_IPV6) ? true : false;
+#else
+	isipv6 = false;
 #endif
+	if (((V_tcp_pmtud_blackhole_detect == 1) ||
+	    (V_tcp_pmtud_blackhole_detect == 2 && !isipv6) ||
+	    (V_tcp_pmtud_blackhole_detect == 3 && isipv6)) &&
+	    ((tp->t_state == TCPS_ESTABLISHED) ||
+	    (tp->t_state == TCPS_FIN_WAIT_1))) {
 
 		/*
 		 * Idea here is that at each stage of mtu probe (usually,
@@ -3044,7 +3050,6 @@ rack_timeout_rxt(struct tcpcb *tp, struct tcp_rack *rack, uint32_t cts)
 			 * default in an attempt to retransmit.
 			 */
 #ifdef INET6
-			isipv6 = (tp->t_inpcb->inp_vflag & INP_IPV6) ? 1 : 0;
 			if (isipv6 &&
 			    tp->t_maxseg > V_tcp_v6pmtud_blackhole_mss) {
 				/* Use the sysctl tuneable blackhole MSS. */
@@ -5411,7 +5416,8 @@ rack_do_syn_sent(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			tp->t_flags |= TF_ACKNOW;
 		}
 
-		if ((thflags & TH_ECE) && V_tcp_do_ecn) {
+		if (((thflags & (TH_CWR | TH_ECE)) == TH_ECE) &&
+		    (V_tcp_do_ecn == 1)) {
 			tp->t_flags |= TF_ECN_PERMIT;
 			TCPSTAT_INC(tcps_ecn_shs);
 		}
@@ -6728,8 +6734,10 @@ rack_hpts_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 * this to occur after we've validated the segment.
 	 */
 	if (tp->t_flags & TF_ECN_PERMIT) {
-		if (thflags & TH_CWR)
+		if (thflags & TH_CWR) {
 			tp->t_flags &= ~TF_ECN_SND_ECE;
+			tp->t_flags |= TF_ACKNOW;
+		}
 		switch (iptos & IPTOS_ECN_MASK) {
 		case IPTOS_ECN_CE:
 			tp->t_flags |= TF_ECN_SND_ECE;
