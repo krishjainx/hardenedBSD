@@ -72,7 +72,7 @@ SYSCTL_INT(_vfs_tmpfs, OID_AUTO, rename_restarts, CTLFLAG_RD,
     "Times rename had to restart due to lock contention");
 
 static struct tmpfs_extattr_list_entry *tmpfs_node_has_extattr(
-    struct tmpfs_node *, int, const char *);
+    struct tmpfs_node *, int, const char *, bool);
 
 static int tmpfs_extattr_set(struct vnode *, int, const char *,
     struct uio *, struct ucred *, struct thread *);
@@ -84,6 +84,9 @@ static int tmpfs_listextattr(struct vop_listextattr_args *);
 
 static int tmpfs_extattr_list(struct vnode *, int, struct uio *,
     size_t *, struct ucred *, struct thread *);
+
+static int tmpfs_extattr_delete(struct vnode *, int, const char *,
+    struct ucred *, struct thread *);
 
 static int
 tmpfs_vn_get_ino_alloc(struct mount *mp, void *arg, int lkflags,
@@ -1602,13 +1605,15 @@ restart:
 
 static struct tmpfs_extattr_list_entry *
 tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
-    const char *name)
+    const char *name, bool dolock)
 {
 	struct tmpfs_extattr_list_entry *entry, *tentry;
 
 	entry = NULL;
 
-	TMPFS_NODE_LOCK(node);
+	if (dolock) {
+		TMPFS_NODE_LOCK(node);
+	}
 	LIST_FOREACH_SAFE(entry, &(node->tn_reg.tn_extattr_list),
 	    tele_entries, tentry) {
 		if (attrnamespace != entry->tele_attrnamespace) {
@@ -1619,7 +1624,9 @@ tmpfs_node_has_extattr(struct tmpfs_node *node, int attrnamespace,
 			break;
 		}
 	}
-	TMPFS_NODE_UNLOCK(node);
+	if (dolock) {
+		TMPFS_NODE_UNLOCK(node);
+	}
 
 	return (entry);
 }
@@ -1652,7 +1659,7 @@ tmpfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 
 	node = VP_TO_TMPFS_NODE(vp);
 
-	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
+	attr = tmpfs_node_has_extattr(node, attrnamespace, name, true);
 	if (attr == NULL) {
 		return (ENOATTR);
 	}
@@ -1711,7 +1718,7 @@ tmpfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 
 	node = VP_TO_TMPFS_NODE(vp);
 
-	attr = tmpfs_node_has_extattr(node, attrnamespace, name);
+	attr = tmpfs_node_has_extattr(node, attrnamespace, name, true);
 	if (attr == NULL) {
 		sz = MIN(TMPFS_EXTATTR_MAXVALUESIZE, uio->uio_resid);
 		attr = malloc(sizeof(*attr), M_TEMP, M_WAITOK|M_ZERO);
@@ -1766,6 +1773,7 @@ tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
 		*size = 0;
 	}
 
+	TMPFS_NODE_LOCK(node);
 	LIST_FOREACH_SAFE(attr, &(node->tn_reg.tn_extattr_list),
 	    tele_entries, tattr) {
 		if (attr->tele_attrnamespace != attrnamespace) {
@@ -1777,19 +1785,79 @@ tmpfs_extattr_list(struct vnode *vp, int attrnamespace, struct uio *uio,
 			*size += namelen + namelen8;
 		} else if (uio != NULL) {
 			namelen8 = namelen;
+			TMPFS_NODE_UNLOCK(node);
 			error = uiomove(&namelen8, sizeof(namelen8), uio);
 			if (error) {
+				TMPFS_NODE_LOCK(node);
 				break;
 			}
 			error = uiomove(attr->tele_attrname, namelen, uio);
+			if (error) {
+				TMPFS_NODE_LOCK(node);
+				break;
+			}
+			TMPFS_NODE_LOCK(node);
 		}
 
 		if (error) {
 			break;
 		}
 	}
+	TMPFS_NODE_UNLOCK(node);
 
 	return (error);
+}
+
+static int
+tmpfs_extattr_delete(struct vnode *vp, int attrnamespace, const char *name,
+    struct ucred *cred, struct thread *td)
+{
+	struct tmpfs_extattr_list_entry *attr;
+	struct tmpfs_node *node;
+	int error;
+
+	if (vp->v_type != VREG) {
+		return (EOPNOTSUPP);
+	}
+
+	error = extattr_check_cred(vp, attrnamespace, cred, td, VWRITE);
+	if (error) {
+		return (error);
+	}
+
+	node = VP_TO_TMPFS_NODE(vp);
+
+	TMPFS_NODE_LOCK(node);
+	attr = tmpfs_node_has_extattr(node, attrnamespace, name, false);
+	if (attr == NULL) {
+		return (EINVAL);
+	}
+
+	LIST_REMOVE(attr, tele_entries);
+	TMPFS_NODE_UNLOCK(node);
+
+	free(attr->tele_value, M_TEMP);
+	memset(attr, 0, sizeof(*attr));
+	free(attr, M_TEMP);
+
+	return (0);
+}
+
+static int
+tmpfs_deleteextattr(struct vop_deleteextattr_args *ap)
+/*
+vop_deleteextattr {
+	IN struct vnode *a_vp;
+	IN int a_attrnamespace;
+	IN const char *a_name;
+	IN struct ucred *a_cred;
+	IN struct thread *a_td;
+}
+*/
+{
+
+	return (tmpfs_extattr_delete(ap->a_vp, ap->a_attrnamespace, ap->a_name,
+	    ap->a_cred, ap->a_td));
 }
 
 /*
@@ -1809,6 +1877,7 @@ struct vop_vector tmpfs_vnodeop_entries = {
 	.vop_getextattr =		tmpfs_getextattr,
 	.vop_setextattr =		tmpfs_setextattr,
 	.vop_listextattr =		tmpfs_listextattr,
+	.vop_deleteextattr =		tmpfs_deleteextattr,
 	.vop_read =			tmpfs_read,
 	.vop_write =			tmpfs_write,
 	.vop_fsync =			tmpfs_fsync,
