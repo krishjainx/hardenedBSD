@@ -1759,8 +1759,11 @@ vm_map_fixed(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 	    ("vm_map_fixed: non-NULL backing object for stack"));
 	vm_map_lock(map);
 	VM_MAP_RANGE_CHECK(map, start, end);
-	if ((cow & MAP_CHECK_EXCL) == 0)
-		vm_map_delete(map, start, end);
+	if ((cow & MAP_CHECK_EXCL) == 0) {
+		result = vm_map_delete(map, start, end);
+		if (result != KERN_SUCCESS)
+			goto out;
+	}
 	if ((cow & (MAP_STACK_GROWS_DOWN | MAP_STACK_GROWS_UP)) != 0) {
 		result = vm_map_stack_locked(map, start, length, sgrowsiz,
 		    prot, max, cow);
@@ -1768,10 +1771,42 @@ vm_map_fixed(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 		result = vm_map_insert(map, object, offset, start, end,
 		    prot, max, cow);
 	}
+out:
 	vm_map_unlock(map);
 	return (result);
 }
 
+<<<<<<< HEAD
+=======
+static const int aslr_pages_rnd_64[2] = {0x1000, 0x10};
+static const int aslr_pages_rnd_32[2] = {0x100, 0x4};
+
+static int cluster_anon = 1;
+SYSCTL_INT(_vm, OID_AUTO, cluster_anon, CTLFLAG_RW,
+    &cluster_anon, 0,
+    "Cluster anonymous mappings: 0 = no, 1 = yes if no hint, 2 = always");
+
+static bool
+clustering_anon_allowed(vm_offset_t addr)
+{
+
+	switch (cluster_anon) {
+	case 0:
+		return (false);
+	case 1:
+		return (addr == 0);
+	case 2:
+	default:
+		return (true);
+	}
+}
+
+static long aslr_restarts;
+SYSCTL_LONG(_vm, OID_AUTO, aslr_restarts, CTLFLAG_RD,
+    &aslr_restarts, 0,
+    "Number of aslr failures");
+
+>>>>>>> origin/freebsd/12-stable/master
 /*
  * Searches for the specified amount of free space in the given map with the
  * specified alignment.  Performs an address-ordered, first-fit search from
@@ -1839,6 +1874,19 @@ vm_map_alignspace(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 	}
 }
 
+int
+vm_map_find_aligned(vm_map_t map, vm_offset_t *addr, vm_size_t length,
+    vm_offset_t max_addr, vm_offset_t alignment)
+{
+	/* XXXKIB ASLR eh ? */
+	*addr = vm_map_findspace(map, *addr, length);
+	if (*addr + length > vm_map_max(map) ||
+	    (max_addr != 0 && *addr + length > max_addr))
+		return (KERN_NO_SPACE);
+	return (vm_map_alignspace(map, NULL, 0, addr, length, max_addr,
+	    alignment));
+}
+
 /*
  *	vm_map_find finds an unallocated region in the target address
  *	map with the given length.  The search is defined to be
@@ -1897,7 +1945,9 @@ again:
 			rv = KERN_INVALID_ADDRESS;
 			goto done;
 		}
-		vm_map_delete(map, *addr, *addr + length);
+		rv = vm_map_delete(map, *addr, *addr + length);
+		if (rv != KERN_SUCCESS)
+			goto done;
 	}
 	if ((cow & (MAP_STACK_GROWS_DOWN | MAP_STACK_GROWS_UP)) != 0) {
 		rv = vm_map_stack_locked(map, *addr, length, sgrowsiz, prot,
