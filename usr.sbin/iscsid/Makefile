@@ -11,11 +11,6 @@ MAN=		iscsid.8
 
 LIBADD=		md util
 
-<<<<<<< HEAD
-
-WARNS=		6
-=======
 WARNS?=		6
->>>>>>> origin/freebsd/12-stable/master
 
 .include <bsd.prog.mk>

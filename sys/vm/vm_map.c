@@ -1776,37 +1776,6 @@ out:
 	return (result);
 }
 
-<<<<<<< HEAD
-=======
-static const int aslr_pages_rnd_64[2] = {0x1000, 0x10};
-static const int aslr_pages_rnd_32[2] = {0x100, 0x4};
-
-static int cluster_anon = 1;
-SYSCTL_INT(_vm, OID_AUTO, cluster_anon, CTLFLAG_RW,
-    &cluster_anon, 0,
-    "Cluster anonymous mappings: 0 = no, 1 = yes if no hint, 2 = always");
-
-static bool
-clustering_anon_allowed(vm_offset_t addr)
-{
-
-	switch (cluster_anon) {
-	case 0:
-		return (false);
-	case 1:
-		return (addr == 0);
-	case 2:
-	default:
-		return (true);
-	}
-}
-
-static long aslr_restarts;
-SYSCTL_LONG(_vm, OID_AUTO, aslr_restarts, CTLFLAG_RD,
-    &aslr_restarts, 0,
-    "Number of aslr failures");
-
->>>>>>> origin/freebsd/12-stable/master
 /*
  * Searches for the specified amount of free space in the given map with the
  * specified alignment.  Performs an address-ordered, first-fit search from
