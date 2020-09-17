@@ -1830,6 +1830,7 @@ tmpfs_extattr_delete(struct vnode *vp, int attrnamespace, const char *name,
 	TMPFS_NODE_LOCK(node);
 	attr = tmpfs_node_has_extattr(node, attrnamespace, name, false);
 	if (attr == NULL) {
+		TMPFS_NODE_UNLOCK(node);
 		return (EINVAL);
 	}
 
