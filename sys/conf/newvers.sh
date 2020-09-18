@@ -49,8 +49,15 @@
 
 TYPE="FreeBSD"
 REVISION="12.2"
+<<<<<<< HEAD
 BRANCH=${BRANCH_OVERRIDE:-STABLE}
 BRANCH="${BRANCH}-HBSD"
+=======
+BRANCH="STABLE"
+if [ -n "${BRANCH_OVERRIDE}" ]; then
+	BRANCH=${BRANCH_OVERRIDE}
+fi
+>>>>>>> origin/freebsd/12-stable/master
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
 
