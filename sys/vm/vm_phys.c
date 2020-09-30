@@ -137,16 +137,9 @@ SYSCTL_OID(_vm, OID_AUTO, phys_free,
     "Phys Free Info");
 
 static int sysctl_vm_phys_segs(SYSCTL_HANDLER_ARGS);
-<<<<<<< HEAD
-SYSCTL_OID(_vm, OID_AUTO, phys_segs, CTLTYPE_STRING | CTLFLAG_RD |
-    CTLFLAG_ROOTONLY,
-    NULL, 0, sysctl_vm_phys_segs, "A", "Phys Seg Info");
-=======
 SYSCTL_OID(_vm, OID_AUTO, phys_segs,
-    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, 0,
-    sysctl_vm_phys_segs, "A",
-    "Phys Seg Info");
->>>>>>> origin/freebsd/12-stable/master
+    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE | CTLFLAG_ROOTONLY
+    , NULL, 0, sysctl_vm_phys_segs, "A", "Phys Seg Info");
 
 #ifdef NUMA
 static int sysctl_vm_phys_locality(SYSCTL_HANDLER_ARGS);

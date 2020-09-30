@@ -257,10 +257,6 @@ kern_thread_cputime(struct thread *targettd, struct timespec *ats)
 	uint64_t runtime, curtime, switchtime;
 
 	if (targettd == NULL) { /* current thread */
-<<<<<<< HEAD
-		p = curthread->td_proc;
-=======
->>>>>>> origin/freebsd/12-stable/master
 		critical_enter();
 		switchtime = PCPU_GET(switchtime);
 		curtime = cpu_ticks();
@@ -268,11 +264,6 @@ kern_thread_cputime(struct thread *targettd, struct timespec *ats)
 		critical_exit();
 		runtime += curtime - switchtime;
 	} else {
-<<<<<<< HEAD
-		p = targettd->td_proc;
-=======
-		PROC_LOCK_ASSERT(targettd->td_proc, MA_OWNED);
->>>>>>> origin/freebsd/12-stable/master
 		thread_lock(targettd);
 		runtime = targettd->td_runtime;
 		thread_unlock(targettd);
