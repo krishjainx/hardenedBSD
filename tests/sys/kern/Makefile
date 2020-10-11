@@ -11,7 +11,6 @@ TESTSDIR=	${TESTSBASE}/sys/kern
 ATF_TESTS_C+=	kern_copyin
 ATF_TESTS_C+=	kern_descrip_test
 ATF_TESTS_C+=	kill_zombie
-ATF_TESTS_C+=	memfd_test
 ATF_TESTS_C+=	ptrace_test
 TEST_METADATA.ptrace_test+=		timeout="15"
 ATF_TESTS_C+=	reaper
@@ -29,6 +28,7 @@ ATF_TESTS_SH+=	coredump_phnum_test
 ATF_TESTS_SH+=	sonewconn_overflow
 TEST_METADATA.sonewconn_overflow+=	required_programs="python"
 TEST_METADATA.sonewconn_overflow+=	required_user="root"
+ATF_TESTS_SH+=	sendfile_test
 
 ${PACKAGE}FILES+=	sonewconn_overflow.py
 ${PACKAGE}FILESMODE_sonewconn_overflow.py=0555
@@ -36,6 +36,7 @@ ${PACKAGE}FILESMODE_sonewconn_overflow.py=0555
 BINDIR=		${TESTSDIR}
 PROGS+=		coredump_phnum_helper
 PROGS+=		pdeathsig_helper
+PROGS+=		sendfile_helper
 
 CFLAGS.sys_getrandom+=			-I${SRCTOP}/sys/contrib/zstd/lib
 LIBADD.sys_getrandom+=			zstd
@@ -44,6 +45,7 @@ LIBADD.sys_getrandom+=			pthread
 LIBADD.ptrace_test+=			pthread
 LIBADD.unix_seqpacket_test+=		pthread
 LIBADD.kcov+=				pthread
+LIBADD.sendfile_helper+=		pthread
 
 NETBSD_ATF_TESTS_C+=	lockf_test
 NETBSD_ATF_TESTS_C+=	mqueue_test
@@ -54,7 +56,7 @@ LIBADD.mqueue_test+=	rt
 
 .if ${MACHINE_ARCH} == "amd64" || \
     ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "aarch64"
+    ${MACHINE_CPUARCH} == "aarch64"
 ATF_TESTS_C+=	libkern_crc32
 .if ${MACHINE_ARCH} == "amd64" || ${MACHINE_ARCH} == "i386"
 LDADD.libkern_crc32+=	${SRCTOP}/sys/libkern/x86/crc32_sse42.c

@@ -62,11 +62,14 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysproto.h>
 #include <sys/ucontext.h>
 #include <sys/vdso.h>
+#include <sys/vmmeter.h>
 
 #include <vm/vm.h>
+#include <vm/vm_param.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
+#include <vm/vm_phys.h>
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_pager.h>
@@ -129,6 +132,8 @@ void pagezero_cache(void *);
 /* pagezero_simple is default pagezero */
 void (*pagezero)(void *p) = pagezero_simple;
 
+int (*apei_nmi)(void);
+
 static void
 pan_setup(void)
 {
@@ -170,6 +175,26 @@ has_hyp(void)
 static void
 cpu_startup(void *dummy)
 {
+	vm_paddr_t size;
+	int i;
+
+	printf("real memory  = %ju (%ju MB)\n", ptoa((uintmax_t)realmem),
+	    ptoa((uintmax_t)realmem) / 1024 / 1024);
+
+	if (bootverbose) {
+		printf("Physical memory chunk(s):\n");
+		for (i = 0; phys_avail[i + 1] != 0; i += 2) {
+			size = phys_avail[i + 1] - phys_avail[i];
+			printf("%#016jx - %#016jx, %ju bytes (%ju pages)\n",
+			    (uintmax_t)phys_avail[i],
+			    (uintmax_t)phys_avail[i + 1] - 1,
+			    (uintmax_t)size, (uintmax_t)size / PAGE_SIZE);
+		}
+	}
+
+	printf("avail memory = %ju (%ju MB)\n",
+	    ptoa((uintmax_t)vm_free_count()),
+	    ptoa((uintmax_t)vm_free_count()) / 1024 / 1024);
 
 	undef_init();
 	install_cpu_errata();
@@ -384,7 +409,6 @@ set_regs32(struct thread *td, struct reg32 *regs)
 	tf->tf_x[14] = regs->r_lr;
 	tf->tf_elr = regs->r_pc;
 	tf->tf_spsr = regs->r_cpsr;
-
 
 	return (0);
 }
@@ -1211,6 +1235,8 @@ initarm(struct arm64_bootparams *abp)
 	valid = bus_probe();
 
 	cninit();
+	set_ttbr0(abp->kern_ttbr0);
+	cpu_tlb_flushID();
 
 	if (!valid)
 		panic("Invalid bus configuration: %s",
@@ -1232,7 +1258,8 @@ initarm(struct arm64_bootparams *abp)
 		strlcpy(kernelname, env, sizeof(kernelname));
 
 	if (boothowto & RB_VERBOSE) {
-		print_efi_map_entries(efihdr);
+		if (efihdr != NULL)
+			print_efi_map_entries(efihdr);
 		physmem_print_tables();
 	}
 

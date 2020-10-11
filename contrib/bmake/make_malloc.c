@@ -1,4 +1,4 @@
-/*	$NetBSD: make_malloc.c,v 1.11 2017/04/16 20:20:24 dholland Exp $	*/
+/*	$NetBSD: make_malloc.c,v 1.18 2020/09/02 06:10:44 rillig Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #ifdef MAKE_NATIVE
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: make_malloc.c,v 1.11 2017/04/16 20:20:24 dholland Exp $");
+__RCSID("$NetBSD: make_malloc.c,v 1.18 2020/09/02 06:10:44 rillig Exp $");
 #endif
 
 #include <stdio.h>
@@ -41,10 +41,7 @@ __RCSID("$NetBSD: make_malloc.c,v 1.11 2017/04/16 20:20:24 dholland Exp $");
 #ifndef USE_EMALLOC
 static MAKE_ATTR_DEAD void enomem(void);
 
-/*
- * enomem --
- *	die when out of memory.
- */
+/* die when out of memory. */
 static MAKE_ATTR_DEAD void
 enomem(void)
 {
@@ -52,10 +49,7 @@ enomem(void)
 	exit(2);
 }
 
-/*
- * bmake_malloc --
- *	malloc, but die on error.
- */
+/* malloc, but die on error. */
 void *
 bmake_malloc(size_t len)
 {
@@ -63,13 +57,10 @@ bmake_malloc(size_t len)
 
 	if ((p = malloc(len)) == NULL)
 		enomem();
-	return(p);
+	return p;
 }
 
-/*
- * bmake_strdup --
- *	strdup, but die on error.
- */
+/* strdup, but die on error. */
 char *
 bmake_strdup(const char *str)
 {
@@ -82,38 +73,29 @@ bmake_strdup(const char *str)
 	return memcpy(p, str, len);
 }
 
-/*
- * bmake_strndup --
- *	strndup, but die on error.
- */
+/* Allocate a string starting from str with exactly len characters. */
 char *
-bmake_strndup(const char *str, size_t max_len)
+bmake_strldup(const char *str, size_t len)
 {
-	size_t len;
-	char *p;
-
-	if (str == NULL)
-		return NULL;
-
-	len = strlen(str);
-	if (len > max_len)
-		len = max_len;
-	p = bmake_malloc(len + 1);
+	char *p = bmake_malloc(len + 1);
 	memcpy(p, str, len);
 	p[len] = '\0';
-
-	return(p);
+	return p;
 }
 
-/*
- * bmake_realloc --
- *	realloc, but die on error.
- */
+/* realloc, but die on error. */
 void *
 bmake_realloc(void *ptr, size_t size)
 {
 	if ((ptr = realloc(ptr, size)) == NULL)
 		enomem();
-	return(ptr);
+	return ptr;
 }
 #endif
+
+/* Allocate a string from start up to but excluding end. */
+char *
+bmake_strsedup(const char *start, const char *end)
+{
+	return bmake_strldup(start, (size_t)(end - start));
+}

@@ -22,6 +22,7 @@ GENHDRS= builtins.h nodes.h syntax.h token.h
 SRCS= ${SHSRCS} ${GENSRCS} ${GENHDRS}
 
 MK_SPECTREV1_FIX=	no
+MK_SAFESTACK=		no
 
 # MLINKS for Shell built in commands for which there are no userland
 # utilities of the same name are handled with the associated manpage,

@@ -786,24 +786,28 @@ setup_xattrs(struct archive_read_disk *a,
     struct archive_entry *entry, int *fd)
 {
 	int namespaces[2];
-	int i, res;
+	int i, res, worstres;
 
 	namespaces[0] = EXTATTR_NAMESPACE_USER;
 	namespaces[1] = EXTATTR_NAMESPACE_SYSTEM;
+
+	worstres = ARCHIVE_OK;
 
 	for (i = 0; i < 2; i++) {
 		res = setup_xattrs_namespace(a, entry, fd,
 		    namespaces[i]);
 		switch (res) {
 			case (ARCHIVE_OK):
+				break;
 			case (ARCHIVE_WARN):
+				worstres = ARCHIVE_WARN;
 				break;
 			default:
 				return (res);
 		}
 	}
 
-	return (ARCHIVE_OK);
+	return (worstres);
 }
 
 #else

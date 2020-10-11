@@ -9,6 +9,7 @@ MK_SSP=		no
 MK_CROSS_DSO_CFI=	no
 WARNS?=	2
 
+SRCS_EXC+=	int_util.c
 .include "Makefile.inc"
 
 .if ${.MAKE.LEVEL} > 0

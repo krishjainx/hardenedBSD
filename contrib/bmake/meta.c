@@ -1,4 +1,4 @@
-/*      $NetBSD: meta.c,v 1.81 2020/04/03 03:32:28 sjg Exp $ */
+/*      $NetBSD: meta.c,v 1.113 2020/09/02 04:08:54 rillig Exp $ */
 
 /*
  * Implement 'meta' mode.
@@ -8,16 +8,16 @@
 /*
  * Copyright (c) 2009-2016, Juniper Networks, Inc.
  * Portions Copyright (c) 2009, John Birrell.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions 
- * are met: 
+ * modification, are permitted provided that the following conditions
+ * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.  
- * 
+ *    documentation and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -28,7 +28,7 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #if defined(USE_META)
 
@@ -47,6 +47,7 @@ char * dirname(char *);
 #endif
 
 #include "make.h"
+#include "dir.h"
 #include "job.h"
 
 #ifdef USE_FILEMON
@@ -113,7 +114,7 @@ extern char    **environ;
  *
  * See meta_oodate below - we mainly care about 'E' and 'R'.
  *
- * We can still use meta mode without filemon, but 
+ * We can still use meta mode without filemon, but
  * the benefits are more limited.
  */
 #ifdef USE_FILEMON
@@ -174,14 +175,18 @@ filemon_read(FILE *mfp, int fd)
 	return 0;
     }
     /* rewind */
-    (void)lseek(fd, (off_t)0, SEEK_SET);
+    if (lseek(fd, (off_t)0, SEEK_SET) < 0) {
+	error = errno;
+	warn("Could not rewind filemon");
+	fprintf(mfp, "\n");
+    } else {
+	error = 0;
+	fprintf(mfp, "\n-- filemon acquired metadata --\n");
 
-    error = 0;
-    fprintf(mfp, "\n-- filemon acquired metadata --\n");
-
-    while ((n = read(fd, buf, sizeof(buf))) > 0) {
-	if ((int)fwrite(buf, 1, n, mfp) < n)
-	    error = EIO;
+	while ((n = read(fd, buf, sizeof(buf))) > 0) {
+	    if ((int)fwrite(buf, 1, n, mfp) < n)
+		error = EIO;
+	}
     }
     fflush(mfp);
     if (close(fd) < 0)
@@ -214,7 +219,7 @@ eat_dots(char *buf, size_t bufsz, int dots)
     default:
 	return;
     }
-    
+
     do {
 	cp = strstr(buf, eat);
 	if (cp) {
@@ -304,7 +309,7 @@ meta_name(char *mname, size_t mnamelen,
 	}
     }
     free(tp);
-    return (mname);
+    return mname;
 }
 
 /*
@@ -314,7 +319,7 @@ meta_name(char *mname, size_t mnamelen,
 static int
 is_submake(void *cmdp, void *gnp)
 {
-    static char *p_make = NULL;
+    static const char *p_make = NULL;
     static int p_len;
     char  *cmd = cmdp;
     GNode *gn = gnp;
@@ -329,7 +334,7 @@ is_submake(void *cmdp, void *gnp)
     }
     cp = strchr(cmd, '$');
     if ((cp)) {
-	mp = Var_Subst(NULL, cmd, gn, VARF_WANTRES);
+	mp = Var_Subst(cmd, gn, VARE_WANTRES);
 	cmd = mp;
     }
     cp2 = strstr(cmd, p_make);
@@ -355,7 +360,7 @@ is_submake(void *cmdp, void *gnp)
 	}
     }
     free(mp);
-    return (rc);
+    return rc;
 }
 
 typedef struct meta_file_s {
@@ -368,13 +373,13 @@ printCMD(void *cmdp, void *mfpp)
 {
     meta_file_t *mfp = mfpp;
     char *cmd = cmdp;
-    char *cp = NULL;
+    char *cmd_freeIt = NULL;
 
     if (strchr(cmd, '$')) {
-	cmd = cp = Var_Subst(NULL, cmd, mfp->gn, VARF_WANTRES);
+	cmd = cmd_freeIt = Var_Subst(cmd, mfp->gn, VARE_WANTRES);
     }
     fprintf(mfp->fp, "CMD %s\n", cmd);
-    free(cp);
+    free(cmd_freeIt);
     return 0;
 }
 
@@ -399,11 +404,11 @@ static Boolean
 meta_needed(GNode *gn, const char *dname,
 	     char *objdir, int verbose)
 {
-    struct stat fs;
+    struct make_stat mst;
 
     if (verbose)
 	verbose = DEBUG(META);
-    
+
     /* This may be a phony node which we don't want meta data for... */
     /* Skip .meta for .BEGIN, .END, .ERROR etc as well. */
     /* Or it may be explicitly flagged as .NOMETA */
@@ -433,7 +438,7 @@ meta_needed(GNode *gn, const char *dname,
     }
 
     /* The object directory may not exist. Check it.. */
-    if (cached_stat(dname, &fs) != 0) {
+    if (cached_stat(dname, &mst) != 0) {
 	if (verbose)
 	    fprintf(debug_file, "Skipping meta for %s: no .OBJDIR\n",
 		    gn->name);
@@ -454,7 +459,7 @@ meta_needed(GNode *gn, const char *dname,
     return TRUE;
 }
 
-    
+
 static FILE *
 meta_create(BuildMon *pbm, GNode *gn)
 {
@@ -484,7 +489,7 @@ meta_create(BuildMon *pbm, GNode *gn)
 	char *mp;
 
 	/* Describe the target we are building */
-	mp = Var_Subst(NULL, "${" MAKE_META_PREFIX "}", gn, VARF_WANTRES);
+	mp = Var_Subst("${" MAKE_META_PREFIX "}", gn, VARE_WANTRES);
 	if (*mp)
 	    fprintf(stdout, "%s\n", mp);
 	free(mp);
@@ -542,10 +547,10 @@ meta_create(BuildMon *pbm, GNode *gn)
     }
  out:
     for (i--; i >= 0; i--) {
-	free(p[i]);
+	bmake_free(p[i]);
     }
 
-    return (mf.fp);
+    return mf.fp;
 }
 
 static Boolean
@@ -570,7 +575,7 @@ meta_init(void)
 {
 #ifdef USE_FILEMON
 	/* this allows makefiles to test if we have filemon support */
-	Var_Set(".MAKE.PATH_FILEMON", filemon_path(), VAR_GLOBAL, 0);
+	Var_Set(".MAKE.PATH_FILEMON", filemon_path(), VAR_GLOBAL);
 #endif
 }
 
@@ -616,7 +621,7 @@ meta_mode_init(const char *make_mode)
 	 * This works be cause :H will generate '.' if there is no /
 	 * and :tA will resolve that to cwd.
 	 */
-	Var_Set(MAKE_META_PREFIX, "Building ${.TARGET:H:tA}/${.TARGET:T}", VAR_GLOBAL, 0);
+	Var_Set(MAKE_META_PREFIX, "Building ${.TARGET:H:tA}/${.TARGET:T}", VAR_GLOBAL);
     }
     if (once)
 	return;
@@ -625,24 +630,19 @@ meta_mode_init(const char *make_mode)
     /*
      * We consider ourselves master of all within ${.MAKE.META.BAILIWICK}
      */
-    metaBailiwick = Lst_Init(FALSE);
-    metaBailiwickStr = Var_Subst(NULL, "${.MAKE.META.BAILIWICK:O:u:tA}",
-	VAR_GLOBAL, VARF_WANTRES);
-    if (metaBailiwickStr) {
-	str2Lst_Append(metaBailiwick, metaBailiwickStr, NULL);
-    }
+    metaBailiwick = Lst_Init();
+    metaBailiwickStr = Var_Subst("${.MAKE.META.BAILIWICK:O:u:tA}",
+	VAR_GLOBAL, VARE_WANTRES);
+    str2Lst_Append(metaBailiwick, metaBailiwickStr, NULL);
     /*
      * We ignore any paths that start with ${.MAKE.META.IGNORE_PATHS}
      */
-    metaIgnorePaths = Lst_Init(FALSE);
+    metaIgnorePaths = Lst_Init();
     Var_Append(MAKE_META_IGNORE_PATHS,
 	       "/dev /etc /proc /tmp /var/run /var/tmp ${TMPDIR}", VAR_GLOBAL);
-    metaIgnorePathsStr = Var_Subst(NULL,
-		   "${" MAKE_META_IGNORE_PATHS ":O:u:tA}", VAR_GLOBAL,
-		   VARF_WANTRES);
-    if (metaIgnorePathsStr) {
-	str2Lst_Append(metaIgnorePaths, metaIgnorePathsStr, NULL);
-    }
+    metaIgnorePathsStr = Var_Subst("${" MAKE_META_IGNORE_PATHS ":O:u:tA}",
+				   VAR_GLOBAL, VARE_WANTRES);
+    str2Lst_Append(metaIgnorePaths, metaIgnorePathsStr, NULL);
 
     /*
      * We ignore any paths that match ${.MAKE.META.IGNORE_PATTERNS}
@@ -650,12 +650,12 @@ meta_mode_init(const char *make_mode)
     cp = NULL;
     if (Var_Value(MAKE_META_IGNORE_PATTERNS, VAR_GLOBAL, &cp)) {
 	metaIgnorePatterns = TRUE;
-	free(cp);
+	bmake_free(cp);
     }
     cp = NULL;
     if (Var_Value(MAKE_META_IGNORE_FILTER, VAR_GLOBAL, &cp)) {
 	metaIgnoreFilter = TRUE;
-	free(cp);
+	bmake_free(cp);
     }
 }
 
@@ -790,12 +790,12 @@ meta_job_error(Job *job, GNode *gn, int flags, int status)
 		"(ignored)" : "");
     }
     if (gn) {
-	Var_Set(".ERROR_TARGET", gn->path ? gn->path : gn->name, VAR_GLOBAL, 0);
+	Var_Set(".ERROR_TARGET", gn->path ? gn->path : gn->name, VAR_GLOBAL);
     }
     getcwd(cwd, sizeof(cwd));
-    Var_Set(".ERROR_CWD", cwd, VAR_GLOBAL, 0);
+    Var_Set(".ERROR_CWD", cwd, VAR_GLOBAL);
     if (pbm->meta_fname[0]) {
-	Var_Set(".ERROR_META_FILE", pbm->meta_fname, VAR_GLOBAL, 0);
+	Var_Set(".ERROR_META_FILE", pbm->meta_fname, VAR_GLOBAL);
     }
     meta_job_finish(job);
 }
@@ -804,7 +804,7 @@ void
 meta_job_output(Job *job, char *cp, const char *nl)
 {
     BuildMon *pbm;
-    
+
     if (job != NULL) {
 	pbm = &job->bm;
     } else {
@@ -818,8 +818,8 @@ meta_job_output(Job *job, char *cp, const char *nl)
 	    if (!meta_prefix) {
 		char *cp2;
 
-		meta_prefix = Var_Subst(NULL, "${" MAKE_META_PREFIX "}",
-					VAR_GLOBAL, VARF_WANTRES);
+		meta_prefix = Var_Subst("${" MAKE_META_PREFIX "}",
+					VAR_GLOBAL, VARE_WANTRES);
 		if ((cp2 = strchr(meta_prefix, '$')))
 		    meta_prefix_len = cp2 - meta_prefix;
 		else
@@ -890,9 +890,11 @@ meta_job_finish(Job *job)
 void
 meta_finish(void)
 {
-    Lst_Destroy(metaBailiwick, NULL);
+    if (metaBailiwick != NULL)
+	Lst_Free(metaBailiwick);
     free(metaBailiwickStr);
-    Lst_Destroy(metaIgnorePaths, NULL);
+    if (metaIgnorePaths != NULL)
+	Lst_Free(metaIgnorePaths);
     free(metaIgnorePathsStr);
 }
 
@@ -900,7 +902,7 @@ meta_finish(void)
  * Fetch a full line from fp - growing bufp if needed
  * Return length in bufp.
  */
-static int 
+static int
 fgetLine(char **bufp, size_t *szp, int o, FILE *fp)
 {
     char *buf = *bufp;
@@ -951,42 +953,26 @@ prefix_match(void *p, void *q)
     const char *path = q;
     size_t n = strlen(prefix);
 
-    return (0 == strncmp(path, prefix, n));
+    return strncmp(path, prefix, n) == 0;
 }
 
-/*
- * looking for exact or prefix/ match to
- * Lst_Find wants 0 to stop search
- */
-static int
+/* See if the path equals prefix or starts with "prefix/". */
+static Boolean
 path_match(const void *p, const void *q)
 {
-    const char *prefix = q;
     const char *path = p;
+    const char *prefix = q;
     size_t n = strlen(prefix);
-    int rc;
 
-    if ((rc = strncmp(path, prefix, n)) == 0) {
-	switch (path[n]) {
-	case '\0':
-	case '/':
-	    break;
-	default:
-	    rc = 1;
-	    break;
-	}
-    }
-    return rc;
+    if (strncmp(path, prefix, n) != 0)
+        return FALSE;
+    return path[n] == '\0' || path[n] == '/';
 }
 
-/* Lst_Find wants 0 to stop search */
-static int
+static Boolean
 string_match(const void *p, const void *q)
 {
-    const char *p1 = p;
-    const char *p2 = q;
-
-    return strcmp(p1, p2);
+    return strcmp(p, q) == 0;
 }
 
 
@@ -1011,12 +997,12 @@ meta_ignore(GNode *gn, const char *p)
     }
 
     if (metaIgnorePatterns) {
+	const char *expr;
 	char *pm;
 
-	Var_Set(".p.", p, gn, 0);
-	pm = Var_Subst(NULL,
-		       "${" MAKE_META_IGNORE_PATTERNS ":@m@${.p.:M$m}@}",
-		       gn, VARF_WANTRES);
+	Var_Set(".p.", p, gn);
+	expr = "${" MAKE_META_IGNORE_PATTERNS ":@m@${.p.:M$m}@}";
+	pm = Var_Subst(expr, gn, VARE_WANTRES);
 	if (*pm) {
 #ifdef DEBUG_META_MODE
 	    if (DEBUG(META))
@@ -1036,7 +1022,7 @@ meta_ignore(GNode *gn, const char *p)
 	snprintf(fname, sizeof(fname),
 		 "${%s:L:${%s:ts:}}",
 		 p, MAKE_META_IGNORE_FILTER);
-	fm = Var_Subst(NULL, fname, gn, VARF_WANTRES);
+	fm = Var_Subst(fname, gn, VARE_WANTRES);
 	if (*fm == '\0') {
 #ifdef DEBUG_META_MODE
 	    if (DEBUG(META))
@@ -1118,7 +1104,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 	goto oodate_out;
     dname = fname3;
 
-    missingFiles = Lst_Init(FALSE);
+    missingFiles = Lst_Init();
 
     /*
      * We need to check if the target is out-of-date. This includes
@@ -1143,7 +1129,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 	int pid;
 	int x;
 	LstNode ln;
-	struct stat fs;
+	struct make_stat mst;
 
 	if (!buf) {
 	    bufsz = 8 * BUFSIZ;
@@ -1188,7 +1174,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 		    have_filemon = TRUE;
 		    continue;
 		}
-	    }		    
+	    }
 
 	    /* Delimit the record type. */
 	    p = buf;
@@ -1236,13 +1222,13 @@ meta_oodate(GNode *gn, Boolean oodate)
 		    CHECK_VALID_META(p);
 		    pid = atoi(p);
 		    if (pid > 0 && pid != lastpid) {
-			char *ldir;
+			const char *ldir;
 			char *tp;
-		    
+
 			if (lastpid > 0) {
 			    /* We need to remember these. */
-			    Var_Set(lcwd_vname, lcwd, VAR_GLOBAL, 0);
-			    Var_Set(ldir_vname, latestdir, VAR_GLOBAL, 0);
+			    Var_Set(lcwd_vname, lcwd, VAR_GLOBAL);
+			    Var_Set(ldir_vname, latestdir, VAR_GLOBAL);
 			}
 			snprintf(lcwd_vname, sizeof(lcwd_vname), LCWD_VNAME_FMT, pid);
 			snprintf(ldir_vname, sizeof(ldir_vname), LDIR_VNAME_FMT, pid);
@@ -1250,12 +1236,12 @@ meta_oodate(GNode *gn, Boolean oodate)
 			ldir = Var_Value(ldir_vname, VAR_GLOBAL, &tp);
 			if (ldir) {
 			    strlcpy(latestdir, ldir, sizeof(latestdir));
-			    free(tp);
+			    bmake_free(tp);
 			}
 			ldir = Var_Value(lcwd_vname, VAR_GLOBAL, &tp);
 			if (ldir) {
 			    strlcpy(lcwd, ldir, sizeof(lcwd));
-			    free(tp);
+			    bmake_free(tp);
 			}
 		    }
 		    /* Skip past the pid. */
@@ -1288,9 +1274,9 @@ meta_oodate(GNode *gn, Boolean oodate)
 			child = atoi(p);
 			if (child > 0) {
 			    snprintf(cldir, sizeof(cldir), LCWD_VNAME_FMT, child);
-			    Var_Set(cldir, lcwd, VAR_GLOBAL, 0);
+			    Var_Set(cldir, lcwd, VAR_GLOBAL);
 			    snprintf(cldir, sizeof(cldir), LDIR_VNAME_FMT, child);
-			    Var_Set(cldir, latestdir, VAR_GLOBAL, 0);
+			    Var_Set(cldir, latestdir, VAR_GLOBAL);
 #ifdef DEBUG_META_MODE
 			    if (DEBUG(META))
 				    fprintf(debug_file, "%s: %d: %d: cwd=%s lcwd=%s ldir=%s\n",
@@ -1303,10 +1289,10 @@ meta_oodate(GNode *gn, Boolean oodate)
 
 		case 'C':		/* Chdir */
 		    /* Update lcwd and latest directory. */
-		    strlcpy(latestdir, p, sizeof(latestdir));	
+		    strlcpy(latestdir, p, sizeof(latestdir));
 		    strlcpy(lcwd, p, sizeof(lcwd));
-		    Var_Set(lcwd_vname, lcwd, VAR_GLOBAL, 0);
-		    Var_Set(ldir_vname, lcwd, VAR_GLOBAL, 0);
+		    Var_Set(lcwd_vname, lcwd, VAR_GLOBAL);
+		    Var_Set(ldir_vname, lcwd, VAR_GLOBAL);
 #ifdef DEBUG_META_MODE
 		    if (DEBUG(META))
 			fprintf(debug_file, "%s: %d: cwd=%s ldir=%s\n", fname, lineno, cwd, lcwd);
@@ -1333,15 +1319,16 @@ meta_oodate(GNode *gn, Boolean oodate)
 		case 'D':		/* unlink */
 		    if (*p == '/' && !Lst_IsEmpty(missingFiles)) {
 			/* remove any missingFiles entries that match p */
-			if ((ln = Lst_Find(missingFiles, p,
-					   path_match)) != NULL) {
+			ln = Lst_Find(missingFiles, path_match, p);
+			if (ln != NULL) {
 			    LstNode nln;
 			    char *tp;
 
 			    do {
-				nln = Lst_FindFrom(missingFiles, Lst_Succ(ln),
-						   p, path_match);
-				tp = Lst_Datum(ln);
+				nln = Lst_FindFrom(missingFiles,
+						   LstNode_Next(ln),
+						   path_match, p);
+				tp = LstNode_Datum(ln);
 				Lst_Remove(missingFiles, ln);
 				free(tp);
 			    } while ((ln = nln) != NULL);
@@ -1383,7 +1370,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 		    /*
 		     * If a file we generated within our bailiwick
 		     * but outside of .OBJDIR is missing,
-		     * we need to do it again. 
+		     * we need to do it again.
 		     */
 		    /* ignore non-absolute paths */
 		    if (*p != '/')
@@ -1407,11 +1394,11 @@ meta_oodate(GNode *gn, Boolean oodate)
 		    if ((strstr("tmp", p)))
 			break;
 
-		    if ((link_src != NULL && cached_lstat(p, &fs) < 0) ||
-			(link_src == NULL && cached_stat(p, &fs) < 0)) {
+		    if ((link_src != NULL && cached_lstat(p, &mst) < 0) ||
+			(link_src == NULL && cached_stat(p, &mst) < 0)) {
 			if (!meta_ignore(gn, p)) {
-			    if (Lst_Find(missingFiles, p, string_match) == NULL)
-				Lst_AtEnd(missingFiles, bmake_strdup(p));
+			    if (Lst_Find(missingFiles, string_match, p) == NULL)
+				Lst_Append(missingFiles, bmake_strdup(p));
 			}
 		    }
 		    break;
@@ -1432,7 +1419,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 		     */
 		    if (meta_ignore(gn, p))
 			break;
-		    
+
 		    /*
 		     * The rest of the record is the file name.
 		     * Check if it's not an absolute path.
@@ -1471,7 +1458,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 			    if (DEBUG(META))
 				fprintf(debug_file, "%s: %d: looking for: %s\n", fname, lineno, *sdp);
 #endif
-			    if (cached_stat(*sdp, &fs) == 0) {
+			    if (cached_stat(*sdp, &mst) == 0) {
 				found = 1;
 				p = *sdp;
 			    }
@@ -1481,12 +1468,12 @@ meta_oodate(GNode *gn, Boolean oodate)
 			    if (DEBUG(META))
 				fprintf(debug_file, "%s: %d: found: %s\n", fname, lineno, p);
 #endif
-			    if (!S_ISDIR(fs.st_mode) &&
-				fs.st_mtime > gn->mtime) {
+			    if (!S_ISDIR(mst.mst_mode) &&
+				mst.mst_mtime > gn->mtime) {
 				if (DEBUG(META))
 				    fprintf(debug_file, "%s: %d: file '%s' is newer than the target...\n", fname, lineno, p);
 				oodate = TRUE;
-			    } else if (S_ISDIR(fs.st_mode)) {
+			    } else if (S_ISDIR(mst.mst_mode)) {
 				/* Update the latest directory. */
 				cached_realpath(p, latestdir);
 			    }
@@ -1496,8 +1483,8 @@ meta_oodate(GNode *gn, Boolean oodate)
 			     * A referenced file outside of CWD is missing.
 			     * We cannot catch every eventuality here...
 			     */
-			    if (Lst_Find(missingFiles, p, string_match) == NULL)
-				    Lst_AtEnd(missingFiles, bmake_strdup(p));
+			    if (Lst_Find(missingFiles, string_match, p) == NULL)
+				Lst_Append(missingFiles, bmake_strdup(p));
 			}
 		    }
 		    if (buf[0] == 'E') {
@@ -1520,7 +1507,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 			fprintf(debug_file, "%s: %d: there were more build commands in the meta data file than there are now...\n", fname, lineno);
 		    oodate = TRUE;
 		} else {
-		    char *cmd = (char *)Lst_Datum(ln);
+		    char *cmd = LstNode_Datum(ln);
 		    Boolean hasOODATE = FALSE;
 
 		    if (strstr(cmd, "$?"))
@@ -1535,7 +1522,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 			if (DEBUG(META))
 			    fprintf(debug_file, "%s: %d: cannot compare command using .OODATE\n", fname, lineno);
 		    }
-		    cmd = Var_Subst(NULL, cmd, gn, VARF_WANTRES|VARF_UNDEFERR);
+		    cmd = Var_Subst(cmd, gn, VARE_WANTRES|VARE_UNDEFERR);
 
 		    if ((cp = strchr(cmd, '\n'))) {
 			int n;
@@ -1572,7 +1559,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 			    oodate = TRUE;
 		    }
 		    free(cmd);
-		    ln = Lst_Succ(ln);
+		    ln = LstNode_Next(ln);
 		}
 	    } else if (strcmp(buf, "CWD") == 0) {
 		/*
@@ -1597,7 +1584,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 	if (!Lst_IsEmpty(missingFiles)) {
 	    if (DEBUG(META))
 		fprintf(debug_file, "%s: missing files: %s...\n",
-			fname, (char *)Lst_Datum(Lst_First(missingFiles)));
+			fname, (char *)LstNode_Datum(Lst_First(missingFiles)));
 	    oodate = TRUE;
 	}
 	if (!oodate && !have_filemon && filemonMissing) {
@@ -1606,7 +1593,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 	    oodate = TRUE;
 	}
     } else {
-	if (writeMeta && metaMissing) {
+	if (writeMeta && (metaMissing || (gn->type & OP_META))) {
 	    cp = NULL;
 
 	    /* if target is in .CURDIR we do not need a meta file */
@@ -1624,7 +1611,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 	}
     }
 
-    Lst_Destroy(missingFiles, (FreeProc *)free);
+    Lst_Destroy(missingFiles, free);
 
     if (oodate && needOODATE) {
 	/*
@@ -1633,13 +1620,13 @@ meta_oodate(GNode *gn, Boolean oodate)
 	 * All we can sanely do is set it to .ALLSRC.
 	 */
 	Var_Delete(OODATE, gn);
-	Var_Set(OODATE, Var_Value(ALLSRC, gn, &cp), gn, 0);
-	free(cp);
+	Var_Set(OODATE, Var_Value(ALLSRC, gn, &cp), gn);
+	bmake_free(cp);
     }
 
  oodate_out:
     for (i--; i >= 0; i--) {
-	free(pa[i]);
+	bmake_free(pa[i]);
     }
     return oodate;
 }
@@ -1656,7 +1643,7 @@ meta_compat_start(void)
      * We need to re-open filemon for each cmd.
      */
     BuildMon *pbm = &Mybm;
-    
+
     if (pbm->mfp != NULL && useFilemon) {
 	meta_open_filemon(pbm);
     } else {

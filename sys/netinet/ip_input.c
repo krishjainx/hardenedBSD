@@ -1096,9 +1096,7 @@ ip_forward(struct mbuf *m, int srcrt)
 	if (mcopy == NULL)
 		return;
 
-
 	switch (error) {
-
 	case 0:				/* forwarded, but need redirect */
 		/* type, code set above */
 		break;

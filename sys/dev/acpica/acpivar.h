@@ -377,7 +377,6 @@ int		acpi_MatchHid(ACPI_HANDLE h, const char *hid);
 #define ACPI_MATCHHID_HID 1
 #define ACPI_MATCHHID_CID 2
 
-
 struct acpi_parse_resource_set {
     void	(*set_init)(device_t dev, void *arg, void **context);
     void	(*set_done)(device_t dev, void *context);
@@ -556,6 +555,7 @@ int		acpi_get_domain(device_t dev, device_t child, int *domain);
  * ARM specific ACPI interfaces, relating to IORT table.
  */
 int	acpi_iort_map_pci_msi(u_int seg, u_int rid, u_int *xref, u_int *devid);
+int	acpi_iort_map_pci_smmuv3(u_int seg, u_int rid, u_int *xref, u_int *devid);
 int	acpi_iort_its_lookup(u_int its_id, u_int *xref, int *pxm);
 #endif
 #endif /* _KERNEL */

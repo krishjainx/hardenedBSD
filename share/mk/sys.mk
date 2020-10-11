@@ -13,7 +13,7 @@ unix		?=	We run FreeBSD, not UNIX.
 # and/or endian.  This is called MACHINE_CPU in NetBSD, but that's used
 # for something different in FreeBSD.
 #
-__TO_CPUARCH=C/mips(n32|64)?(el)?(hf)?/mips/:C/arm(v[67])?(eb)?/arm/:C/powerpc(64|spe)/powerpc/:C/riscv64(sf)?/riscv/
+__TO_CPUARCH=C/mips(n32|64)?(el)?(hf)?/mips/:C/arm(v[67])?(eb)?/arm/:C/powerpc(64|64le|spe)/powerpc/:C/riscv64(sf)?/riscv/
 MACHINE_CPUARCH=${MACHINE_ARCH:${__TO_CPUARCH}}
 .endif
 
@@ -158,7 +158,11 @@ ARFLAGS		?=	rcv
 .if defined(%POSIX)
 ARFLAGS		?=	-rv
 .else
+<<<<<<< HEAD
 ARFLAGS		?=	crD
+=======
+ARFLAGS		?=	-crsD
+>>>>>>> origin/hardened/current/master
 .endif
 .endif
 
@@ -286,6 +290,7 @@ SHELL		?=	sh
 
 .if !defined(%POSIX)
 SIZE		?=	size
+STRIPBIN	?=	strip
 .endif
 
 YACC		?=	yacc

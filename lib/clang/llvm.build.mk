@@ -108,3 +108,8 @@ CXXFLAGS+=	-fno-rtti
 CXXFLAGS.clang+= -stdlib=libc++
 
 NOCFI=		yes
+
+.if ${MACHINE_ARCH:Mmips64}
+STATIC_CFLAGS+= -mxgot
+STATIC_CXXFLAGS+= -mxgot
+.endif

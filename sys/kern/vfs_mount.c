@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/smp.h>
+#include <sys/devctl.h>
 #include <sys/eventhandler.h>
 #include <sys/fcntl.h>
 #include <sys/jail.h>
@@ -100,6 +101,8 @@ MTX_SYSINIT(mountlist, &mountlist_mtx, "mountlist", MTX_DEF);
 
 EVENTHANDLER_LIST_DEFINE(vfs_mounted);
 EVENTHANDLER_LIST_DEFINE(vfs_unmounted);
+
+static void mount_devctl_event(const char *type, struct mount *mp, bool donew);
 
 /*
  * Global opts, taken by all filesystems
@@ -947,6 +950,7 @@ vfs_domount_first(
 		vput(vp);
 		return (error);
 	}
+	vn_seqc_write_begin(vp);
 	VOP_UNLOCK(vp);
 
 	/* Allocate and initialize the filesystem. */
@@ -965,11 +969,14 @@ vfs_domount_first(
 	if ((error = VFS_MOUNT(mp)) != 0 ||
 	    (error1 = VFS_STATFS(mp, &mp->mnt_stat)) != 0 ||
 	    (error1 = VFS_ROOT(mp, LK_EXCLUSIVE, &newdp)) != 0) {
+		rootvp = NULL;
 		if (error1 != 0) {
 			error = error1;
 			rootvp = vfs_cache_root_clear(mp);
-			if (rootvp != NULL)
+			if (rootvp != NULL) {
+				vhold(rootvp);
 				vrele(rootvp);
+			}
 			if ((error1 = VFS_UNMOUNT(mp, 0)) != 0)
 				printf("VFS_UNMOUNT returned %d\n", error1);
 		}
@@ -979,9 +986,15 @@ vfs_domount_first(
 		VI_LOCK(vp);
 		vp->v_iflag &= ~VI_MOUNT;
 		VI_UNLOCK(vp);
+		if (rootvp != NULL) {
+			vn_seqc_write_end(rootvp);
+			vdrop(rootvp);
+		}
+		vn_seqc_write_end(vp);
 		vrele(vp);
 		return (error);
 	}
+	vn_seqc_write_begin(newdp);
 	VOP_UNLOCK(newdp);
 
 	if (mp->mnt_opt != NULL)
@@ -1017,7 +1030,10 @@ vfs_domount_first(
 	VOP_UNLOCK(vp);
 	EVENTHANDLER_DIRECT_INVOKE(vfs_mounted, mp, newdp, td);
 	VOP_UNLOCK(newdp);
+	mount_devctl_event("MOUNT", mp, false);
 	mountcheckdirs(vp, newdp);
+	vn_seqc_write_end(vp);
+	vn_seqc_write_end(newdp);
 	vrele(newdp);
 	if ((mp->mnt_flag & MNT_RDONLY) == 0)
 		vfs_allocate_syncvnode(mp);
@@ -1094,7 +1110,9 @@ vfs_domount_update(
 	VOP_UNLOCK(vp);
 
 	vfs_op_enter(mp);
+	vn_seqc_write_begin(vp);
 
+	rootvp = NULL;
 	MNT_ILOCK(mp);
 	if ((mp->mnt_kern_flag & MNTK_UNMOUNT) != 0) {
 		MNT_IUNLOCK(mp);
@@ -1108,8 +1126,6 @@ vfs_domount_update(
 		mp->mnt_kern_flag &= ~MNTK_ASYNC;
 	rootvp = vfs_cache_root_clear(mp);
 	MNT_IUNLOCK(mp);
-	if (rootvp != NULL)
-		vrele(rootvp);
 	mp->mnt_optnew = *optlist;
 	vfs_mergeopts(mp->mnt_optnew, mp->mnt_opt);
 
@@ -1216,6 +1232,7 @@ vfs_domount_update(
 	if (error != 0)
 		goto end;
 
+	mount_devctl_event("REMOUNT", mp, true);
 	if (mp->mnt_opt != NULL)
 		vfs_freeopts(mp->mnt_opt);
 	mp->mnt_opt = mp->mnt_optnew;
@@ -1233,6 +1250,11 @@ vfs_domount_update(
 		vfs_deallocate_syncvnode(mp);
 end:
 	vfs_op_exit(mp);
+	if (rootvp != NULL) {
+		vn_seqc_write_end(rootvp);
+		vrele(rootvp);
+	}
+	vn_seqc_write_end(vp);
 	vfs_unbusy(mp);
 	VI_LOCK(vp);
 	vp->v_iflag &= ~VI_MOUNT;
@@ -1508,6 +1530,9 @@ vfs_op_enter(struct mount *mp)
 		mp->mnt_writeopcount +=
 		    zpcpu_replace_cpu(mp->mnt_writeopcount_pcpu, 0, cpu);
 	}
+	if (mp->mnt_ref <= 0 || mp->mnt_lockref < 0 || mp->mnt_writeopcount < 0)
+		panic("%s: invalid count(s) on mp %p: ref %d lockref %d writeopcount %d\n",
+		    __func__, mp, mp->mnt_ref, mp->mnt_lockref, mp->mnt_writeopcount);
 	MNT_IUNLOCK(mp);
 	vfs_assert_mount_counters(mp);
 }
@@ -1723,14 +1748,19 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	}
 	mp->mnt_kern_flag |= MNTK_UNMOUNT;
 	rootvp = vfs_cache_root_clear(mp);
+	if (coveredvp != NULL)
+		vn_seqc_write_begin(coveredvp);
 	if (flags & MNT_NONBUSY) {
 		MNT_IUNLOCK(mp);
 		error = vfs_check_usecounts(mp);
 		MNT_ILOCK(mp);
 		if (error != 0) {
+			vn_seqc_write_end(coveredvp);
 			dounmount_cleanup(mp, coveredvp, MNTK_UNMOUNT);
-			if (rootvp != NULL)
+			if (rootvp != NULL) {
+				vn_seqc_write_end(rootvp);
 				vrele(rootvp);
+			}
 			return (error);
 		}
 	}
@@ -1759,21 +1789,18 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	    ("%s: invalid return value for msleep in the drain path @ %s:%d",
 	    __func__, __FILE__, __LINE__));
 
-	if (rootvp != NULL)
+	/*
+	 * We want to keep the vnode around so that we can vn_seqc_write_end
+	 * after we are done with unmount. Downgrade our reference to a mere
+	 * hold count so that we don't interefere with anything.
+	 */
+	if (rootvp != NULL) {
+		vhold(rootvp);
 		vrele(rootvp);
+	}
 
 	if (mp->mnt_flag & MNT_EXPUBLIC)
 		vfs_setpublicfs(NULL, NULL, NULL);
-
-	/*
-	 * From now, we can claim that the use reference on the
-	 * coveredvp is ours, and the ref can be released only by
-	 * successfull unmount by us, or left for later unmount
-	 * attempt.  The previously acquired hold reference is no
-	 * longer needed to protect the vnode from reuse.
-	 */
-	if (coveredvp != NULL)
-		vdrop(coveredvp);
 
 	vfs_periodic(mp, MNT_WAIT);
 	MNT_ILOCK(mp);
@@ -1781,7 +1808,6 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	mp->mnt_flag &= ~MNT_ASYNC;
 	mp->mnt_kern_flag &= ~MNTK_ASYNC;
 	MNT_IUNLOCK(mp);
-	cache_purgevfs(mp, false); /* remove cache entries for this file sys */
 	vfs_deallocate_syncvnode(mp);
 	error = VFS_UNMOUNT(mp, flags);
 	vn_finished_write(mp);
@@ -1809,8 +1835,15 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 		}
 		vfs_op_exit_locked(mp);
 		MNT_IUNLOCK(mp);
-		if (coveredvp)
+		if (coveredvp) {
+			vn_seqc_write_end(coveredvp);
 			VOP_UNLOCK(coveredvp);
+			vdrop(coveredvp);
+		}
+		if (rootvp != NULL) {
+			vn_seqc_write_end(rootvp);
+			vdrop(rootvp);
+		}
 		return (error);
 	}
 	mtx_lock(&mountlist_mtx);
@@ -1819,7 +1852,14 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	EVENTHANDLER_DIRECT_INVOKE(vfs_unmounted, mp, td);
 	if (coveredvp != NULL) {
 		coveredvp->v_mountedhere = NULL;
+		vn_seqc_write_end(coveredvp);
 		VOP_UNLOCK(coveredvp);
+		vdrop(coveredvp);
+	}
+	mount_devctl_event("UNMOUNT", mp, false);
+	if (rootvp != NULL) {
+		vn_seqc_write_end(rootvp);
+		vdrop(rootvp);
 	}
 	vfs_event_signal(NULL, VQ_UNMOUNT, 0);
 	if (rootvnode != NULL && mp == rootvnode->v_mount) {
@@ -2397,4 +2437,105 @@ kernel_vmount(int flags, ...)
 
 	error = kernel_mount(ma, flags);
 	return (error);
+}
+
+/* Map from mount options to printable formats. */
+static struct mntoptnames optnames[] = {
+	MNTOPT_NAMES
+};
+
+static void
+mount_devctl_event_mntopt(struct sbuf *sb, const char *what, struct vfsoptlist *opts)
+{
+	struct vfsopt *opt;
+
+	if (opts == NULL || TAILQ_EMPTY(opts))
+		return;
+	if (sbuf_printf(sb, " %s=\"", what) == -1) {
+		return;
+	}
+	TAILQ_FOREACH(opt, opts, link) {
+		if (opt->name[0] == '\0' || (opt->len > 0 && *(char *)opt->value == '\0'))
+			continue;
+		devctl_safe_quote_sb(sb, opt->name);
+		if (opt->len > 0) {
+			if (sbuf_putc(sb, '=') == -1) {
+				return;
+			}
+			devctl_safe_quote_sb(sb, opt->value);
+		}
+		if (sbuf_putc(sb, ';') == -1) {
+			return;
+		}
+	}
+	sbuf_putc(sb, '"');
+}
+
+#define DEVCTL_LEN 1024
+static void
+mount_devctl_event(const char *type, struct mount *mp, bool donew)
+{
+	const uint8_t *cp;
+	struct mntoptnames *fp;
+	struct sbuf sb;
+	struct statfs *sfp = &mp->mnt_stat;
+	char *buf;
+
+	buf = malloc(DEVCTL_LEN, M_MOUNT, M_NOWAIT);
+	if (buf == NULL)
+		return;
+	if (sbuf_new(&sb, buf, DEVCTL_LEN, SBUF_FIXEDLEN) == NULL) {
+		free(buf, M_MOUNT);
+		return;
+	}
+	if (sbuf_cpy(&sb, "mount-point=\"") == -1) {
+		goto err;
+	}
+	devctl_safe_quote_sb(&sb, sfp->f_mntonname);
+	if (sbuf_cat(&sb, "\" mount-dev=\"") == -1) {
+		goto err;
+	}
+	devctl_safe_quote_sb(&sb, sfp->f_mntfromname);
+	if (sbuf_cat(&sb, "\" mount-type=\"") == -1) {
+		goto err;
+	}
+	devctl_safe_quote_sb(&sb, sfp->f_fstypename);
+	if (sbuf_cat(&sb, "\" fsid=0x") == -1) {
+		goto err;
+	}
+	cp = (const uint8_t *)&sfp->f_fsid.val[0];
+	for (int i = 0; i < sizeof(sfp->f_fsid); i++) {
+		if (sbuf_printf(&sb, "%02x", cp[i]) == -1) {
+			goto err;
+		}
+	}
+	if (sbuf_printf(&sb, " owner=%u flags=\"", sfp->f_owner) == -1) {
+		goto err;
+	}
+	for (fp = optnames; fp->o_opt != 0; fp++) {
+		if ((mp->mnt_flag & fp->o_opt) != 0) {
+			if (sbuf_cat(&sb, fp->o_name) == -1) {
+				goto err;
+			}
+			if (sbuf_putc(&sb, ';') == -1) {
+				goto err;
+			}
+		}
+	}
+	if (sbuf_putc(&sb, '"') == -1) {
+		goto err;
+	}
+	mount_devctl_event_mntopt(&sb, "opt", mp->mnt_opt);
+	if (donew)
+		mount_devctl_event_mntopt(&sb, "optnew", mp->mnt_optnew);
+	if (sbuf_finish(&sb) == -1) {
+		goto err;
+	}
+
+	if (sbuf_error(&sb) == 0) {
+		devctl_notify("VFS", "FS", type, sbuf_data(&sb));
+	}
+err:
+	sbuf_delete(&sb);
+	free(buf, M_MOUNT);
 }

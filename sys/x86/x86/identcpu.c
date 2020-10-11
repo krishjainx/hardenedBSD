@@ -780,7 +780,6 @@ printcpuinfo(void)
 		 * http://www.intel.com/assets/pdf/appnote/241618.pdf
 		 */
 		if (cpu_high > 0) {
-
 			/*
 			 * Here we should probably set up flags indicating
 			 * whether or not various features are available.
@@ -1277,7 +1276,6 @@ identblue(void)
 		return IDENTBLUE_CYRIXM2;
 	return IDENTBLUE_IBMCPU;
 }
-
 
 /*
  * identifycyrix() set lower 16 bits of cyrix_did as follows:

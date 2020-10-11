@@ -575,7 +575,7 @@ sys_sigreturn(td, uap)
 int
 freebsd4_sigreturn(struct thread *td, struct freebsd4_sigreturn_args *uap)
 {
- 
+
 	return sys_sigreturn(td, (struct sigreturn_args *)uap);
 }
 #endif
@@ -1562,6 +1562,8 @@ amd64_bsp_pcpu_init1(struct pcpu *pc)
 	PCPU_SET(ldt, (struct system_segment_descriptor *)&gdt[GUSERLDT_SEL]);
 	PCPU_SET(fs32p, &gdt[GUFS32_SEL]);
 	PCPU_SET(gs32p, &gdt[GUGS32_SEL]);
+	PCPU_SET(ucr3_load_mask, PMAP_UCR3_NOMASK);
+	PCPU_SET(smp_tlb_gen, 1);
 }
 
 void
@@ -1805,7 +1807,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	initializecpu();	/* Initialize CPU registers */
 
 	amd64_bsp_ist_init(pc);
-	
+
 	/* Set the IO permission bitmap (empty due to tss seg limit) */
 	pc->pc_common_tss.tss_iobase = sizeof(struct amd64tss) +
 	    IOPERM_BITMAP_SIZE;

@@ -80,6 +80,7 @@
 #include <net/if_vlan_var.h>
 #include <net/radix.h>
 #include <net/route.h>
+#include <net/route/route_ctl.h>
 #include <net/vnet.h>
 
 #if defined(INET) || defined(INET6)
@@ -487,7 +488,6 @@ VNET_SYSUNINIT(vnet_if_return, SI_SUB_VNET_DONE, SI_ORDER_ANY,
     vnet_if_return, NULL);
 #endif
 
-
 static void *
 if_grow(void)
 {
@@ -628,10 +628,7 @@ if_free_internal(struct ifnet *ifp)
 
 	free(ifp->if_description, M_IFDESCR);
 	free(ifp->if_hw_addr, M_IFADDR);
-	if (ifp->if_numa_domain == IF_NODOM)
-		free(ifp, M_IFNET);
-	else
-		free_domain(ifp, M_IFNET);
+	free(ifp, M_IFNET);
 }
 
 static void
@@ -690,7 +687,7 @@ if_rele(struct ifnet *ifp)
 void
 ifq_init(struct ifaltq *ifq, struct ifnet *ifp)
 {
-	
+
 	mtx_init(&ifq->ifq_mtx, ifp->if_xname, "if send queue", MTX_DEF);
 
 	if (ifq->ifq_maxlen == 0) 
@@ -1301,6 +1298,11 @@ if_vmove(struct ifnet *ifp, struct vnet *new_vnet)
 	ifindex_free_locked(ifp->if_index);
 	IFNET_WUNLOCK();
 
+
+	/* Don't re-attach DYING interfaces. */
+	if (ifp->if_flags & IFF_DYING)
+		return (0);
+
 	/*
 	 * Perform interface-specific reassignment tasks, if provided by
 	 * the driver.
@@ -1840,11 +1842,11 @@ ifa_free(struct ifaddr *ifa)
 		NET_EPOCH_CALL(ifa_destroy, &ifa->ifa_epoch_ctx);
 }
 
-
 static int
 ifa_maintain_loopback_route(int cmd, const char *otype, struct ifaddr *ifa,
     struct sockaddr *ia)
 {
+	struct rib_cmd_info rc;
 	struct epoch_tracker et;
 	int error;
 	struct rt_addrinfo info;
@@ -1872,7 +1874,7 @@ ifa_maintain_loopback_route(int cmd, const char *otype, struct ifaddr *ifa,
 	info.rti_info[RTAX_GATEWAY] = (struct sockaddr *)&null_sdl;
 	link_init_sdl(ifp, (struct sockaddr *)&null_sdl, ifp->if_type);
 
-	error = rtrequest1_fib(cmd, &info, NULL, ifp->if_fib);
+	error = rib_action(ifp->if_fib, cmd, &info, &rc);
 	NET_EPOCH_EXIT(et);
 
 	if (rti_ifa != NULL)
@@ -2359,7 +2361,7 @@ if_qflush(struct ifnet *ifp)
 {
 	struct mbuf *m, *n;
 	struct ifaltq *ifq;
-	
+
 	ifq = &ifp->if_snd;
 	IFQ_LOCK(ifq);
 #ifdef ALTQ
@@ -2515,6 +2517,18 @@ ifhwioctl(u_long cmd, struct ifnet *ifp, caddr_t data, struct thread *td)
 		ifr->ifr_reqcap = ifp->if_capabilities;
 		ifr->ifr_curcap = ifp->if_capenable;
 		break;
+
+	case SIOCGIFDATA:
+	{
+		struct if_data ifd;
+
+		/* Ensure uninitialised padding is not leaked. */
+		memset(&ifd, 0, sizeof(ifd));
+
+		if_data_copy(ifp, &ifd);
+		error = copyout(&ifd, ifr_data_get_ptr(ifr), sizeof(ifd));
+		break;
+	}
 
 #ifdef MAC
 	case SIOCGIFMAC:
@@ -3143,7 +3157,7 @@ if_setflag(struct ifnet *ifp, int flag, int pflag, int *refcount, int onswitch)
 	/* Save ifnet parameters for if_ioctl() may fail */
 	oldcount = *refcount;
 	oldflags = ifp->if_flags;
-	
+
 	/*
 	 * See if we aren't the only and touching refcount is enough.
 	 * Actually toggle interface flag if we are the first or last.
@@ -3430,7 +3444,6 @@ if_freemulti(struct ifmultiaddr *ifma)
 
 	NET_EPOCH_CALL(if_destroymulti, &ifma->ifma_epoch_ctx);
 }
-
 
 /*
  * Register an additional multicast address with a network interface.
@@ -4030,7 +4043,7 @@ void
 if_register_com_alloc(u_char type,
     if_com_alloc_t *a, if_com_free_t *f)
 {
-	
+
 	KASSERT(if_com_alloc[type] == NULL,
 	    ("if_register_com_alloc: %d already registered", type));
 	KASSERT(if_com_free[type] == NULL,
@@ -4043,7 +4056,7 @@ if_register_com_alloc(u_char type,
 void
 if_deregister_com_alloc(u_char type)
 {
-	
+
 	KASSERT(if_com_alloc[type] != NULL,
 	    ("if_deregister_com_alloc: %d not registered", type));
 	KASSERT(if_com_free[type] != NULL,
@@ -4155,14 +4168,13 @@ if_getdrvflags(if_t ifp)
 {
 	return ((struct ifnet *)ifp)->if_drv_flags;
 }
- 
+
 int
 if_setdrvflags(if_t ifp, int flags)
 {
 	((struct ifnet *)ifp)->if_drv_flags = flags;
 	return (0);
 }
-
 
 int
 if_setflags(if_t ifp, int flags)
@@ -4377,7 +4389,6 @@ if_getamcount(if_t ifp)
 	return ((struct ifnet *)ifp)->if_amcount;
 }
 
-
 int
 if_setsendqready(if_t ifp)
 {
@@ -4538,7 +4549,7 @@ if_settransmitfn(if_t ifp, if_transmit_fn_t start_fn)
 void if_setqflushfn(if_t ifp, if_qflush_fn_t flush_fn)
 {
 	((struct ifnet *)ifp)->if_qflush = flush_fn;
-	
+
 }
 
 void

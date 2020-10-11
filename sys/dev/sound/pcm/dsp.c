@@ -644,7 +644,6 @@ dsp_open(struct cdev *i_dev, int flags, int mode, struct thread *td)
 		}
 	}
 
-
 	PCM_LOCK(d);
 
 	/*
@@ -2874,7 +2873,6 @@ dsp_oss_syncgroup(struct pcm_channel *wrch, struct pcm_channel *rdch, oss_syncgr
 		wrch->flags |= CHN_F_NOTRIGGER;
 		wrch->sm = smwr;
 	}
-
 
 out:
 	if (ret != 0) {

@@ -117,6 +117,7 @@ options 	WITNESS			# Enable checks to detect deadlocks and cycles
 options 	WITNESS_SKIPSPIN	# Don't run witness on spinlocks for speed
 options 	MALLOC_DEBUG_MAXZONES=8	# Separate malloc(9) zones
 options 	VERBOSE_SYSINIT=0
+options 	IOMMU
 
 options 	EKCD
 options 	GZIO
@@ -134,7 +135,6 @@ device		cpufreq
 
 # Bus support.
 device		acpi
-options 	ACPI_DMAR
 device		pci
 options 	PCI_HP			# PCI-Express native HotPlug
 options		PCI_IOV			# PCI SR-IOV support

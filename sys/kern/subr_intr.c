@@ -128,7 +128,11 @@ static struct intr_irqsrc *irq_sources[NIRQ];
 u_int irq_next_free;
 
 #ifdef SMP
-static boolean_t irq_assign_cpu = FALSE;
+#ifdef EARLY_AP_STARTUP
+static bool irq_assign_cpu = true;
+#else
+static bool irq_assign_cpu = false;
+#endif
 #endif
 
 /*
@@ -932,7 +936,6 @@ intr_resolve_irq(device_t dev, intptr_t xref, struct intr_map_data *data,
 		    ("%s: Found a non-PIC controller: %s", __func__,
 		     device_get_name(pic->pic_dev)));
 		return (PIC_MAP_INTR(pic->pic_dev, data, isrc));
-
 	}
 }
 
@@ -1191,6 +1194,7 @@ intr_irq_next_cpu(u_int last_cpu, cpuset_t *cpumask)
 	return (last_cpu);
 }
 
+#ifndef EARLY_AP_STARTUP
 /*
  *  Distribute all the interrupt sources among the available
  *  CPUs once the AP's have been launched.
@@ -1205,7 +1209,7 @@ intr_irq_shuffle(void *arg __unused)
 		return;
 
 	mtx_lock(&isrc_table_lock);
-	irq_assign_cpu = TRUE;
+	irq_assign_cpu = true;
 	for (i = 0; i < NIRQ; i++) {
 		isrc = irq_sources[i];
 		if (isrc == NULL || isrc->isrc_handlers == 0 ||
@@ -1231,6 +1235,7 @@ intr_irq_shuffle(void *arg __unused)
 	mtx_unlock(&isrc_table_lock);
 }
 SYSINIT(intr_irq_shuffle, SI_SUB_SMP, SI_ORDER_SECOND, intr_irq_shuffle, NULL);
+#endif /* !EARLY_AP_STARTUP */
 
 #else
 u_int
@@ -1239,7 +1244,7 @@ intr_irq_next_cpu(u_int current_cpu, cpuset_t *cpumask)
 
 	return (PCPU_GET(cpuid));
 }
-#endif
+#endif /* SMP */
 
 /*
  * Allocate memory for new intr_map_data structure.
@@ -1312,7 +1317,6 @@ intr_alloc_msi(device_t pci, device_t child, intptr_t xref, int count,
 		msi-> isrc = isrc[i];
 		irqs[i] = intr_map_irq(pic->pic_dev, xref,
 		    (struct intr_map_data *)msi);
-
 	}
 	free(isrc, M_INTRNG);
 

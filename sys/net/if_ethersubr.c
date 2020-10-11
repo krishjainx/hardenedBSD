@@ -40,7 +40,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+#include <sys/devctl.h>
 #include <sys/eventhandler.h>
 #include <sys/jail.h>
 #include <sys/kernel.h>
@@ -122,7 +122,6 @@ static	void ether_reassign(struct ifnet *, struct vnet *, char *);
 #endif
 static	int ether_requestencap(struct ifnet *, struct if_encap_req *);
 
-
 #define senderr(e) do { error = (e); goto bad;} while (0)
 
 static void
@@ -199,7 +198,6 @@ ether_requestencap(struct ifnet *ifp, struct if_encap_req *req)
 
 	return (0);
 }
-
 
 static int
 ether_resolve_addr(struct ifnet *ifp, struct mbuf *m,
@@ -545,7 +543,6 @@ ether_input_internal(struct ifnet *ifp, struct mbuf *m)
 	/* draft-ietf-6man-ipv6only-flag */
 	/* Catch ETHERTYPE_IP, and ETHERTYPE_[REV]ARP if we are v6-only. */
 	if ((ND_IFINFO(ifp)->flags & ND6_IFF_IPV6_ONLY_MASK) != 0) {
-
 		switch (etype) {
 		case ETHERTYPE_IP:
 		case ETHERTYPE_ARP:
@@ -774,7 +771,7 @@ vnet_ether_init(__unused void *arg)
 }
 VNET_SYSINIT(vnet_ether_init, SI_SUB_PROTO_IF, SI_ORDER_ANY,
     vnet_ether_init, NULL);
- 
+
 #ifdef VIMAGE
 static void
 vnet_ether_pfil_destroy(__unused void *arg)
@@ -794,8 +791,6 @@ vnet_ether_destroy(__unused void *arg)
 VNET_SYSUNINIT(vnet_ether_uninit, SI_SUB_PROTO_IF, SI_ORDER_ANY,
     vnet_ether_destroy, NULL);
 #endif
-
-
 
 static void
 ether_input(struct ifnet *ifp, struct mbuf *m)
@@ -969,8 +964,8 @@ ether_ifattach(struct ifnet *ifp, const u_int8_t *lla)
 
 	ifp->if_addrlen = ETHER_ADDR_LEN;
 	ifp->if_hdrlen = ETHER_HDR_LEN;
-	if_attach(ifp);
 	ifp->if_mtu = ETHERMTU;
+	if_attach(ifp);
 	ifp->if_output = ether_output;
 	ifp->if_input = ether_input;
 	ifp->if_resolvemulti = ether_resolvemulti;

@@ -279,7 +279,6 @@ restart:
 	 * Perform each task, and continue on to the next task.
 	 */
 	for (sipp = sysinit; sipp < sysinit_end; sipp++) {
-
 		if ((*sipp)->subsystem == SI_SUB_DUMMY)
 			continue;	/* skip dummy task(s)*/
 
@@ -374,18 +373,18 @@ SYSINIT(version, SI_SUB_COPYRIGHT, SI_ORDER_THIRD, print_version, NULL);
 #ifdef WITNESS
 static char wit_warn[] =
      "WARNING: WITNESS option enabled, expect reduced performance.\n";
-SYSINIT(witwarn, SI_SUB_COPYRIGHT, SI_ORDER_THIRD + 1,
+SYSINIT(witwarn, SI_SUB_COPYRIGHT, SI_ORDER_FOURTH,
    print_caddr_t, wit_warn);
-SYSINIT(witwarn2, SI_SUB_LAST, SI_ORDER_THIRD + 1,
+SYSINIT(witwarn2, SI_SUB_LAST, SI_ORDER_FOURTH,
    print_caddr_t, wit_warn);
 #endif
 
 #ifdef DIAGNOSTIC
 static char diag_warn[] =
      "WARNING: DIAGNOSTIC option enabled, expect reduced performance.\n";
-SYSINIT(diagwarn, SI_SUB_COPYRIGHT, SI_ORDER_THIRD + 2,
+SYSINIT(diagwarn, SI_SUB_COPYRIGHT, SI_ORDER_FIFTH,
     print_caddr_t, diag_warn);
-SYSINIT(diagwarn2, SI_SUB_LAST, SI_ORDER_THIRD + 2,
+SYSINIT(diagwarn2, SI_SUB_LAST, SI_ORDER_FIFTH,
     print_caddr_t, diag_warn);
 #endif
 
@@ -406,8 +405,6 @@ null_set_syscall_retval(struct thread *td __unused, int error __unused)
 struct sysentvec null_sysvec = {
 	.sv_size	= 0,
 	.sv_table	= NULL,
-	.sv_errsize	= 0,
-	.sv_errtbl	= NULL,
 	.sv_transtrap	= NULL,
 	.sv_fixup	= NULL,
 	.sv_sendsig	= NULL,
@@ -569,7 +566,7 @@ proc0_init(void *dummy __unused)
 	siginit(&proc0);
 
 	/* Create the file descriptor table. */
-	p->p_fd = fdinit(NULL, false);
+	p->p_fd = fdinit(NULL, false, NULL);
 	p->p_fdtol = NULL;
 
 	/* Create the limits structures. */
@@ -729,16 +726,24 @@ start_init(void *dummy)
 	/* Wipe GELI passphrase from the environment. */
 	kern_unsetenv("kern.geom.eli.passphrase");
 
+	/* For Multicons, report which console is primary to both */
+	if (boothowto & RB_MULTIPLE) {
+		if (boothowto & RB_SERIAL)
+			printf("Dual Console: Serial Primary, Video Secondary\n");
+		else
+			printf("Dual Console: Video Primary, Serial Secondary\n");
+	}
+
 	if ((var = kern_getenv("init_path")) != NULL) {
 		strlcpy(init_path, var, sizeof(init_path));
 		freeenv(var);
 	}
 	free_init_path = tmp_init_path = strdup(init_path, M_TEMP);
-	
+
 	while ((path = strsep(&tmp_init_path, ":")) != NULL) {
 		if (bootverbose)
 			printf("start_init: trying %s\n", path);
-			
+
 		memset(&args, 0, sizeof(args));
 		error = exec_alloc_args(&args);
 		if (error != 0)
@@ -766,16 +771,11 @@ start_init(void *dummy)
 		KASSERT((td->td_pflags & TDP_EXECVMSPC) == 0,
 		    ("nested execve"));
 		oldvmspace = td->td_proc->p_vmspace;
-		error = kern_execve(td, &args, NULL);
+		error = kern_execve(td, &args, NULL, oldvmspace);
 		KASSERT(error != 0,
 		    ("kern_execve returned success, not EJUSTRETURN"));
 		if (error == EJUSTRETURN) {
-			if ((td->td_pflags & TDP_EXECVMSPC) != 0) {
-				KASSERT(p->p_vmspace != oldvmspace,
-				    ("oldvmspace still used"));
-				vmspace_free(oldvmspace);
-				td->td_pflags &= ~TDP_EXECVMSPC;
-			}
+			exec_cleanup(td, oldvmspace);
 			free(free_init_path, M_TEMP);
 			TSEXIT();
 			return;

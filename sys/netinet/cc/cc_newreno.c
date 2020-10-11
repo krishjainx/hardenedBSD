@@ -213,8 +213,15 @@ newreno_after_idle(struct cc_var *ccv)
 	 * wirespeed, overloading router and switch buffers along the way.
 	 *
 	 * See RFC5681 Section 4.1. "Restarting Idle Connections".
+	 *
+	 * In addition, per RFC2861 Section 2, the ssthresh is set to the
+	 * maximum of the former ssthresh or 3/4 of the old cwnd, to
+	 * not exit slow-start prematurely.
 	 */
 	rw = tcp_compute_initwnd(tcp_maxseg(ccv->ccvc.tcp));
+
+	CCV(ccv, snd_ssthresh) = max(CCV(ccv, snd_ssthresh),
+	    CCV(ccv, snd_cwnd)-(CCV(ccv, snd_cwnd)>>2));
 
 	CCV(ccv, snd_cwnd) = min(rw, CCV(ccv, snd_cwnd));
 }
@@ -396,3 +403,4 @@ SYSCTL_PROC(_net_inet_tcp_cc_newreno, OID_AUTO, beta_ecn,
     "New Reno beta ecn, specified as number between 1 and 100");
 
 DECLARE_CC_MODULE(newreno, &newreno_cc_algo);
+MODULE_VERSION(newreno, 1);
