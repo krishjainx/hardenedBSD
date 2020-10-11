@@ -967,9 +967,10 @@ typedef struct {
 #define	AT_ENVC		30	/* Environment count */
 #define	AT_ENVV		31	/* Environment vector */
 #define	AT_PS_STRINGS	32	/* struct ps_strings */
-#define	AT_PAXFLAGS 	33
+#define	AT_FXRNG	33	/* Pointer to root RNG seed version. */
+#define	AT_PAXFLAGS 	34
 
-#define	AT_COUNT	34	/* Count of defined aux entry types. */
+#define	AT_COUNT	35	/* Count of defined aux entry types. */
 
 /*
  * Relocation types.
