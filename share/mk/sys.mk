@@ -158,11 +158,7 @@ ARFLAGS		?=	rcv
 .if defined(%POSIX)
 ARFLAGS		?=	-rv
 .else
-<<<<<<< HEAD
-ARFLAGS		?=	crD
-=======
 ARFLAGS		?=	-crsD
->>>>>>> origin/hardened/current/master
 .endif
 .endif
 

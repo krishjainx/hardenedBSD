@@ -495,14 +495,8 @@ MK_UNBOUND:= no
 MK_AUTHPF:=	no
 .endif
 
-<<<<<<< HEAD
-.if ${MK_PORTSNAP} == "no"
-# freebsd-update depends on phttpget from portsnap
-MK_FREEBSD_UPDATE:=	no
-=======
 .if ${MK_OFED} == "no"
 MK_OFED_EXTRA:=	no
->>>>>>> origin/hardened/current/master
 .endif
 
 .if ${MK_TESTS} == "no"
