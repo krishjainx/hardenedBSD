@@ -293,6 +293,7 @@ struct vmspace {
 	caddr_t vm_maxsaddr;	/* user VA at max stack growth */
 	vm_offset_t vm_aslr_delta_mmap;	/* mmap() random delta for ASLR */
 	vm_offset_t vm_aslr_delta_stack;	/* stack random delta for ASLR */
+	vm_offset_t vm_aslr_delta_thr_stack;	/* thread stack random delta for ASLR */
 	vm_offset_t vm_aslr_delta_exec;	/* exec base random delta for ASLR */
 	vm_offset_t vm_aslr_delta_vdso;	/* VDSO base random delta for ASLR */
 #ifdef __LP64__

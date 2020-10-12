@@ -392,8 +392,12 @@ kern_mmap_req(struct thread *td, const struct mmap_req *mrp)
 			    lim_max(td, RLIMIT_DATA));
 #ifdef PAX_ASLR
 		PROC_LOCK(td->td_proc);
-		if (!(td->td_proc->p_flag2 & P2_ASLR_ENABLE))
-			pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
+		if (!(td->td_proc->p_flag2 & P2_ASLR_ENABLE)) {
+			if (flags & MAP_STACK)
+				pax_aslr_thr_stack(td->td_proc, &addr);
+			else
+				pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
+		}
 		PROC_UNLOCK(td->td_proc);
 		pax_aslr_done = 1;
 #endif

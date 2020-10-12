@@ -275,6 +275,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #ifdef PAX_ASLR
 	vm->vm_aslr_delta_mmap = 0;
 	vm->vm_aslr_delta_stack = 0;
+	vm->vm_aslr_delta_thr_stack = 0;
 	vm->vm_aslr_delta_exec = 0;
 	vm->vm_aslr_delta_vdso = 0;
 #ifdef __LP64__
@@ -4208,6 +4209,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_aslr_delta_exec = vm1->vm_aslr_delta_exec;
 	vm2->vm_aslr_delta_mmap = vm1->vm_aslr_delta_mmap;
 	vm2->vm_aslr_delta_stack = vm1->vm_aslr_delta_stack;
+	vm2->vm_aslr_delta_thr_stack = vm1->vm_aslr_delta_thr_stack;
 	vm2->vm_aslr_delta_vdso = vm1->vm_aslr_delta_vdso;
 #ifdef __LP64__
 	vm2->vm_aslr_delta_map32bit = vm1->vm_aslr_delta_map32bit;
