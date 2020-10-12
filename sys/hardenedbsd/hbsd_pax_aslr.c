@@ -88,6 +88,10 @@ __FBSDID("$FreeBSD$");
 #define	PAX_ASLR_DELTA_STACK_LSB	PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_STACK_LSB */
 
+#ifndef PAX_ASLR_DELTA_THR_STACK_LSB
+#define	PAX_ASLR_DELTA_THR_STACK_LSB	3
+#endif /* PAX_ASLR_DELTA_THR_STACK_LSB */
+
 #ifndef PAX_ASLR_DELTA_STACK_WITH_GAP_LSB
 #define	PAX_ASLR_DELTA_STACK_WITH_GAP_LSB	3
 #endif /* PAX_ASLR_DELTA_STACK_WITH_GAP_LSB */
@@ -118,6 +122,10 @@ __FBSDID("$FreeBSD$");
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
 #define	PAX_ASLR_DELTA_STACK_DEF_LEN	42
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
+
+#ifndef PAX_ASLR_DELTA_THR_STACK_DEF_LEN
+#define	PAX_ASLR_DELTA_THR_STACK_DEF_LEN	42
+#endif /* PAX_ASLR_DELTA_THR_STACK_DEF_LEN */
 
 #ifndef PAX_ASLR_DELTA_EXEC_DEF_LEN
 #define	PAX_ASLR_DELTA_EXEC_DEF_LEN	30
@@ -196,6 +204,7 @@ FEATURE(hbsd_aslr, "Address Space Layout Randomization.");
 static int pax_aslr_status = PAX_FEATURE_OPTOUT;
 static int pax_aslr_mmap_len = PAX_ASLR_DELTA_MMAP_DEF_LEN;
 static int pax_aslr_stack_len = PAX_ASLR_DELTA_STACK_DEF_LEN;
+static int pax_aslr_thr_stack_len = PAX_ASLR_DELTA_THR_STACK_DEF_LEN;
 static int pax_aslr_exec_len = PAX_ASLR_DELTA_EXEC_DEF_LEN;
 static int pax_aslr_vdso_len = PAX_ASLR_DELTA_VDSO_DEF_LEN;
 #ifdef MAP_32BIT
@@ -376,6 +385,12 @@ try_again:
 	    PAX_ASLR_DELTA_STACK_WITH_GAP_LSB,
 	    pax_aslr_stack_len);
 	vm->vm_aslr_delta_stack = ALIGN(vm->vm_aslr_delta_stack);
+
+	arc4rand(&rand_buf, sizeof(rand_buf), 0);
+	vm->vm_aslr_delta_thr_stack = PAX_ASLR_DELTA(rand_buf,
+	    PAX_ASLR_DELTA_THR_STACK_LSB,
+	    pax_aslr_thr_stack_len);
+	vm->vm_aslr_delta_thr_stack = ALIGN(vm->vm_aslr_delta_thr_stack);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	rand_buf = PAX_ASLR_DELTA(rand_buf,
@@ -625,6 +640,26 @@ pax_aslr_stack(struct proc *p, vm_offset_t *addr)
 	 */
 	random = p->p_vmspace->vm_aslr_delta_stack;
 	random &= (-1UL << PAX_ASLR_DELTA_STACK_LSB);
+	*addr -= random;
+}
+
+void
+pax_aslr_thr_stack(struct proc *p, vm_offset_t *addr)
+{
+	uintptr_t orig_addr;
+	uintptr_t random;
+
+	if (!pax_aslr_active(p))
+		return;
+
+	orig_addr = *addr;
+
+	/*
+	 * Apply the random offset to the mapping.
+	 * This should page aligned.
+	 */
+	random = p->p_vmspace->vm_aslr_delta_thr_stack;
+	random &= (-1UL << PAX_ASLR_DELTA_THR_STACK_LSB);
 	*addr -= random;
 }
 
