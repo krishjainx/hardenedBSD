@@ -30,6 +30,8 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_pax.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/capsicum.h>
@@ -42,11 +44,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/syscallsubr.h>
 #include <sys/sysproto.h>
 #include <sys/wait.h>
-
-#include <vm/vm.h>
-#include <vm/pmap.h>
-#include <vm/vm_map.h>
-#include <vm/vm_extern.h>
 
 static int
 protect_setchild(struct thread *td, struct proc *p, int flags)
@@ -418,6 +415,7 @@ trapcap_status(struct thread *td, struct proc *p, int *data)
 	return (0);
 }
 
+#ifndef PAX_ASLR
 static int
 aslr_ctl(struct thread *td, struct proc *p, int state)
 {
@@ -523,6 +521,8 @@ stackgap_status(struct thread *td, struct proc *p, int *data)
 	return (0);
 }
 
+#endif /* PAX_ASLR */
+
 #ifndef _SYS_SYSPROTO_H_
 struct procctl_args {
 	idtype_t idtype;
@@ -548,9 +548,13 @@ sys_procctl(struct thread *td, struct procctl_args *uap)
 		    uap->com, uap->data));
 
 	switch (uap->com) {
+#ifndef PAX_ASLR
 	case PROC_ASLR_CTL:
+#endif
 	case PROC_SPROTECT:
+#ifndef PAX_ASLR
 	case PROC_STACKGAP_CTL:
+#endif
 	case PROC_TRACE_CTL:
 	case PROC_TRAPCAP_CTL:
 		error = copyin(uap->data, &flags, sizeof(flags));
@@ -579,8 +583,10 @@ sys_procctl(struct thread *td, struct procctl_args *uap)
 			return (error);
 		data = &x.rk;
 		break;
+#ifndef PAX_ASLR
 	case PROC_ASLR_STATUS:
 	case PROC_STACKGAP_STATUS:
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 		data = &flags;
@@ -608,8 +614,10 @@ sys_procctl(struct thread *td, struct procctl_args *uap)
 		if (error == 0)
 			error = error1;
 		break;
+#ifndef PAX_ASLR
 	case PROC_ASLR_STATUS:
 	case PROC_STACKGAP_STATUS:
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 		if (error == 0)
@@ -629,16 +637,20 @@ kern_procctl_single(struct thread *td, struct proc *p, int com, void *data)
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	switch (com) {
+#ifndef PAX_ASLR
 	case PROC_ASLR_CTL:
 		return (aslr_ctl(td, p, *(int *)data));
 	case PROC_ASLR_STATUS:
 		return (aslr_status(td, p, data));
+#endif /* PAX_ASLR */
 	case PROC_SPROTECT:
 		return (protect_set(td, p, *(int *)data));
+#ifndef PAX_ASLR
 	case PROC_STACKGAP_CTL:
 		return (stackgap_ctl(td, p, *(int *)data));
 	case PROC_STACKGAP_STATUS:
 		return (stackgap_status(td, p, data));
+#endif /* PAX_ASLR */
 	case PROC_REAP_ACQUIRE:
 		return (reap_acquire(td, p));
 	case PROC_REAP_RELEASE:
@@ -672,15 +684,19 @@ kern_procctl(struct thread *td, idtype_t idtype, id_t id, int com, void *data)
 	bool tree_locked;
 
 	switch (com) {
+#ifndef PAX_ASLR
 	case PROC_ASLR_CTL:
 	case PROC_ASLR_STATUS:
+#endif /* PAX_ASLR */
 	case PROC_REAP_ACQUIRE:
 	case PROC_REAP_RELEASE:
 	case PROC_REAP_STATUS:
 	case PROC_REAP_GETPIDS:
 	case PROC_REAP_KILL:
+#ifndef PAX_ASLR
 	case PROC_STACKGAP_CTL:
 	case PROC_STACKGAP_STATUS:
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 	case PROC_PDEATHSIG_CTL:
@@ -725,10 +741,12 @@ kern_procctl(struct thread *td, idtype_t idtype, id_t id, int com, void *data)
 		sx_xlock(&proctree_lock);
 		tree_locked = true;
 		break;
+#ifndef PAX_ASLR
 	case PROC_ASLR_CTL:
 	case PROC_ASLR_STATUS:
 	case PROC_STACKGAP_CTL:
 	case PROC_STACKGAP_STATUS:
+#endif /* PAX_ASLR */
 	case PROC_TRACE_STATUS:
 	case PROC_TRAPCAP_STATUS:
 		tree_locked = false;

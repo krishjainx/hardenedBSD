@@ -38,6 +38,8 @@
  *	@(#)vm_unix.c	8.1 (Berkeley) 6/11/93
  */
 
+#include "opt_pax.h"
+
 /*
  * Traditional sbrk/grow interface to VM
  */
@@ -48,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
+#include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/racct.h>
 #include <sys/resourcevar.h>
@@ -89,8 +92,9 @@ kern_break(struct thread *td, uintptr_t *addr)
 	struct vmspace *vm = td->td_proc->p_vmspace;
 	vm_map_t map = &vm->vm_map;
 	vm_offset_t new, old, base;
+	vm_prot_t prot, maxprot;
 	rlim_t datalim, lmemlim, vmemlim;
-	int prot, rv;
+	int rv;
 	int error = 0;
 
 	datalim = lim_cur(td, RLIMIT_DATA);
@@ -175,14 +179,11 @@ kern_break(struct thread *td, uintptr_t *addr)
 		}
 #endif
 		prot = VM_PROT_RW;
-#ifdef COMPAT_FREEBSD32
-#if defined(__amd64__)
-		if (i386_read_exec && SV_PROC_FLAG(td->td_proc, SV_ILP32))
-			prot |= VM_PROT_EXECUTE;
+		maxprot = VM_PROT_ALL;
+#ifdef PAX_NOEXEC
+		pax_noexec_nx(td->td_proc, &prot, &maxprot);
 #endif
-#endif
-		rv = vm_map_insert(map, NULL, 0, old, new, prot, VM_PROT_ALL,
-		    0);
+		rv = vm_map_insert(map, NULL, 0, old, new, prot, maxprot, 0);
 		if (rv == KERN_SUCCESS && (map->flags & MAP_WIREFUTURE) != 0) {
 			rv = vm_map_wire_locked(map, old, new,
 			    VM_MAP_WIRE_USER | VM_MAP_WIRE_NOHOLES);

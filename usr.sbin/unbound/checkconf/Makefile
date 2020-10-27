@@ -13,4 +13,6 @@ CFLAGS+=	-I${.CURDIR:H} -I${.CURDIR}
 LIBADD=	unbound pthread
 MAN=	local-unbound-checkconf.8
 
+CFI_OVERRIDE=-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>

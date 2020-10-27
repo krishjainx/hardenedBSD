@@ -108,6 +108,7 @@ __FBSDID("$FreeBSD$");
  */
 
 #include "opt_ddb.h"
+#include "opt_pax.h"
 #include "opt_pmap.h"
 #include "opt_vm.h"
 
@@ -437,7 +438,12 @@ int invpcid_works = 0;
 SYSCTL_INT(_vm_pmap, OID_AUTO, invpcid_works, CTLFLAG_RD, &invpcid_works, 0,
     "Is the invpcid instruction available ?");
 
+#ifdef PAX
+/* The related part of code is in x86/identcpu.c - see pti_get_default() */
+int __read_frequently pti = 1;
+#else
 int __read_frequently pti = 0;
+#endif
 SYSCTL_INT(_vm_pmap, OID_AUTO, pti, CTLFLAG_RDTUN | CTLFLAG_NOFETCH,
     &pti, 0,
     "Page Table Isolation enabled");
@@ -2154,6 +2160,7 @@ pmap_cache_mask(pmap_t pmap, boolean_t is_pde)
 	return (mask);
 }
 
+#ifndef PAX_HARDENING
 static int
 pmap_pat_index(pmap_t pmap, pt_entry_t pte, bool is_pde)
 {
@@ -2188,6 +2195,7 @@ pmap_pat_index(pmap_t pmap, pt_entry_t pte, bool is_pde)
 
 	return (pat_idx);
 }
+#endif /* !PAX_HARDENING */
 
 bool
 pmap_ps_enabled(pmap_t pmap)
@@ -10150,6 +10158,7 @@ pmap_pkru_clear(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 	return (error);
 }
 
+#ifndef PAX_HARDENING
 /*
  * Track a range of the kernel's virtual address space that is contiguous
  * in various mapping attributes.
@@ -10411,9 +10420,10 @@ restart:
 	return (error);
 }
 SYSCTL_OID(_vm_pmap, OID_AUTO, kernel_maps,
-    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE,
+    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE | CTLFLAG_ROOTONLY,
     NULL, 0, sysctl_kmaps, "A",
     "Dump kernel address layout");
+#endif /* !PAX_HARDENING */
 
 #ifdef DDB
 DB_SHOW_COMMAND(pte, pmap_print_pte)

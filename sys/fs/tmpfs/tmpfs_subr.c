@@ -336,6 +336,7 @@ tmpfs_alloc_node(struct mount *mp, struct tmpfs_mount *tmp, enum vtype type,
 		break;
 
 	case VREG:
+		LIST_INIT(&(nnode->tn_reg.tn_extattr_list));
 		obj = nnode->tn_reg.tn_aobj =
 		    vm_pager_allocate(OBJT_SWAP, NULL, 0, VM_PROT_DEFAULT, 0,
 			NULL /* XXXKIB - tmpfs needs swap reservation */);
@@ -382,6 +383,7 @@ bool
 tmpfs_free_node_locked(struct tmpfs_mount *tmp, struct tmpfs_node *node,
     bool detach)
 {
+	struct tmpfs_extattr_list_entry *attr, *tattr;
 	vm_object_t uobj;
 
 	TMPFS_MP_ASSERT_LOCKED(tmp);
@@ -422,6 +424,11 @@ tmpfs_free_node_locked(struct tmpfs_mount *tmp, struct tmpfs_node *node,
 		break;
 
 	case VREG:
+		LIST_FOREACH_SAFE(attr, &(node->tn_reg.tn_extattr_list),
+		    tele_entries, tattr) {
+			free(attr->tele_value, M_TEMP);
+			free(attr, M_TEMP);
+		}
 		uobj = node->tn_reg.tn_aobj;
 		if (uobj != NULL) {
 			if (uobj->size != 0)

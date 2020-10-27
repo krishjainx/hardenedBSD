@@ -30,7 +30,7 @@
 ############################################################ MAIN
 
 cat $BSDINSTALL_TMPETC/rc.conf.* >> $BSDINSTALL_TMPETC/rc.conf
-rm $BSDINSTALL_TMPETC/rc.conf.*
+rm -f $BSDINSTALL_TMPETC/rc.conf.*
 
 cat $BSDINSTALL_CHROOT/etc/sysctl.conf $BSDINSTALL_TMPETC/sysctl.conf.* >> $BSDINSTALL_TMPETC/sysctl.conf
 rm $BSDINSTALL_TMPETC/sysctl.conf.*

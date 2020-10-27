@@ -42,7 +42,6 @@ __DEFAULT_YES_OPTIONS = \
     MODULE_DRM2 \
     NETGRAPH \
     PF \
-    REPRODUCIBLE_BUILD \
     SCTP_SUPPORT \
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
@@ -55,7 +54,8 @@ __DEFAULT_NO_OPTIONS = \
     KERNEL_RETPOLINE \
     NAND \
     OFED \
-    RATELIMIT
+    RATELIMIT \
+    REPRODUCIBLE_BUILD
 
 # Some options are totally broken on some architectures. We disable
 # them. If you need to enable them on an experimental basis, you
@@ -90,9 +90,10 @@ BROKEN_OPTIONS+= FORMAT_EXTENSIONS
 BROKEN_OPTIONS+= OFED
 .endif
 
-# Things that don't work based on toolchain support.
-.if ${MACHINE} != "i386" && ${MACHINE} != "amd64"
-BROKEN_OPTIONS+= KERNEL_RETPOLINE
+.if ${MACHINE_CPUARCH} == "amd64"
+__DEFAULT_YES_OPTIONS+=	RETPOLINE
+.else
+__DEFAULT_NO_OPTIONS+=	RETPOLINE
 .endif
 
 # EFI doesn't exist on mips, powerpc, sparc or riscv.

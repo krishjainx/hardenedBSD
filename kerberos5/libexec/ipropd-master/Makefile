@@ -10,6 +10,8 @@ DPADD=	${LDAPDPADD}
 LDADD=	${LDAPLDADD}
 LDFLAGS=${LDAPLDFLAGS}
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>
 
 .PATH: ${KRB5DIR}/lib/kadm5

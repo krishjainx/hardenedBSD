@@ -2,6 +2,8 @@
 
 .include <src.opts.mk>
 
+MK_CFI=		no
+
 LLVM_BASE=	${SRCTOP}/contrib/llvm-project
 LLVM_SRCS=	${LLVM_BASE}/llvm
 LLD_SRCS=	${LLVM_BASE}/lld

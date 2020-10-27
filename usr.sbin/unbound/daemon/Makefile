@@ -14,4 +14,6 @@ CFLAGS+=	-I${.CURDIR:H} -I${.CURDIR}
 LIBADD=	unbound util ssl crypto pthread
 MAN=	local-unbound.8 local-unbound.conf.5
 
+NOCFI=	yes
+
 .include <bsd.prog.mk>

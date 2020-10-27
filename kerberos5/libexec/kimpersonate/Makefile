@@ -8,6 +8,8 @@ CFLAGS+=	-I${KRB5DIR}/lib/hx509 \
 		-I${KRB5DIR}/lib/sl -I.
 LIBADD=	krb5 roken asn1 vers
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>
 
 .PATH: ${KRB5DIR}/kuser

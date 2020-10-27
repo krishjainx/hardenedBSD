@@ -6,8 +6,6 @@ SUBDIR+=	asan
 SUBDIR+=	asan-preinit
 SUBDIR+=	asan_cxx
 SUBDIR+=	asan_dynamic
-SUBDIR+=	cfi
-SUBDIR+=	cfi_diag
 SUBDIR+=	safestack
 SUBDIR+=	stats
 SUBDIR+=	stats_client
@@ -17,6 +15,8 @@ SUBDIR+=	ubsan_standalone_cxx
 .endif # amd64 || i386
 
 .if ${MACHINE_CPUARCH} == "amd64"
+SUBDIR+=	cfi
+SUBDIR+=	cfi_diag
 SUBDIR+=	dd
 SUBDIR+=	fuzzer
 SUBDIR+=	fuzzer_no_main

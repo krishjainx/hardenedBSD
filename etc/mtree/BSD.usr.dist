@@ -34,8 +34,6 @@
         ..
     ..
     lib
-        aout
-        ..
         clang
             10.0.1
                 include
@@ -58,10 +56,6 @@
                     freebsd
                     ..
                 ..
-            ..
-        ..
-        compat
-            aout
             ..
         ..
         dtrace
@@ -277,11 +271,11 @@
             ..
             find_interface
             ..
+            hardenedbsd
+            ..
             hast
             ..
             hostapd
-            ..
-            ibcs2
             ..
             indent
             ..
@@ -447,6 +441,12 @@
             ..
         ..
         keys
+            hbsd-update
+                revoked
+                ..
+                trusted
+                ..
+            ..
             pkg
                 revoked
                 ..
@@ -1187,6 +1187,8 @@
                 man5
                 ..
                 man7
+		..
+                man8
                 ..
             ..
         ..

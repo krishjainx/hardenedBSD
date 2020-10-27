@@ -1732,7 +1732,7 @@ vfs_scanopt(struct vfsoptlist *opts, const char *name, const char *fmt, ...)
 }
 
 int
-vfs_setopt(struct vfsoptlist *opts, const char *name, void *value, int len)
+vfs_setopt(struct vfsoptlist *opts, const char *name, void *value, size_t len)
 {
 	struct vfsopt *opt;
 
@@ -1753,7 +1753,7 @@ vfs_setopt(struct vfsoptlist *opts, const char *name, void *value, int len)
 }
 
 int
-vfs_setopt_part(struct vfsoptlist *opts, const char *name, void *value, int len)
+vfs_setopt_part(struct vfsoptlist *opts, const char *name, void *value, size_t len)
 {
 	struct vfsopt *opt;
 
