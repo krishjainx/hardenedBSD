@@ -345,17 +345,11 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t size, int prot,
 			    lim_max(td, RLIMIT_DATA));
 #ifdef PAX_ASLR
 		PROC_LOCK(td->td_proc);
-<<<<<<< HEAD
-		pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
-=======
-		if (!(td->td_proc->p_flag2 & P2_ASLR_ENABLE)) {
-			if (flags & MAP_STACK)
-				pax_aslr_thr_stack(td->td_proc, &addr);
-			else
-				pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
-		}
+		if (flags & MAP_STACK)
+			pax_aslr_thr_stack(td->td_proc, &addr);
+		else
+			pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
 		PROC_UNLOCK(td->td_proc);
->>>>>>> 05e4070111f9... HBSD: Add new delta for thread stacks
 		pax_aslr_done = 1;
 		PROC_UNLOCK(td->td_proc);
 #endif
