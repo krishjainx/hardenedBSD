@@ -351,7 +351,6 @@ kern_mmap_fpcheck(struct thread *td, uintptr_t addr0, size_t size, int prot,
 			pax_aslr_mmap(td->td_proc, &addr, orig_addr, flags);
 		PROC_UNLOCK(td->td_proc);
 		pax_aslr_done = 1;
-		PROC_UNLOCK(td->td_proc);
 #endif
 	}
 	if (size == 0) {
