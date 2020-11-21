@@ -1034,7 +1034,7 @@ EOF
 report_version() {
 	local res
 	get_tmpdir > /dev/null
-	get_version
+	get_version > /dev/null
 	if [ ! ${?} -eq 0 ]; then
 		echo "[-] Could not get remote version number" >&2
 		cleanup
