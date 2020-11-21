@@ -1268,6 +1268,16 @@ main() {
 
 	trap 'sigint_handler 1' INT
 
+	if [ ${no_kernel} -eq 0 ]; then
+		apply_kernel
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			cleanup
+			destroy_be
+			exit 1
+		fi
+	fi
+
 	if [ ${nobase} -eq 0 ]; then
 		apply_mtree
 		res=${?}
@@ -1278,16 +1288,6 @@ main() {
 		fi
 
 		apply_base
-		res=${?}
-		if [ ${res} -gt 0 ]; then
-			cleanup
-			destroy_be
-			exit 1
-		fi
-	fi
-
-	if [ ${no_kernel} -eq 0 ]; then
-		apply_kernel
 		res=${?}
 		if [ ${res} -gt 0 ]; then
 			cleanup
