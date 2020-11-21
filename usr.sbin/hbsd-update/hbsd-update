@@ -42,20 +42,21 @@ dnssec="yes"
 dnssec_key="/usr/share/keys/hbsd-update/trusted/dnssec.key"
 revoke_dir="/usr/share/keys/hbsd-update/revoked"
 
+fetchonly=0
 ignorever=0
-unsigned=0
-verbose=0
-integriforce=1
-no_kernel=0
-no_obsolete=0
-interactive=0
 install_src=0
+integriforce=1
+interactive=0
 keeptmp=0
 local_resolver=0 # This really should've been named "remote-resolver"
-remote_resolver=0
-nodownload=0
-fetchonly=0
+machine_readable=0
+no_kernel=0
+no_obsolete=0
 nobase=0
+nodownload=0
+remote_resolver=0
+unsigned=0
+verbose=0
 
 update_hash=""
 
@@ -1010,13 +1011,41 @@ check_sanity() {
 	fi
 }
 
+report_version_machine_readable() {
+	cat <<EOF
+{
+	"schemaver": 1,
+	"local": {
+		"fullstr": "$(cat ${mountpoint}/var/db/hbsd-update/version)",
+		"src_ver": "$(awk -F '-' '{print $3;}' ${mountpoint}/var/db/hbsd-update/version)",
+		"hbsd_ver": "$(awk -F '-' '{print $2;}' ${mountpoint}/var/db/hbsd-update/version)"
+	},
+	"remote": {
+		"fullstr": "${buildver}",
+		"hash": {
+			"algorithm": "${hashalgo}",
+			"hash": "${hashcheck}"
+		}
+	}
+}
+EOF
+}
+
 report_version() {
+	local res
 	get_tmpdir > /dev/null
 	get_version
 	if [ ! ${?} -eq 0 ]; then
 		echo "[-] Could not get remote version number" >&2
 		cleanup
 		exit 1
+	fi
+
+	if [ ${machine_readable} -gt 0 ]; then
+		report_version_machine_readable
+		res=${?}
+		cleanup
+		exit ${?}
 	fi
 
 	if [ -f ${mountpoint}/var/db/hbsd-update/version ]; then
@@ -1051,7 +1080,7 @@ main() {
 	local_kernel=""
 	no_kernel=0
 
-	while getopts 'dfhinosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
+	while getopts 'dfhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
 		case "${opt}" in
 			b)
 				zfsbe="${OPTARG}"
@@ -1088,6 +1117,9 @@ main() {
 				;;
 			k)
 				local_kernel="${OPTARG}"
+				;;
+			m)
+				machine_readable=1
 				;;
 			n)
 				no_kernel=1
