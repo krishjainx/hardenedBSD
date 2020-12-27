@@ -1564,12 +1564,11 @@ exec_free_args(struct image_args *args)
 void
 exec_stackgap(struct image_params *imgp, uintptr_t *dp)
 {
-	if (imgp->sysent->sv_stackgap == NULL ||
-	    (imgp->proc->p_fctl0 & (NT_FREEBSD_FCTL_ASLR_DISABLE |
-	    NT_FREEBSD_FCTL_ASG_DISABLE)) != 0 ||
-	    (imgp->map_flags & MAP_ASLR) == 0)
-		return;
-	imgp->sysent->sv_stackgap(imgp, (u_long *)dp);
+	/*
+	 * XXX HardenedBSD: Ignore FreeBSD's vein attempt at
+	 * randomizing the stack based solely on a random gap.
+	 */
+	return;
 }
 
 /*
