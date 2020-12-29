@@ -555,7 +555,7 @@ main(int argc, char *argv[])
 			filebehave = FILE_MMAP;
 			break;
 		case 'V':
-#ifdef WITH_GNU
+#ifdef WITH_GNU_COMPAT
 			printf(errstr[9], getprogname(), VERSION);
 #else
 			printf(errstr[8], getprogname(), VERSION);
@@ -711,6 +711,8 @@ main(int argc, char *argv[])
 
 	if ((aargc == 0 || aargc == 1) && !Hflag)
 		hflag = true;
+
+	initqueue();
 
 	if (aargc == 0 && dirbehave != DIR_RECURSE)
 		exit(!procfile("-"));

@@ -110,6 +110,7 @@ __DEFAULT_YES_OPTIONS = \
     GDB \
     GNU_DIFF \
     GNU_GREP \
+    GNU_GREP_COMPAT \
     GOOGLETEST \
     GPIO \
     HAST \
@@ -204,7 +205,6 @@ __DEFAULT_NO_OPTIONS = \
     DTRACE_TESTS \
     FREEBSD_UPDATE \
     GH_BC \
-    GNU_GREP_COMPAT \
     HESIOD \
     LIB32 \
     LIBRESSL \
