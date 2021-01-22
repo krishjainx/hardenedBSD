@@ -14,7 +14,6 @@ ATF_TESTS_C+=		tsearch_test
 ATF_TESTS_CXX+=		cxa_thread_atexit_test
 ATF_TESTS_CXX+=		cxa_thread_atexit_nothr_test
 NOPIE=			yes
-.endif
 
 # All architectures on FreeBSD have fenv.h
 CFLAGS+=	-D__HAVE_FENV
