@@ -1603,7 +1603,7 @@ cpuset_thread0(void)
 	CPU_COPY(&all_cpus, &set->cs_mask);
 	LIST_INIT(&set->cs_children);
 	LIST_INSERT_HEAD(&cpuset_ids, set, cs_link);
-	set->cs_ref = 1;
+	refcount_init(&set->cs_ref, 1);
 	set->cs_flags = CPU_SET_ROOT | CPU_SET_RDONLY;
 	set->cs_domain = &domainset0;
 	cpuset_zero = set;
@@ -1628,7 +1628,7 @@ cpuset_thread0(void)
 	/*
 	 * Initialize the unit allocator. 0 and 1 are allocated above.
 	 */
-	cpuset_unr = new_unrhdr(2, INT_MAX, NULL);
+	cpuset_unr = new_unrhdr(3, INT_MAX, NULL);
 
 	/*
 	 * If MD code has not initialized per-domain cpusets, place all
