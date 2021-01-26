@@ -33,12 +33,15 @@
 #include <sys/endian.h>
 #include <sys/stat.h>
 
+#include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <gelf.h>
 #include <getopt.h>
 #include <libelf.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,15 +65,16 @@ struct ControlFeatures {
 };
 
 static struct ControlFeatures featurelist[] = {
-	{ "aslr",	NT_FREEBSD_FCTL_ASLR_DISABLE,	"Disable ASLR" },
-	{ "protmax",	NT_FREEBSD_FCTL_PROTMAX_DISABLE,
+	{ "noaslr",	NT_FREEBSD_FCTL_ASLR_DISABLE,	"Disable ASLR" },
+	{ "noprotmax",	NT_FREEBSD_FCTL_PROTMAX_DISABLE,
 	    "Disable implicit PROT_MAX" },
-	{ "stackgap",	NT_FREEBSD_FCTL_STKGAP_DISABLE, "Disable stack gap" },
+	{ "nostackgap",	NT_FREEBSD_FCTL_STKGAP_DISABLE, "Disable stack gap" },
 	{ "wxneeded",	NT_FREEBSD_FCTL_WXNEEDED, "Requires W+X mappings" },
 #ifdef NT_FREEBSD_FCTL_LA48
 	{ "la48",	NT_FREEBSD_FCTL_LA48, "amd64: Limit user VA to 48bit" },
 #endif
-	{ "aslrstkgap", NT_FREEBSD_FCTL_ASG_DISABLE, "Disable ASLR stack gap" },
+	{ "noaslrstkgap", NT_FREEBSD_FCTL_ASG_DISABLE,
+	    "Disable ASLR stack gap" },
 };
 
 static struct option long_opts[] = {
@@ -234,11 +238,38 @@ convert_to_feature_val(char *feature_str, uint32_t *feature_val)
 				input |= featurelist[i].value;
 				break;
 			}
+			/* XXX Backwards compatibility for "no"-prefix flags. */
+			if (strncmp(featurelist[i].alias, "no", 2) == 0 &&
+			    strcmp(featurelist[i].alias + 2, feature) == 0) {
+				input |= featurelist[i].value;
+				warnx(
+				    "interpreting %s as %s; please specify %s",
+				    feature, featurelist[i].alias,
+				    featurelist[i].alias);
+				break;
+			}
 		}
 		if (i == len) {
-			warnx("%s is not a valid feature", feature);
-			if (!iflag)
-				return (false);
+			if (isdigit(feature[0])) {
+				char *eptr;
+				unsigned long long val;
+
+				errno = 0;
+				val = strtoll(feature, &eptr, 0);
+				if (eptr == feature || *eptr != '\0')
+					errno = EINVAL;
+				else if (val > UINT32_MAX)
+					errno = ERANGE;
+				if (errno != 0) {
+					warn("%s invalid", feature);
+					return (false);
+				}
+				input |= val;
+			} else {
+				warnx("%s is not a valid feature", feature);
+				if (!iflag)
+					return (false);
+			}
 		}
 	}
 
