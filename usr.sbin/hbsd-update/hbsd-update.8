@@ -47,6 +47,7 @@
 .Op Fl m
 .Op Fl n
 .Op Fl o
+.Op Fl R
 .Op Fl r
 .Op Fl s
 .Op Fl t Ar tmpdir
@@ -115,6 +116,10 @@ Produce machine-readable output (only used for reporting the version).
 Do no install a new kernel.
 .It Fl o
 Do not remove obsolete files and directories.
+.It Fl R
+Use system resolver for the DNS-based version check.
+This is sometimes needed on hardened networks where only the network's
+recursive resolving nameserver is permitted to perform DNS queries.
 .It Fl r Ar path
 Install the update to a chroot
 .Ar path .
