@@ -81,30 +81,6 @@ ENTRY(pagecopy)
 	ret
 END(pagecopy)
 
-/* Address: %rdi */
-ENTRY(sse2_pagezero)
-	PUSH_FRAME_POINTER
-	movq	$-PAGE_SIZE,%rdx
-	subq	%rdx,%rdi
-	xorl	%eax,%eax
-	jmp	1f
-	/*
-	 * The loop takes 29 bytes.  Ensure that it doesn't cross a 32-byte
-	 * cache line.
-	 */
-	.p2align 5,0x90
-1:
-	movnti	%rax,(%rdi,%rdx)
-	movnti	%rax,8(%rdi,%rdx)
-	movnti	%rax,16(%rdi,%rdx)
-	movnti	%rax,24(%rdi,%rdx)
-	addq	$32,%rdx
-	jne	1b
-	sfence
-	POP_FRAME_POINTER
-	ret
-END(sse2_pagezero)
-
 /*
  * memcmpy(b1, b2, len)
  *	   rdi,rsi,rdx
@@ -322,6 +298,7 @@ END(memcmp)
 	cmpq	$256,%rcx
 	ja	1256f
 
+	ALIGN_TEXT
 103200:
 	movq	(%rsi),%rdx
 	movq	%rdx,(%rdi)
@@ -455,6 +432,7 @@ END(memcmp)
 	cmpq	$32,%rcx
 	jb	2016f
 
+	ALIGN_TEXT
 2032:
 	movq	(%rsi),%rdx
 	movq	%rdx,(%rdi)
@@ -595,6 +573,7 @@ END(memcpy_erms)
 	cmpq	$256,%rcx
 	ja	1256f
 
+	ALIGN_TEXT
 103200:
 	movq	%r10,(%rdi)
 	movq	%r10,8(%rdi)
