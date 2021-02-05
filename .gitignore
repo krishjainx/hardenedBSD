@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 .clang_complete
 .snap
-=======
->>>>>>> origin/freebsd/13-stable/main
 *.a
 *.core
 *.o
@@ -26,10 +23,7 @@ GPATH
 GRTAGS
 GTAGS
 ID
-<<<<<<< HEAD
 .tags
-=======
->>>>>>> origin/freebsd/13-stable/main
 cscope.files
 cscope.in.out
 cscope.out
