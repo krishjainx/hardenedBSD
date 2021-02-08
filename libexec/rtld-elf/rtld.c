@@ -271,6 +271,7 @@ int dlinfo(void *, int , void *) __exported;
 int dl_iterate_phdr(__dl_iterate_hdr_callback, void *) __exported;
 int _rtld_addr_phdr(const void *, struct dl_phdr_info *) __exported;
 int _rtld_get_stack_prot(void) __exported;
+Elf_Word _rtld_get_pax_flags(void) __exported;
 int _rtld_is_dlopened(void *) __exported;
 void _rtld_error(const char *, ...) __exported;
 
@@ -5835,6 +5836,13 @@ _rtld_get_stack_prot(void)
 {
 
 	return (stack_prot);
+}
+
+Elf_Word
+_rtld_get_pax_flags(void)
+{
+
+	return (pax_flags);
 }
 
 int

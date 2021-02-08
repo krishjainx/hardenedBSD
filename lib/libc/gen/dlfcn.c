@@ -287,6 +287,14 @@ _rtld_get_stack_prot(void)
 #endif
 }
 
+#pragma weak _rtld_get_pax_flags
+Elf_Word
+_rtld_get_pax_flags(void)
+{
+
+	return (0);
+}
+
 #pragma weak _rtld_is_dlopened
 int
 _rtld_is_dlopened(void *arg __unused)

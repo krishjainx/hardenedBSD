@@ -225,6 +225,8 @@ int pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts);
 #endif
 int pax_procfs_harden(struct thread *td);
 
+#endif /* _KERNEL */
+
 #define	PAX_NOTE_PAGEEXEC	0x00000001
 #define	PAX_NOTE_NOPAGEEXEC	0x00000002
 #define	PAX_NOTE_MPROTECT	0x00000004
@@ -249,8 +251,6 @@ int pax_procfs_harden(struct thread *td);
     PAX_NOTE_NOSEGVGUARD | PAX_NOTE_NOASLR | PAX_NOTE_NOSHLIBRANDOM | \
     PAX_NOTE_NODISALLOWMAP32BIT)
 #define PAX_NOTE_ALL	(PAX_NOTE_ALL_ENABLED | PAX_NOTE_ALL_DISABLED | PAX_NOTE_PREFER_ACL)
-
-#endif /* _KERNEL */
 
 #define	PAX_HARDENING_SHLIBRANDOM	0x00000100
 #define	PAX_HARDENING_NOSHLIBRANDOM	0x00000200

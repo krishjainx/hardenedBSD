@@ -33,6 +33,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
+#include <sys/pax.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
 #include <stdlib.h>
@@ -199,10 +200,13 @@ _thr_stack_alloc(struct pthread_attr *attr)
 {
 	struct pthread *curthread = _get_curthread();
 	struct stack *spare_stack;
+	Elf_Word paxflags;
 	size_t stacksize;
 	size_t guardsize;
 	char *stackaddr;
 	uint32_t delta;
+
+	paxflags = _rtld_get_pax_flags();
 
 	/*
 	 * Round up stack size to nearest multiple of _thr_page_size so
@@ -275,17 +279,21 @@ _thr_stack_alloc(struct pthread_attr *attr)
 		 * the best place to map this to, so providing a hint
 		 * that may be above another stack is okay.
 		 */
-		stackaddr = last_stack - stacksize - guardsize;
-		delta = arc4random_uniform(DELTA_PAGES);
-		stackaddr += (getpagesize() * delta);
+		if ((paxflags & PAX_NOTE_ASLR)) {
+			stackaddr = last_stack - stacksize - guardsize;
+			delta = arc4random_uniform(DELTA_PAGES);
+			stackaddr += (getpagesize() * delta);
+		} else {
+			stackaddr = last_stack - stacksize - guardsize;
+		}
 
 		/*
-		 * Even if stack allocation fails, we don't want to try to
-		 * use this location again, so unconditionally decrement
-		 * last_stack.  Under normal operating conditions, the most
-		 * likely reason for an mmap() error is a stack overflow of
-		 * the adjacent thread stack.
-		 */
+		* Even if stack allocation fails, we don't want to try to
+		* use this location again, so unconditionally decrement
+		* last_stack.  Under normal operating conditions, the most
+		* likely reason for an mmap() error is a stack overflow of
+		* the adjacent thread stack.
+		*/
 		last_stack = stackaddr;
 
 		/* Release the lock before mmap'ing it. */
@@ -304,8 +312,10 @@ _thr_stack_alloc(struct pthread_attr *attr)
 			 * HardenedBSD-provided ASLR delta
 			 * application.
 			 */
-			last_stack = stackaddr;
-			stackaddr += guardsize;
+			if (paxflags & PAX_NOTE_ASLR) {
+				last_stack = stackaddr;
+				stackaddr += guardsize;
+			}
 		} else {
 			if (stackaddr != MAP_FAILED)
 				munmap(stackaddr, stacksize + guardsize);
