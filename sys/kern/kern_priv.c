@@ -246,6 +246,7 @@ priv_check_cred(struct ucred *cred, int priv)
 		}
 	}
 
+#ifndef HARDEN_KLD
 	/*
 	 * Inspecting kernel module information should be root-only.
 	 */
@@ -253,6 +254,7 @@ priv_check_cred(struct ucred *cred, int priv)
 		error = 0;
 		goto out;
 	}
+#endif
 
 	if (priv == PRIV_SYSCTL_ROOTONLY) {
 		if (cred->cr_uid == 0) {
