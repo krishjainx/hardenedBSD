@@ -54,13 +54,9 @@ __DEFAULT_NO_OPTIONS = \
     EXTRA_TCP_STACKS \
     KERNEL_RETPOLINE \
     NAND \
-<<<<<<< HEAD
     OFED \
     RATELIMIT \
     REPRODUCIBLE_BUILD
-=======
-    RATELIMIT
->>>>>>> origin/freebsd/12-stable/main
 
 # Some options are totally broken on some architectures. We disable
 # them. If you need to enable them on an experimental basis, you
