@@ -29,7 +29,7 @@ struct file;
 # include <sys/uio.h>
 # undef _KERNEL
 #endif
-#if defined(_KERNEL) && defined(__FreeBSD_version)
+#if defined(_KERNEL) && defined(__FreeBSD__)
 # include <sys/filio.h>
 # include <sys/fcntl.h>
 #else
@@ -53,11 +53,11 @@ struct file;
 # include <sys/stream.h>
 # include <sys/kmem.h>
 #endif
-#if defined(__FreeBSD_version)
+#if defined(__FreeBSD__)
 # include <sys/queue.h>
 #endif
 #include <net/if.h>
-#if defined(__FreeBSD_version)
+#if defined(__FreeBSD__)
 # include <net/if_var.h>
 #endif
 #ifdef sun
@@ -88,7 +88,7 @@ extern struct ifnet vpnif;
 #include "netinet/ip_lookup.h"
 #include "netinet/ip_dstlist.h"
 #include "netinet/ip_sync.h"
-#if defined(__FreeBSD_version)
+#if defined(__FreeBSD__)
 # include <sys/malloc.h>
 #endif
 #ifdef HAS_SYS_MD5_H
@@ -390,7 +390,7 @@ ipf_nat6_hostmap(softn, np, src, dst, map, port)
 	hv += dst->i6[2];
 	hv += dst->i6[1];
 	hv += dst->i6[0];
-	hv %= HOSTMAP_SIZE;
+	hv %= softn->ipf_nat_hostmap_sz;
 	for (hm = softn->ipf_hm_maptable[hv]; hm; hm = hm->hm_next)
 		if (IP6_EQ(&hm->hm_osrc6, src) &&
 		    IP6_EQ(&hm->hm_odst6, dst) &&
@@ -1434,7 +1434,7 @@ ipf_nat6_icmperrorlookup(fin, dir)
 	mb_t *m;
 
 	m = fin->fin_m;
-# if defined(MENTAT)
+# if SOLARIS
 	if ((char *)oip6 + fin->fin_dlen - ICMPERR_ICMPHLEN >
 	    (char *)m->b_wptr) {
 		ATOMIC_INCL(nside->ns_icmp_mbuf);
@@ -2858,7 +2858,7 @@ ipf_nat6_out(fin, nat, natadd, nflags)
 
 		m = fin->fin_m;
 
-#if defined(MENTAT) && defined(_KERNEL)
+#if SOLARIS && defined(_KERNEL)
 		m->b_rptr += skip;
 #else
 		m->m_data += skip;
@@ -3321,7 +3321,7 @@ ipf_nat6_in(fin, nat, natadd, nflags)
 
 		m = fin->fin_m;
 
-#if defined(MENTAT) && defined(_KERNEL)
+#if SOLARIS && defined(_KERNEL)
 		m->b_rptr += skip;
 #else
 		m->m_data += skip;

@@ -16,13 +16,9 @@ static const char rcsid[] = "@(#)$Id$";
 # define	KERNEL	1
 # define	_KERNEL	1
 #endif
-#if defined(__FreeBSD_version) && \
+#if defined(__FreeBSD__) && \
     !defined(KLD_MODULE) && !defined(IPFILTER_LKM)
 # include "opt_inet6.h"
-#endif
-#if defined(__FreeBSD_version) && \
-    !defined(KLD_MODULE) && !defined(IPFILTER_LKM)
-# include "opt_random_ip_id.h"
 #endif
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -33,7 +29,7 @@ static const char rcsid[] = "@(#)$Id$";
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/dirent.h>
-#if defined(__FreeBSD_version)
+#if defined(__FreeBSD__)
 # include <sys/jail.h>
 #endif
 #include <sys/malloc.h>
@@ -298,14 +294,12 @@ ipfioctl(dev, cmd, data, mode, p)
 	SPL_INT(s);
 
 	CURVNET_SET(TD_TO_VNET(p));
-#if (BSD >= 199306)
         if (securelevel_ge(p->p_cred, 3) && (mode & FWRITE))
 	{
 		V_ipfmain.ipf_interror = 130001;
 		CURVNET_RESTORE();
 		return EPERM;
 	}
-#endif
 
 	unit = GET_MINOR(dev);
 	if ((IPL_LOGMAX < unit) || (unit < 0)) {
@@ -392,11 +386,9 @@ ipf_send_reset(fin)
 	}
 
 	m->m_len = sizeof(*tcp2) + hlen;
-#if (BSD >= 199103)
 	m->m_data += max_linkhdr;
 	m->m_pkthdr.len = m->m_len;
 	m->m_pkthdr.rcvif = (struct ifnet *)0;
-#endif
 	ip = mtod(m, struct ip *);
 	bzero((char *)ip, hlen);
 #ifdef USE_INET6
