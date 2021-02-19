@@ -2383,20 +2383,17 @@ prison_remove_one(struct prison *pr)
 	int drflags;
 
 	drflags = PD_DEREF | PD_LOCKED | PD_LIST_XLOCKED;
-
-<<<<<<< HEAD
-#ifdef MAC
-#ifdef PAX_CONTROL_ACL
-	mac_prison_destroy(pr);
-#endif
-#endif
-=======
 	/*
 	 * Mark the prison as doomed, so it doesn't accidentally come back
 	 * to life.  It may still be explicitly brought back by jail_set(2).
 	 */
 	pr->pr_flags |= PR_REMOVE;
->>>>>>> origin/freebsd/13-stable/main
+
+#ifdef MAC
+#ifdef PAX_CONTROL_ACL
+	mac_prison_destroy(pr);
+#endif
+#endif
 
 	/* If the prison was persistent, it is not anymore. */
 	if (pr->pr_flags & PR_PERSIST) {
