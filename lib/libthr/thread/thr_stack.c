@@ -265,8 +265,6 @@ _thr_stack_alloc(struct pthread_attr *attr)
 		if (last_stack == NULL) {
 			last_stack = _usrstack - _thr_stack_initial -
 			    _thr_guard_default;
-			delta = arc4random_uniform(DELTA_PAGES);
-			last_stack -= (getpagesize() * delta);
 		}
 
 		/*
@@ -283,6 +281,7 @@ _thr_stack_alloc(struct pthread_attr *attr)
 			stackaddr = last_stack - stacksize - guardsize;
 			delta = arc4random_uniform(DELTA_PAGES);
 			stackaddr += (getpagesize() * delta);
+			last_stack = stackaddr;
 		} else {
 			stackaddr = last_stack - stacksize - guardsize;
 		}
@@ -294,7 +293,7 @@ _thr_stack_alloc(struct pthread_attr *attr)
 		* likely reason for an mmap() error is a stack overflow of
 		* the adjacent thread stack.
 		*/
-		last_stack = stackaddr;
+		last_stack -= (stacksize + guardsize);
 
 		/* Release the lock before mmap'ing it. */
 		THREAD_LIST_UNLOCK(curthread);
