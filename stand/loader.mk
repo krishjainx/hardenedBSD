@@ -21,11 +21,8 @@ CFLAGS.load_elf32.c += -I$(SRCTOP)/sys/teken -I${SRCTOP}/contrib/pnglite
 CFLAGS.load_elf64.c += -I$(SRCTOP)/sys/teken -I${SRCTOP}/contrib/pnglite
 .elif ${MACHINE_CPUARCH} == "aarch64"
 SRCS+=	load_elf64.c reloc_elf64.c
-<<<<<<< HEAD
 NOPIE=	1
-=======
 CFLAGS.load_elf64.c += -I$(SRCTOP)/sys/teken -I${SRCTOP}/contrib/pnglite
->>>>>>> origin/freebsd/13-stable/main
 .elif ${MACHINE_CPUARCH} == "arm"
 SRCS+=	load_elf32.c reloc_elf32.c
 CFLAGS.load_elf32.c += -I$(SRCTOP)/sys/teken -I${SRCTOP}/contrib/pnglite
