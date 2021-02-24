@@ -296,16 +296,21 @@ restart:
 		goto restart;
 	}
 	error = VOP_CREATE(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vat);
-	VOP_UNLOCK(nd.ni_dvp);
 	if (error) {
+		VOP_VPUT_PAIR(nd.ni_dvp, NULL, true);
 		NDFREE(&nd, NDF_ONLY_PNBUF);
 		vn_finished_write(wrtmp);
-		vrele(nd.ni_dvp);
 		if (error == ERELOOKUP)
 			goto restart;
 		return (error);
 	}
 	vp = nd.ni_vp;
+	vref(nd.ni_dvp);
+	VOP_VPUT_PAIR(nd.ni_dvp, &vp, false);
+	if (VN_IS_DOOMED(vp)) {
+		error = EBADF;
+		goto out;
+	}
 	vnode_create_vobject(nd.ni_vp, fs->fs_size, td);
 	vp->v_vflag |= VV_SYSTEM;
 	ip = VTOI(vp);
@@ -2590,6 +2595,7 @@ process_deferred_inactive(struct mount *mp)
 			continue;
 		}
 		vholdl(vp);
+retry_vnode:
 		error = vn_lock(vp, LK_EXCLUSIVE | LK_INTERLOCK);
 		if (error != 0) {
 			vdrop(vp);
@@ -2604,7 +2610,12 @@ process_deferred_inactive(struct mount *mp)
 			UFS_INODE_SET_FLAG(ip, IN_MODIFIED);
 		}
 		VI_LOCK(vp);
-		vinactive(vp);
+		error = vinactive(vp);
+		if (error == ERELOOKUP && vp->v_usecount == 0) {
+			VI_UNLOCK(vp);
+			VOP_UNLOCK(vp);
+			goto retry_vnode;
+		}
 		VI_UNLOCK(vp);
 		VOP_UNLOCK(vp);
 		vdrop(vp);
