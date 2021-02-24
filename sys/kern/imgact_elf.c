@@ -1289,14 +1289,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		maxv1 = maxv / 2 + addr / 2;
 		MPASS(maxv1 >= addr);	/* No overflow */
 		map->anon_loc = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
-<<<<<<< HEAD
-		    MAXPAGESIZES > 1 ? pagesizes[1] : pagesizes[0]);
-=======
 		    (MAXPAGESIZES > 1 && pagesizes[1] != 0) ?
 		    pagesizes[1] : pagesizes[0]);
-	} else {
-		map->anon_loc = addr;
->>>>>>> origin/freebsd/13-stable/main
 	}
 #ifdef PAX_ASLR
 	else
