@@ -62,7 +62,6 @@ __FBSDID("$FreeBSD$");
 #include <net/route.h>
 #include <net/route/nhop.h>
 #include <net/route/route_ctl.h>
-#include <net/route/route_var.h>
 #include <net/radix.h>
 #include <net/vnet.h>
 
@@ -704,7 +703,7 @@ defrouter_addreq(struct nd_defrouter *new)
 	NET_EPOCH_ASSERT();
 	error = rib_action(fibnum, RTM_ADD, &info, &rc);
 	if (error == 0) {
-		struct nhop_object *nh = nhop_select(rc.rc_nh_new, 0);
+		struct nhop_object *nh = nhop_select_func(rc.rc_nh_new, 0);
 		rt_routemsg(RTM_ADD, rc.rc_rt, nh, fibnum);
 		new->installed = 1;
 	}
@@ -744,7 +743,7 @@ defrouter_delreq(struct nd_defrouter *dr)
 	NET_EPOCH_ENTER(et);
 	error = rib_action(fibnum, RTM_DELETE, &info, &rc);
 	if (error == 0) {
-		struct nhop_object *nh = nhop_select(rc.rc_nh_old, 0);
+		struct nhop_object *nh = nhop_select_func(rc.rc_nh_old, 0);
 		rt_routemsg(RTM_DELETE, rc.rc_rt, nh, fibnum);
 	}
 	NET_EPOCH_EXIT(et);
