@@ -34,7 +34,6 @@ nooptions	COMPAT_FREEBSD6
 nooptions	COMPAT_FREEBSD7
 nooptions	COMPAT_FREEBSD9
 nooptions	COMPAT_FREEBSD10
-nooptions	COMPAT_FREEBSD11
 nooptions	COMPAT_FREEBSD32
 
 # HardenedBSD hardening options
