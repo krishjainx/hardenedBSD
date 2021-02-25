@@ -73,6 +73,6 @@ CFLAGS+= \
 	-include ${SRCTOP}/sys/modules/zfs/zfs_config.h \
 	-DSYSCONFDIR=\"/etc\"
 
-LIBADD=	geom nvpair uutil zfs zutil avl spl tpool zfs_core m
+LIBADD=	geom jail nvpair uutil zfs zutil avl spl tpool zfs_core m
 LDADD+= 	-pthread
 .include <bsd.prog.mk>
