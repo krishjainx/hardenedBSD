@@ -23,6 +23,7 @@
  * Copyright (c) 2013 Martin Matuska <mm@FreeBSD.org>. All rights reserved.
  */
 #include <os/freebsd/zfs/sys/zfs_ioctl_compat.h>
+#include <jail.h>
 #include <libzfs_impl.h>
 #include <libzfs.h>
 #include <libzutil.h>
@@ -213,7 +214,7 @@ int
 libzfs_load_module(void)
 {
 
-	if (getuid()) {
+	if (getuid() || jailed()) {
 		/*
 		 * HBSD: KLD-related syscalls require a privileged
 		 * account.
