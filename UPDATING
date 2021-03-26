@@ -16,8 +16,6 @@ from older versions of FreeBSD, try WITHOUT_CLANG and WITH_GCC to bootstrap to
 the tip of head, and then rebuild without this option. The bootstrap process
 from older version of current across the gcc/clang cutover is a bit fragile.
 
-<<<<<<< HEAD
-=======
 20210325:	p5	FreeBSD-SA-21:07.openssl
 
 	Fix multiple OpenSSL issues [SA-21:07.openssl]
@@ -60,7 +58,6 @@ from older version of current across the gcc/clang cutover is a bit fragile.
 
        Xen guest-triggered out of memory [SA-21:02.xenoom]
 
->>>>>>> freebsd/releng/12.2
 20201208:	p2	FreeBSD-SA-20:33.openssl
 
         Fix OpenSSL NULL pointer de-reference. [SA-20:33.openssl]
