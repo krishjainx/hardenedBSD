@@ -1789,6 +1789,7 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 		}
 	}
 	pr->pr_flags = (pr->pr_flags & ~ch_flags) | pr_flags;
+	pr->pr_flags &= ~PR_REMOVE;
 	mtx_unlock(&pr->pr_mtx);
 
 #ifdef RACCT
@@ -2327,11 +2328,19 @@ prison_remove_one(struct prison *pr)
 	struct proc *p;
 	int deuref;
 
+<<<<<<< HEAD
 #ifdef MAC
 #ifdef PAX_CONTROL_ACL
 	mac_prison_destroy(pr);
 #endif
 #endif
+=======
+	/*
+	 * Mark the prison as doomed, so it doesn't accidentally come back
+	 * to life.  It may still be explicitly brought back by jail_set(2).
+	 */
+	pr->pr_flags |= PR_REMOVE;
+>>>>>>> freebsd/releng/12.2
 
 	/* If the prison was persistent, it is not anymore. */
 	deuref = 0;
@@ -2457,7 +2466,7 @@ do_jail_attach(struct thread *td, struct prison *pr)
 		goto e_unlock;
 #endif
 	VOP_UNLOCK(pr->pr_root, 0);
-	if ((error = pwd_chroot(td, pr->pr_root)))
+	if ((error = pwd_chroot_chdir(td, pr->pr_root)))
 		goto e_revert_osd;
 
 	newcred = crget();
@@ -2477,6 +2486,17 @@ do_jail_attach(struct thread *td, struct prison *pr)
 #endif
 	prison_deref(oldcred->cr_prison, PD_DEREF | PD_DEUREF);
 	crfree(oldcred);
+
+	/*
+	 * If the prison was killed while changing credentials, die along
+	 * with it.
+	 */
+	if (pr->pr_flags & PR_REMOVE) {
+		PROC_LOCK(p);
+		kern_psignal(p, SIGKILL);
+		PROC_UNLOCK(p);
+	}
+
 	return (0);
 
  e_unlock:
