@@ -1270,6 +1270,9 @@ kern_sigtimedwait(struct thread *td, sigset_t waitset, ksiginfo_t *ksi,
 	ets.tv_nsec = 0;
 	traced = false;
 
+	/* Ensure the sigfastblock value is up to date. */
+	sigfastblock_fetch(td);
+
 	if (timeout != NULL) {
 		if (timeout->tv_nsec >= 0 && timeout->tv_nsec < 1000000000) {
 			timevalid = 1;
@@ -1528,6 +1531,9 @@ kern_sigsuspend(struct thread *td, sigset_t mask)
 {
 	struct proc *p = td->td_proc;
 	int has_sig, sig;
+
+	/* Ensure the sigfastblock value is up to date. */
+	sigfastblock_fetch(td);
 
 	/*
 	 * When returning from sigsuspend, we want
