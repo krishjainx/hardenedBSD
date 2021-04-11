@@ -602,7 +602,7 @@ pax_aslr_mmap(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr, int mmap
 	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
 	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
 	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
-	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
+	 * MAP_FIXED but still expect that behaviour so the hint cannot be overridden
 	 * for anonymous mappings).
 	 *
 	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30
@@ -674,7 +674,7 @@ pax_aslr_stack_with_gap(struct proc *p, vm_offset_t *addr)
 
 	orig_addr = *addr;
 	/*
-	 * Apply the random gap offset withing the page.
+	 * Apply the random gap offset within the page.
 	 */
 	random = p->p_vmspace->vm_aslr_delta_stack;
 	*addr -= random;
@@ -804,7 +804,7 @@ pax_aslr_mmap_map_32bit(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr
 	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
 	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
 	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
-	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
+	 * MAP_FIXED but still expect that behaviour so the hint cannot be overridden
 	 * for anonymous mappings).
 	 *
 	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30
