@@ -57,8 +57,11 @@ nodownload=0
 remote_resolver=0
 unsigned=0
 verbose=0
+force_ipv4="no"
+force_ipv6="no"
 
 update_hash=""
+net_flag=""
 
 AWK="/usr/bin/awk"
 BEADM="/usr/local/sbin/beadm"
@@ -88,6 +91,8 @@ debug_print() {
 usage() {
 	debug_print "USAGE: ${0} OPTIONS"
 	debug_print "OPTIONS:"
+	debug_print "\t-4\t\tForce IPv4"
+	debug_print "\t-6\t\tForce IPv6"
 	debug_print "\t-b BEname\tInstall updates to ZFS Boot Environment <BEname>"
 	debug_print "\t-C\t\tCheck the current local and remote version"
 	debug_print "\t-c config\tUse a non-default config file"
@@ -186,6 +191,7 @@ dnssec_check() {
 				debug_print "[*] Looking up version info with DNSSEC enabled."
 			fi
 			${UNBOUND_HOST} \
+				${net_flag} \
 				${resolver_flag} \
 				-v \
 				-t txt \
@@ -213,7 +219,7 @@ dnssec_check() {
 
 			;;
 		*)
-			${DRILL} ${dnsrec} txt | \
+			${DRILL} ${net_flag} ${dnsrec} txt | \
 				${GREP} -F TXT | \
 				${GREP} -vF ';;' | \
 				${AWK} '{print $5;}' | \
@@ -254,7 +260,7 @@ get_version() {
 			debug_print "[*] Could not get version info from DNS. Falling back to the mirror."
 		fi
 
-		res=$(${FETCH} -o - ${baseurl}/update-latest.txt)
+		res=$(${FETCH} ${net_flag} -o - ${baseurl}/update-latest.txt)
 		buildver=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $2;}')
 		update_hash=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $3;}')
 
@@ -340,7 +346,7 @@ fetch_update() {
 	local res
 
 	# Step 1: Download the update archive
-	${FETCH} -o ${tmpdir}/update.tar \
+	${FETCH} ${net_flag} -o ${tmpdir}/update.tar \
 		${baseurl}/update-$(get_version).tar
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -998,6 +1004,17 @@ check_sanity() {
 		exit 1
 	fi
 
+	if [ "${force_ipv4}" = "yes" ]; then
+		net_flag="-4"
+	fi
+
+	if [ "${force_ipv6}" = "yes" ]; then
+		if [ ! -z "${net_flag}" ]; then
+			debug_print "[-] force_ipv6 is mutually exclusive with force_ipv4"
+		fi
+		net_flag="-6"
+	fi
+
 	# FreeBSD / HardenedBSD 12 introduced bectl in base. bectl
 	# provides a beadm-compatible utility for managing ZFS Boot
 	# Environments (BEs). Since the majority of HardenedBSD users
@@ -1084,8 +1101,14 @@ main() {
 	local_kernel=""
 	no_kernel=0
 
-	while getopts 'dfhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
+	while getopts '46dfhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
 		case "${opt}" in
+			4)
+				net_flag="-4"
+				;;
+			6)
+				net_flag="-6"
+				;;
 			b)
 				zfsbe="${OPTARG}"
 				;;
