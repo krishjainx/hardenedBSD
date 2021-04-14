@@ -85,6 +85,8 @@ TAR="/usr/bin/tar"
 UNBOUND_HOST="/usr/sbin/unbound-host"
 
 is_true() {
+	local val
+
 	val="${1}"
 
 	if [ -z "${val}" ]; then
@@ -991,6 +993,8 @@ cleanup() {
 }
 
 check_sanity() {
+	local res
+
 	if [ ! -f ${configfile} ]; then
 		debug_print "[-] Configuration file missing"
 		exit 1
@@ -1035,20 +1039,10 @@ check_sanity() {
 			exit 1
 		fi
 	fi
-}
 
-check_sanity_post_config() {
-	local res
-
-	is_true "${force_ipv4}"
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		is_true "${force_ipv6}"
-		res=${?}
-		if [ ${res} -gt 0 ]; then
-			debug_print "[-] force_ipv6 is mutually exclusive with force_ipv4"
-			exit 1
-		fi
+	if is_true "${force_ipv4}" && is_true "${force_ipv6}"; then
+		debug_print "[-] force_ipv6 is mutually exclusive with force_ipv4"
+		exit 1
 	fi
 }
 
@@ -1126,10 +1120,10 @@ main() {
 	while getopts '46dfhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
 		case "${opt}" in
 			4)
-				net_flag="-4"
+				force_ipv4="yes"
 				;;
 			6)
-				net_flag="-6"
+				force_ipv6="yes"
 				;;
 			b)
 				zfsbe="${OPTARG}"
@@ -1207,7 +1201,12 @@ main() {
 		esac
 	done
 
-	check_sanity_post_config
+	check_sanity
+	check_jailname
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		exit 1
+	fi
 
 	if is_true "${force_ipv4}"; then
 		net_flag="-4"
@@ -1215,13 +1214,6 @@ main() {
 
 	if is_true "${force_ipv6}"; then
 		net_flag="-6"
-	fi
-
-	check_sanity
-	check_jailname
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		exit 1
 	fi
 
 	if [ ${do_report_version} -gt 0 ]; then
