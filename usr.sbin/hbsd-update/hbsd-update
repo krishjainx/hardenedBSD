@@ -84,6 +84,24 @@ TAIL="/usr/bin/tail"
 TAR="/usr/bin/tar"
 UNBOUND_HOST="/usr/sbin/unbound-host"
 
+is_true() {
+	val="${1}"
+
+	if [ -z "${val}" ]; then
+		return 1
+	fi
+
+	if [ "${val}" = "1" ]; then
+		return 0
+	fi
+
+	if [ "${val}" = "yes" ]; then
+		return 0
+	fi
+
+	return 1
+}
+
 debug_print() {
 	echo -e "${1}" >&2
 }
@@ -1004,17 +1022,6 @@ check_sanity() {
 		exit 1
 	fi
 
-	if [ "${force_ipv4}" = "yes" ]; then
-		net_flag="-4"
-	fi
-
-	if [ "${force_ipv6}" = "yes" ]; then
-		if [ ! -z "${net_flag}" ]; then
-			debug_print "[-] force_ipv6 is mutually exclusive with force_ipv4"
-		fi
-		net_flag="-6"
-	fi
-
 	# FreeBSD / HardenedBSD 12 introduced bectl in base. bectl
 	# provides a beadm-compatible utility for managing ZFS Boot
 	# Environments (BEs). Since the majority of HardenedBSD users
@@ -1025,6 +1032,21 @@ check_sanity() {
 			BEADM=/sbin/bectl
 		else
 			debug_print "[-] Please install sysutils/beadm"
+			exit 1
+		fi
+	fi
+}
+
+check_sanity_post_config() {
+	local res
+
+	is_true "${force_ipv4}"
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		is_true "${force_ipv6}"
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			debug_print "[-] force_ipv6 is mutually exclusive with force_ipv4"
 			exit 1
 		fi
 	fi
@@ -1184,6 +1206,16 @@ main() {
 				;;
 		esac
 	done
+
+	check_sanity_post_config
+
+	if is_true "${force_ipv4}"; then
+		net_flag="-4"
+	fi
+
+	if is_true "${force_ipv6}"; then
+		net_flag="-6"
+	fi
 
 	check_sanity
 	check_jailname
