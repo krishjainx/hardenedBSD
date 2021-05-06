@@ -116,6 +116,9 @@ kcoredump(int fd, pid_t pid)
 	memset(&pc, 0, sizeof(pc));
 	pc.pc_fd = fd;
 	pc.pc_flags = (pflags & PFLAGS_FULL) != 0 ? PC_ALL : 0;
+#ifdef HARDENEDBSD
+	pc.pc_flags &= ~(PC_ALL);
+#endif
 	error = ptrace(PT_COREDUMP, pid, (void *)&pc, sizeof(pc));
 	if (error == -1) {
 		warn("coredump");

@@ -1418,8 +1418,12 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 		tcq->tc_flags = SVC_PT_COREDUMP;
 		if ((pc->pc_flags & PC_COMPRESS) == 0)
 			tcq->tc_flags |= SVC_NOCOMPRESS;
+#ifndef PAX_HARDENING
 		if ((pc->pc_flags & PC_ALL) != 0)
 			tcq->tc_flags |= SVC_ALL;
+#else
+		tcq->tc_flags &= (~SVC_ALL);
+#endif
 		td2->td_coredump = tcq;
 		td2->td_dbgflags |= TDB_COREDUMPRQ;
 		thread_run_flash(td2);
