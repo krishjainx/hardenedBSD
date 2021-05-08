@@ -878,12 +878,6 @@ __CONCAT(rnd_, __elfN(base))(vm_map_t map __unused, u_long minv, u_long maxv,
 	return (res);
 }
 
-/*
- * Impossible et_dyn_addr initial value indicating that the real base
- * must be calculated later with some randomization applied.
- */
-#define	ET_DYN_ADDR_RAND	1
-
 static int
 __elfN(enforce_limits)(struct image_params *imgp, const Elf_Ehdr *hdr,
     const Elf_Phdr *phdr, u_long et_dyn_addr)
@@ -1221,7 +1215,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	}
 
 	if (((imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0 ||
-	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC)) &&
+	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC)) ||
 	    do_asr) {
 		imgp->map_flags |= MAP_ASLR;
 		/*
@@ -1254,7 +1248,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 
 	if (do_asr) {
 		KASSERT((map->flags & MAP_ASLR) != 0,
-		    ("ET_DYN_ADDR_RAND but !MAP_ASLR"));
+		    ("do_asr but !MAP_ASLR"));
 		et_dyn_addr = __CONCAT(rnd_, __elfN(base))(map,
 		    vm_map_min(map) + mapsz + lim_max(td, RLIMIT_DATA),
 		    /* reserve half of the address space to interpreter */
