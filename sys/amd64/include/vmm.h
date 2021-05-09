@@ -469,7 +469,7 @@ void vm_copyout(struct vm *vm, int vcpuid, const void *kaddr,
 int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 #endif	/* KERNEL */
 
-#define	VM_MAXCPU	16			/* maximum virtual cpus */
+#define	VM_MAXCPU	48			/* maximum virtual cpus */
 
 /*
  * Identifiers for optional vmm capabilities
