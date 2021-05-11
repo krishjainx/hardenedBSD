@@ -448,6 +448,7 @@ add_extra_files() {
 	local res
 
 	cat <<EOF > ${STAGEDIR}/skip.txt
+./boot/efi
 ./etc
 ./proc
 ./root/.profile
