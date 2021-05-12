@@ -7,6 +7,7 @@ SHLIBDIR?= /lib
 PACKAGE=	runtime
 SHLIB=	nv
 SHLIB_MAJOR= 0
+LIB=	nv
 
 .PATH: ${SRCTOP}/sys/contrib/libnv ${SRCTOP}/sys/sys
 CFLAGS+=-I${.CURDIR}
