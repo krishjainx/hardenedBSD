@@ -90,14 +90,11 @@ extern struct r_debug r_debug; /* For GDB */
 extern int _thread_autoinit_dummy_decl;
 extern void (*__cleanup)(void);
 
-<<<<<<< HEAD
-=======
 struct dlerror_save {
 	int seen;
 	char *msg;
 };
 
->>>>>>> origin/freebsd/13-stable/main
 /*
  * Function declarations.
  */
