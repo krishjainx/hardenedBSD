@@ -200,6 +200,8 @@ open2nameif(int fmode, u_int vn_open_flags)
 	res = ISOPEN | LOCKLEAF;
 	if ((fmode & O_RESOLVE_BENEATH) != 0)
 		res |= RBENEATH;
+	if ((fmode & O_EMPTY_PATH) != 0)
+		res |= EMPTYPATH;
 	if ((vn_open_flags & VN_OPEN_NOAUDIT) == 0)
 		res |= AUDITVNODE1;
 	if ((vn_open_flags & VN_OPEN_NOCAPCHECK) != 0)
@@ -231,7 +233,8 @@ restart:
 	first_open = false;
 	fmode = *flagp;
 	if ((fmode & (O_CREAT | O_EXCL | O_DIRECTORY)) == (O_CREAT |
-	    O_EXCL | O_DIRECTORY))
+	    O_EXCL | O_DIRECTORY) ||
+	    (fmode & (O_CREAT | O_EMPTY_PATH)) == (O_CREAT | O_EMPTY_PATH))
 		return (EINVAL);
 	else if ((fmode & (O_CREAT | O_DIRECTORY)) == O_CREAT) {
 		ndp->ni_cnd.cn_nameiop = CREATE;
