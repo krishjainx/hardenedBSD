@@ -103,8 +103,8 @@ static const char *tmpfs_updateopts[] = {
  * Handle updates of time from writes to mmaped regions, if allowed.
  * Use MNT_VNODE_FOREACH_ALL instead of MNT_VNODE_FOREACH_LAZY, since
  * unmap of the tmpfs-backed vnode does not call vinactive(), due to
- * vm object type is OBJT_SWAP.  If lazy, only handle delayed update
- * of mtime due to the writes to mapped files.
+ * vm object type is basically OBJT_SWAP.  If lazy, only handle
+ * delayed update of mtime due to the writes to mapped files.
  */
 static void
 tmpfs_update_mtime(struct mount *mp, bool lazy)
@@ -120,8 +120,8 @@ tmpfs_update_mtime(struct mount *mp, bool lazy)
 			continue;
 		}
 		obj = vp->v_object;
-		KASSERT((obj->flags & (OBJ_TMPFS_NODE | OBJ_TMPFS)) ==
-		    (OBJ_TMPFS_NODE | OBJ_TMPFS), ("non-tmpfs obj"));
+		MPASS(obj->type == tmpfs_pager_type);
+		MPASS((obj->flags & OBJ_TMPFS) != 0);
 
 		/*
 		 * In lazy case, do unlocked read, avoid taking vnode
@@ -225,8 +225,7 @@ again:
 			    (entry->max_protection & VM_PROT_WRITE) == 0)
 				continue;
 			object = entry->object.vm_object;
-			if (object == NULL || object->type != OBJT_SWAP ||
-			    (object->flags & OBJ_TMPFS_NODE) == 0)
+			if (object == NULL || object->type != tmpfs_pager_type)
 				continue;
 			/*
 			 * No need to dig into shadow chain, mapping
@@ -239,8 +238,7 @@ again:
 				continue;
 			}
 			MPASS(object->ref_count > 1);
-			if ((object->flags & (OBJ_TMPFS_NODE | OBJ_TMPFS)) !=
-			    (OBJ_TMPFS_NODE | OBJ_TMPFS)) {
+			if ((object->flags & OBJ_TMPFS) == 0) {
 				VM_OBJECT_RUNLOCK(object);
 				continue;
 			}
@@ -663,7 +661,11 @@ tmpfs_sync(struct mount *mp, int waitfor)
 static int
 tmpfs_init(struct vfsconf *conf)
 {
-	tmpfs_subr_init();
+	int res;
+
+	res = tmpfs_subr_init();
+	if (res != 0)
+		return (res);
 	memcpy(&tmpfs_fnops, &vnops, sizeof(struct fileops));
 	tmpfs_fnops.fo_close = tmpfs_fo_close;
 	return (0);
