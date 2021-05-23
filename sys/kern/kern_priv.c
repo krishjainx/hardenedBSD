@@ -256,6 +256,34 @@ priv_check_cred(struct ucred *cred, int priv)
 	}
 #endif
 
+	if (priv == PRIV_KENV_DUMP) {
+		if (cred->cr_uid == 0) {
+			error = 0;
+			goto out;
+		}
+	}
+
+	if (priv == PRIV_KENV_GET) {
+		if (cred->cr_uid == 0) {
+			error = 0;
+			goto out;
+		}
+	}
+
+	if (priv == PRIV_KENV_SET) {
+		if (cred->cr_uid == 0) {
+			error = 0;
+			goto out;
+		}
+	}
+
+	if (priv == PRIV_KENV_UNSET) {
+		if (cred->cr_uid == 0) {
+			error = 0;
+			goto out;
+		}
+	}
+
 	if (priv == PRIV_SYSCTL_ROOTONLY) {
 		if (cred->cr_uid == 0) {
 			error = 0;
