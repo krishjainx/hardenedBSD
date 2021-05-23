@@ -107,6 +107,30 @@ sys_kenv(td, uap)
 
 	KASSERT(dynamic_kenv, ("kenv: dynamic_kenv = false"));
 
+	switch (uap->what) {
+	case KENV_DUMP:
+		error = priv_check(td, PRIV_KENV_DUMP);
+		if (error)
+			return (error);
+		break;
+	case KENV_GET:
+		error = priv_check(td, PRIV_KENV_GET);
+		if (error)
+			return (error);
+		break;
+	case KENV_SET:
+		error = priv_check(td, PRIV_KENV_SET);
+		if (error)
+			return (error);
+		break;
+
+	case KENV_UNSET:
+		error = priv_check(td, PRIV_KENV_UNSET);
+		if (error)
+			return (error);
+		break;
+	}
+
 	error = 0;
 	if (uap->what == KENV_DUMP) {
 #ifdef MAC
@@ -142,20 +166,6 @@ sys_kenv(td, uap)
 		}
 		td->td_retval[0] = ((done == needed) ? 0 : needed);
 		return (error);
-	}
-
-	switch (uap->what) {
-	case KENV_SET:
-		error = priv_check(td, PRIV_KENV_SET);
-		if (error)
-			return (error);
-		break;
-
-	case KENV_UNSET:
-		error = priv_check(td, PRIV_KENV_UNSET);
-		if (error)
-			return (error);
-		break;
 	}
 
 	name = malloc(KENV_MNAMELEN + 1, M_TEMP, M_WAITOK);

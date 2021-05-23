@@ -3461,6 +3461,12 @@ prison_priv_check(struct ucred *cred, int priv)
 		else
 			return (EPERM);
 
+	case PRIV_KENV_DUMP:
+	case PRIV_KENV_GET:
+	case PRIV_KENV_SET:
+	case PRIV_KENV_UNSET:
+		return (EPERM);
+
 	default:
 		/*
 		 * In all remaining cases, deny the privilege request.  This
