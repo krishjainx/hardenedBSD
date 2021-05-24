@@ -6,6 +6,7 @@ FBSD_1.0 {
 	__xuname;
 	pthread_atfork;
 	pthread_attr_destroy;
+	pthread_attr_get_np;
 	pthread_attr_getdetachstate;
 	pthread_attr_getguardsize;
 	pthread_attr_getinheritsched;
@@ -421,12 +422,17 @@ FBSD_1.5 {
 };
 
 FBSD_1.6 {
+	eventfd;
+	eventfd_read;
+	eventfd_write;
 	getlogin_r;
 	memalign;
 	scandir_b;
 	sigandset;
 	sigisemptyset;
 	sigorset;
+	tcgetwinsize;
+	tcsetwinsize;
 };
 
 FBSDprivate_1.0 {
@@ -502,6 +508,7 @@ FBSDprivate_1.0 {
 	_rtld_atfork_post;
 	_rtld_error;		/* for private use */
 	_rtld_get_stack_prot;
+	_rtld_get_pax_flags;
 	_rtld_is_dlopened;
 	_rtld_thread_init;	/* for private use */
 	__elf_phdr_match_addr;

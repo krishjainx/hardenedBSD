@@ -51,6 +51,7 @@ struct jailparam {
 };
 
 __BEGIN_DECLS
+extern int jailed(void);
 extern int jail_getid(const char *name);
 extern char *jail_getname(int jid);
 extern int jail_setv(int flags, ...);

@@ -91,7 +91,7 @@ static void pax_log_ulog(const char *prefix, const char *fmt, va_list ap);
 #define __HARDENING_LOG_TEMPLATE(MAIN, SUBJECT, prefix, name)		\
 void									\
 prefix##_log_##name(struct proc *p, pax_log_settings_t flags,		\
-    const char* fmt, ...)						\
+    const char *fmt, ...)						\
 {									\
 	const char *prefix = "["#MAIN" "#SUBJECT"]";			\
 	va_list args;							\
@@ -106,7 +106,7 @@ prefix##_log_##name(struct proc *p, pax_log_settings_t flags,		\
 }									\
 									\
 void									\
-prefix##_ulog_##name(const char* fmt, ...)				\
+prefix##_ulog_##name(const char *fmt, ...)				\
 {									\
 	const char *prefix = "["#MAIN" "#SUBJECT"]";			\
 	va_list args;							\
@@ -370,7 +370,7 @@ __HARDENING_LOG_TEMPLATE(HBSD, MPROTECT, pax, mprotect);
 __HARDENING_LOG_TEMPLATE(HBSD, SEGVGUARD, pax, segvguard);
 
 void
-pax_log_internal_imgp(struct image_params *imgp, pax_log_settings_t flags, const char* fmt, ...)
+pax_log_internal_imgp(struct image_params *imgp, pax_log_settings_t flags, const char *fmt, ...)
 {
 	const char *prefix = "[HBSD INTERNAL]";
 	struct sbuf *sb;

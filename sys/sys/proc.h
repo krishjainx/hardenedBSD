@@ -111,9 +111,11 @@ struct pgrp {
 	struct session	*pg_session;	/* (c) Pointer to session. */
 	struct sigiolst	pg_sigiolst;	/* (m) List of sigio sources. */
 	pid_t		pg_id;		/* (c) Process group id. */
-	int		pg_jobc;	/* (m) Job control process count. */
 	struct mtx	pg_mtx;		/* Mutex to protect members */
+	int		pg_flags;	/* (m) PGRP_ flags */
 };
+
+#define	PGRP_ORPHANED	0x00000001	/* Group is orphaned */
 
 /*
  * pargs, used to hold a copy of the command line, if it had a sane length.
@@ -181,6 +183,7 @@ struct kaudit_record;
 struct kcov_info;
 struct kdtrace_proc;
 struct kdtrace_thread;
+struct kq_timer_cb_data;
 struct mqueue_notifier;
 struct p_sched;
 struct proc;
@@ -229,7 +232,10 @@ struct thread {
 	struct proc	*td_proc;	/* (*) Associated process. */
 	TAILQ_ENTRY(thread) td_plist;	/* (*) All threads in this proc. */
 	TAILQ_ENTRY(thread) td_runq;	/* (t) Run queue. */
-	TAILQ_ENTRY(thread) td_slpq;	/* (t) Sleep queue. */
+	union	{
+		TAILQ_ENTRY(thread) td_slpq;	/* (t) Sleep queue. */
+		struct thread *td_zombie; /* Zombie list linkage */
+	};
 	TAILQ_ENTRY(thread) td_lockq;	/* (t) Lock queue. */
 	LIST_ENTRY(thread) td_hash;	/* (d) Hash chain. */
 	struct cpuset	*td_cpuset;	/* (t) CPU affinity mask. */
@@ -243,6 +249,7 @@ struct thread {
 	sigqueue_t	td_sigqueue;	/* (c) Sigs arrived, not delivered. */
 #define	td_siglist	td_sigqueue.sq_signals
 	u_char		td_lend_user_pri; /* (t) Lend user pri. */
+	u_char		td_allocdomain;	/* (b) NUMA domain backing this struct thread. */
 
 /* Cleared during fork1() */
 #define	td_startzero td_flags
@@ -319,7 +326,6 @@ struct thread {
 	u_char		td_user_pri;	/* (t) User pri from estcpu and nice. */
 	u_char		td_base_user_pri; /* (t) Base user pri */
 	uint32_t	td_pax;		/* (b) Cached PaX settings from process. */
-	u_char		td_pre_epoch_prio; /* (k) User pri on entry to epoch */
 	uintptr_t	td_rb_list;	/* (k) Robust list head. */
 	uintptr_t	td_rbp_list;	/* (k) Robust priv list head. */
 	uintptr_t	td_rb_inact;	/* (k) Current in-action mutex loc. */
@@ -342,6 +348,7 @@ struct thread {
 		TDS_RUNQ,
 		TDS_RUNNING
 	} td_state;			/* (t) thread state */
+	/* Note: td_state must be accessed using TD_{GET,SET}_STATE(). */
 	union {
 		register_t	tdu_retval[2];
 		off_t		tdu_off;
@@ -370,6 +377,8 @@ struct thread {
 	int		td_oncpu;	/* (t) Which cpu we are on. */
 	void		*td_lkpi_task;	/* LinuxKPI task struct pointer */
 	int		td_pmcpend;
+	void		*td_coredump;	/* (c) coredump request. */
+	off_t		td_ktr_io_lim;	/* (k) limit for ktrace file size */
 #ifdef EPOCH_TRACE
 	SLIST_HEAD(, epoch_tracker) td_epochs;
 #endif
@@ -478,6 +487,8 @@ do {									\
 #define	TDB_VFORK	0x00000800 /* vfork indicator for ptrace() */
 #define	TDB_FSTP	0x00001000 /* The thread is PT_ATTACH leader */
 #define	TDB_STEP	0x00002000 /* (x86) PSL_T set for PT_STEP */
+#define	TDB_SSWITCH	0x00004000 /* Suspended in ptracestop */
+#define	TDB_COREDUMPRQ	0x00008000 /* Coredump request */
 
 /*
  * "Private" flags kept in td_pflags:
@@ -517,6 +528,8 @@ do {									\
 #define	TDP_SIGFASTPENDING 0x80000000 /* Pending signal due to sigfastblock */
 
 #define	TDP2_SBPAGES	0x00000001 /* Owns sbusy on some pages */
+#define	TDP2_COMPAT32RB	0x00000002 /* compat32 ABI for robust lists */
+#define	TDP2_ACCT	0x00000004 /* Doing accounting */
 
 /*
  * Reasons that the current thread can not be run yet.
@@ -534,10 +547,15 @@ do {									\
 #define	TD_IS_SWAPPED(td)	((td)->td_inhibitors & TDI_SWAPPED)
 #define	TD_ON_LOCK(td)		((td)->td_inhibitors & TDI_LOCK)
 #define	TD_AWAITING_INTR(td)	((td)->td_inhibitors & TDI_IWAIT)
-#define	TD_IS_RUNNING(td)	((td)->td_state == TDS_RUNNING)
-#define	TD_ON_RUNQ(td)		((td)->td_state == TDS_RUNQ)
-#define	TD_CAN_RUN(td)		((td)->td_state == TDS_CAN_RUN)
-#define	TD_IS_INHIBITED(td)	((td)->td_state == TDS_INHIBITED)
+#ifdef _KERNEL
+#define	TD_GET_STATE(td)	atomic_load_int(&(td)->td_state)
+#else
+#define	TD_GET_STATE(td)	((td)->td_state)
+#endif
+#define	TD_IS_RUNNING(td)	(TD_GET_STATE(td) == TDS_RUNNING)
+#define	TD_ON_RUNQ(td)		(TD_GET_STATE(td) == TDS_RUNQ)
+#define	TD_CAN_RUN(td)		(TD_GET_STATE(td) == TDS_CAN_RUN)
+#define	TD_IS_INHIBITED(td)	(TD_GET_STATE(td) == TDS_INHIBITED)
 #define	TD_ON_UPILOCK(td)	((td)->td_flags & TDF_UPIBLOCKED)
 #define TD_IS_IDLETHREAD(td)	((td)->td_flags & TDF_IDLETD)
 
@@ -551,15 +569,15 @@ do {									\
 	((td)->td_inhibitors & TDI_LOCK) != 0 ? "blocked" :		\
 	((td)->td_inhibitors & TDI_IWAIT) != 0 ? "iwait" : "yielding")
 
-#define	TD_SET_INHIB(td, inhib) do {			\
-	(td)->td_state = TDS_INHIBITED;			\
-	(td)->td_inhibitors |= (inhib);			\
+#define	TD_SET_INHIB(td, inhib) do {		\
+	TD_SET_STATE(td, TDS_INHIBITED);	\
+	(td)->td_inhibitors |= (inhib);		\
 } while (0)
 
 #define	TD_CLR_INHIB(td, inhib) do {			\
 	if (((td)->td_inhibitors & (inhib)) &&		\
 	    (((td)->td_inhibitors &= ~(inhib)) == 0))	\
-		(td)->td_state = TDS_CAN_RUN;		\
+		TD_SET_STATE(td, TDS_CAN_RUN);		\
 } while (0)
 
 #define	TD_SET_SLEEPING(td)	TD_SET_INHIB((td), TDI_SLEEPING)
@@ -575,9 +593,15 @@ do {									\
 #define	TD_CLR_SUSPENDED(td)	TD_CLR_INHIB((td), TDI_SUSPENDED)
 #define	TD_CLR_IWAIT(td)	TD_CLR_INHIB((td), TDI_IWAIT)
 
-#define	TD_SET_RUNNING(td)	(td)->td_state = TDS_RUNNING
-#define	TD_SET_RUNQ(td)		(td)->td_state = TDS_RUNQ
-#define	TD_SET_CAN_RUN(td)	(td)->td_state = TDS_CAN_RUN
+#ifdef _KERNEL
+#define	TD_SET_STATE(td, state)	atomic_store_int(&(td)->td_state, state)
+#else
+#define	TD_SET_STATE(td, state)	(td)->td_state = state
+#endif
+#define	TD_SET_RUNNING(td)	TD_SET_STATE(td, TDS_RUNNING)
+#define	TD_SET_RUNQ(td)		TD_SET_STATE(td, TDS_RUNQ)
+#define	TD_SET_CAN_RUN(td)	TD_SET_STATE(td, TDS_CAN_RUN)
+
 
 #define	TD_SBDRY_INTR(td) \
     (((td)->td_flags & (TDF_SEINTR | TDF_SERESTART)) != 0)
@@ -594,6 +618,7 @@ struct proc {
 	struct ucred	*p_ucred;	/* (c) Process owner's identity. */
 	struct filedesc	*p_fd;		/* (b) Open files. */
 	struct filedesc_to_leader *p_fdtol; /* (b) Tracking node */
+	struct pwddesc	*p_pd;		/* (b) Cwd, chroot, jail, umask */
 	struct pstats	*p_stats;	/* (b) Accounting/statistics (CPU). */
 	struct plimit	*p_limit;	/* (c) Resource limits. */
 	struct callout	p_limco;	/* (c) Limit callout handle */
@@ -638,8 +663,7 @@ struct proc {
 	int		p_profthreads;	/* (c) Num threads in addupc_task. */
 	volatile int	p_exitthreads;	/* (j) Number of threads exiting */
 	int		p_traceflag;	/* (o) Kernel trace points. */
-	struct vnode	*p_tracevp;	/* (c + o) Trace to vnode. */
-	struct ucred	*p_tracecred;	/* (o) Credentials to trace with. */
+	struct ktr_io_params	*p_ktrioparms;	/* (c + o) Params for ktrace. */
 	struct vnode	*p_textvp;	/* (b) Vnode of executable. */
 	u_int		p_lock;		/* (c) Proclock (prevent swap) count. */
 	struct sigiolst	p_sigiolst;	/* (c) List of sigio sources. */
@@ -714,6 +738,8 @@ struct proc {
 	 */
 	LIST_ENTRY(proc) p_orphan;	/* (e) List of orphan processes. */
 	LIST_HEAD(, proc) p_orphans;	/* (e) Pointer to list of orphans. */
+
+	TAILQ_HEAD(, kq_timer_cb_data)	p_kqtim_stop;	/* (c) */
 };
 
 #define	p_session	p_pgrp->pg_session
@@ -740,57 +766,80 @@ struct proc {
 #define	PROC_PROFLOCK_ASSERT(p, type)	mtx_assert(&(p)->p_profmtx, (type))
 
 /* These flags are kept in p_flag. */
-#define	P_ADVLOCK	0x00001	/* Process may hold a POSIX advisory lock. */
-#define	P_CONTROLT	0x00002	/* Has a controlling terminal. */
-#define	P_KPROC		0x00004	/* Kernel process. */
-#define	P_UNUSED3	0x00008	/* --available-- */
-#define	P_PPWAIT	0x00010	/* Parent is waiting for child to exec/exit. */
-#define	P_PROFIL	0x00020	/* Has started profiling. */
-#define	P_STOPPROF	0x00040	/* Has thread requesting to stop profiling. */
-#define	P_HADTHREADS	0x00080	/* Has had threads (no cleanup shortcuts) */
-#define	P_SUGID		0x00100	/* Had set id privileges since last exec. */
-#define	P_SYSTEM	0x00200	/* System proc: no sigs, stats or swapping. */
-#define	P_SINGLE_EXIT	0x00400	/* Threads suspending should exit, not wait. */
-#define	P_TRACED	0x00800	/* Debugged process being traced. */
-#define	P_WAITED	0x01000	/* Someone is waiting for us. */
-#define	P_WEXIT		0x02000	/* Working on exiting. */
-#define	P_EXEC		0x04000	/* Process called exec. */
-#define	P_WKILLED	0x08000	/* Killed, go to kernel/user boundary ASAP. */
-#define	P_CONTINUED	0x10000	/* Proc has continued from a stopped state. */
-#define	P_STOPPED_SIG	0x20000	/* Stopped due to SIGSTOP/SIGTSTP. */
-#define	P_STOPPED_TRACE	0x40000	/* Stopped because of tracing. */
-#define	P_STOPPED_SINGLE 0x80000 /* Only 1 thread can continue (not to user). */
-#define	P_PROTECTED	0x100000 /* Do not kill on memory overcommit. */
-#define	P_SIGEVENT	0x200000 /* Process pending signals changed. */
-#define	P_SINGLE_BOUNDARY 0x400000 /* Threads should suspend at user boundary. */
-#define	P_HWPMC		0x800000 /* Process is using HWPMCs */
-#define	P_JAILED	0x1000000 /* Process is in jail. */
-#define	P_TOTAL_STOP	0x2000000 /* Stopped in stop_all_proc. */
-#define	P_INEXEC	0x4000000 /* Process is in execve(). */
-#define	P_STATCHILD	0x8000000 /* Child process stopped or exited. */
-#define	P_INMEM		0x10000000 /* Loaded into memory. */
-#define	P_SWAPPINGOUT	0x20000000 /* Process is being swapped out. */
-#define	P_SWAPPINGIN	0x40000000 /* Process is being swapped in. */
-#define	P_PPTRACE	0x80000000 /* PT_TRACEME by vforked child. */
+#define	P_ADVLOCK	0x00000001	/* Process may hold a POSIX advisory
+					   lock. */
+#define	P_CONTROLT	0x00000002	/* Has a controlling terminal. */
+#define	P_KPROC		0x00000004	/* Kernel process. */
+#define	P_UNUSED3	0x00000008	/* --available-- */
+#define	P_PPWAIT	0x00000010	/* Parent is waiting for child to
+					   exec/exit. */
+#define	P_PROFIL	0x00000020	/* Has started profiling. */
+#define	P_STOPPROF	0x00000040	/* Has thread requesting to stop
+					   profiling. */
+#define	P_HADTHREADS	0x00000080	/* Has had threads (no cleanup
+					   shortcuts) */
+#define	P_SUGID		0x00000100	/* Had set id privileges since last
+					   exec. */
+#define	P_SYSTEM	0x00000200	/* System proc: no sigs, stats or
+					   swapping. */
+#define	P_SINGLE_EXIT	0x00000400	/* Threads suspending should exit,
+					   not wait. */
+#define	P_TRACED	0x00000800	/* Debugged process being traced. */
+#define	P_WAITED	0x00001000	/* Someone is waiting for us. */
+#define	P_WEXIT		0x00002000	/* Working on exiting. */
+#define	P_EXEC		0x00004000	/* Process called exec. */
+#define	P_WKILLED	0x00008000	/* Killed, go to kernel/user boundary
+					   ASAP. */
+#define	P_CONTINUED	0x00010000	/* Proc has continued from a stopped
+					   state. */
+#define	P_STOPPED_SIG	0x00020000	/* Stopped due to SIGSTOP/SIGTSTP. */
+#define	P_STOPPED_TRACE	0x00040000	/* Stopped because of tracing. */
+#define	P_STOPPED_SINGLE 0x00080000	/* Only 1 thread can continue (not to
+					   user). */
+#define	P_PROTECTED	0x00100000	/* Do not kill on memory overcommit. */
+#define	P_SIGEVENT	0x00200000	/* Process pending signals changed. */
+#define	P_SINGLE_BOUNDARY 0x00400000	/* Threads should suspend at user
+					   boundary. */
+#define	P_HWPMC		0x00800000	/* Process is using HWPMCs */
+#define	P_JAILED	0x01000000	/* Process is in jail. */
+#define	P_TOTAL_STOP	0x02000000	/* Stopped in stop_all_proc. */
+#define	P_INEXEC	0x04000000	/* Process is in execve(). */
+#define	P_STATCHILD	0x08000000	/* Child process stopped or exited. */
+#define	P_INMEM		0x10000000	/* Loaded into memory. */
+#define	P_SWAPPINGOUT	0x20000000	/* Process is being swapped out. */
+#define	P_SWAPPINGIN	0x40000000	/* Process is being swapped in. */
+#define	P_PPTRACE	0x80000000	/* PT_TRACEME by vforked child. */
 
 #define	P_STOPPED	(P_STOPPED_SIG|P_STOPPED_SINGLE|P_STOPPED_TRACE)
 #define	P_SHOULDSTOP(p)	((p)->p_flag & P_STOPPED)
 #define	P_KILLED(p)	((p)->p_flag & P_WKILLED)
 
 /* These flags are kept in p_flag2. */
-#define	P2_INHERIT_PROTECTED 0x00000001 /* New children get P_PROTECTED. */
-#define	P2_NOTRACE	0x00000002	/* No ptrace(2) attach or coredumps. */
-#define	P2_NOTRACE_EXEC 0x00000004	/* Keep P2_NOPTRACE on exec(2). */
-#define	P2_AST_SU	0x00000008	/* Handles SU ast for kthreads. */
-#define	P2_PTRACE_FSTP	0x00000010 /* SIGSTOP from PT_ATTACH not yet handled. */
-#define	P2_TRAPCAP	0x00000020	/* SIGTRAP on ENOTCAPABLE */
-#define	P2_ASLR_ENABLE	0x00000040	/* Force enable ASLR. */
-#define	P2_ASLR_DISABLE	0x00000080	/* Force disable ASLR. */
-#define	P2_ASLR_IGNSTART 0x00000100	/* Enable ASLR to consume sbrk area. */
-#define	P2_PROTMAX_ENABLE 0x00000200	/* Force enable implied PROT_MAX. */
-#define	P2_PROTMAX_DISABLE 0x00000400	/* Force disable implied PROT_MAX. */
-#define	P2_STKGAP_DISABLE 0x00000800	/* Disable stack gap for MAP_STACK */
-#define	P2_STKGAP_DISABLE_EXEC 0x00001000 /* Stack gap disabled after exec */
+#define	P2_INHERIT_PROTECTED	0x00000001	/* New children get
+						   P_PROTECTED. */
+#define	P2_NOTRACE		0x00000002	/* No ptrace(2) attach or
+						   coredumps. */
+#define	P2_NOTRACE_EXEC		0x00000004	/* Keep P2_NOPTRACE on
+						   exec(2). */
+#define	P2_AST_SU		0x00000008	/* Handles SU ast for
+						   kthreads. */
+#define	P2_PTRACE_FSTP		0x00000010	/* SIGSTOP from PT_ATTACH not
+						   yet handled. */
+#define	P2_TRAPCAP		0x00000020	/* SIGTRAP on ENOTCAPABLE */
+#define	P2_ASLR_ENABLE		0x00000040	/* Force enable ASLR. */
+#define	P2_ASLR_DISABLE		0x00000080	/* Force disable ASLR. */
+#define	P2_ASLR_IGNSTART	0x00000100	/* Enable ASLR to consume sbrk
+						   area. */
+#define	P2_PROTMAX_ENABLE	0x00000200	/* Force enable implied
+						   PROT_MAX. */
+#define	P2_PROTMAX_DISABLE	0x00000400	/* Force disable implied
+						   PROT_MAX. */
+#define	P2_STKGAP_DISABLE	0x00000800	/* Disable stack gap for
+						   MAP_STACK */
+#define	P2_STKGAP_DISABLE_EXEC	0x00001000	/* Stack gap disabled
+						   after exec */
+#define	P2_ITSTOPPED		0x00002000
+#define	P2_PTRACEREQ		0x00004000	/* Active ptrace req */
 
 /* Flags protected by proctree_lock, kept in p_treeflags. */
 #define	P_TREE_ORPHANED		0x00000001	/* Reparented, on orphan list */
@@ -844,7 +893,6 @@ struct proc {
 
 #ifdef MALLOC_DECLARE
 MALLOC_DECLARE(M_PARGS);
-MALLOC_DECLARE(M_PGRP);
 MALLOC_DECLARE(M_SESSION);
 MALLOC_DECLARE(M_SUBPROC);
 #endif
@@ -862,6 +910,7 @@ MALLOC_DECLARE(M_SUBPROC);
  */
 #define	PID_MAX		99999
 #define	NO_PID		100000
+#define	THREAD0_TID	NO_PID
 extern pid_t pid_max;
 
 #define	SESS_LEADER(p)	((p)->p_session->s_leader == (p))
@@ -974,10 +1023,6 @@ extern LIST_HEAD(pidhashhead, proc) *pidhashtbl;
 extern struct sx *pidhashtbl_lock;
 extern u_long pidhash;
 extern u_long pidhashlock;
-#define	TIDHASH(tid)	(&tidhashtbl[(tid) & tidhash])
-extern LIST_HEAD(tidhashhead, thread) *tidhashtbl;
-extern u_long tidhash;
-extern struct rwlock tidhash_lock;
 
 #define	PGRPHASH(pgid)	(&pgrphashtbl[(pgid) & pgrphash])
 extern LIST_HEAD(pgrphashhead, pgrp) *pgrphashtbl;
@@ -1005,6 +1050,7 @@ extern struct proclist allproc;		/* List of all processes. */
 extern struct proc *initproc, *pageproc; /* Process slots for init, pager. */
 
 extern struct uma_zone *proc_zone;
+extern struct uma_zone *pgrp_zone;
 
 struct	proc *pfind(pid_t);		/* Find process by id. */
 struct	proc *pfind_any(pid_t);		/* Find (zombie) process by id. */
@@ -1022,7 +1068,9 @@ struct	fork_req {
 	int 		fr_pd_flags;
 	struct filecaps	*fr_pd_fcaps;
 	int 		fr_flags2;
-#define	FR2_DROPSIG_CAUGHT	0x00001	/* Drop caught non-DFL signals */
+#define	FR2_DROPSIG_CAUGHT	0x00000001 /* Drop caught non-DFL signals */
+#define	FR2_SHARE_PATHS		0x00000002 /* Invert sense of RFFDG for paths */
+#define	FR2_KPROC		0x00000004 /* Create a kernel process */
 };
 
 /*
@@ -1058,6 +1106,8 @@ void	fork_exit(void (*)(void *, struct trapframe *), void *,
 	    struct trapframe *);
 void	fork_return(struct thread *, struct trapframe *);
 int	inferior(struct proc *p);
+void	itimer_proc_continue(struct proc *p);
+void	kqtimer_proc_continue(struct proc *p);
 void	kern_proc_vmmap_resident(struct vm_map *map, struct vm_map_entry *entry,
 	    int *resident_count, bool *super);
 void	kern_yield(int);
@@ -1145,7 +1195,6 @@ int	thread_create(struct thread *td, struct rtprio *rtp,
 void	thread_exit(void) __dead2;
 void	thread_free(struct thread *td);
 void	thread_link(struct thread *td, struct proc *p);
-void	thread_reap(void);
 int	thread_single(struct proc *p, int how);
 void	thread_single_end(struct proc *p, int how);
 void	thread_stash(struct thread *td);
@@ -1153,6 +1202,7 @@ void	thread_stopped(struct proc *p);
 void	childproc_stopped(struct proc *child, int reason);
 void	childproc_continued(struct proc *child);
 void	childproc_exited(struct proc *child);
+void	thread_run_flash(struct thread *td);
 int	thread_suspend_check(int how);
 bool	thread_suspend_check_needed(void);
 void	thread_suspend_switch(struct thread *, struct proc *p);
@@ -1160,7 +1210,6 @@ void	thread_suspend_one(struct thread *td);
 void	thread_unlink(struct thread *td);
 void	thread_unsuspend(struct proc *p);
 void	thread_wait(struct proc *p);
-struct thread	*thread_find(struct proc *p, lwpid_t tid);
 
 void	stop_all_proc(void);
 void	resume_all_proc(void);
@@ -1201,6 +1250,13 @@ curthread_pflags2_restore(int save)
 {
 
 	curthread->td_pflags2 &= save;
+}
+
+static __inline bool
+kstack_contains(struct thread *td, vm_offset_t va, size_t len)
+{
+	return (va >= td->td_kstack && va + len >= va &&
+	    va + len <= td->td_kstack + td->td_kstack_pages * PAGE_SIZE);
 }
 
 static __inline __pure2 struct td_sched *

@@ -42,9 +42,11 @@
 #include <sys/tree.h>
 
 #ifdef	_SYS_MALLOC_H_
-MALLOC_DECLARE(M_TMPFSMNT);
 MALLOC_DECLARE(M_TMPFSNAME);
 #endif
+
+#define	OBJ_TMPFS	OBJ_PAGERPRIV1	/* has tmpfs vnode allocated */
+#define	OBJ_TMPFS_VREF	OBJ_PAGERPRIV2	/* vnode is referenced */
 
 /*
  * Internal representation of a tmpfs directory entry.
@@ -178,7 +180,9 @@ struct tmpfs_node {
 	 * when the node is removed from list and unlocked.
 	 */
 	LIST_ENTRY(tmpfs_node)	tn_entries;	/* (m) */
-	bool			tn_attached;	/* (m) */
+
+	/* Node identifier. */
+	ino_t			tn_id;		/* (c) */
 
 	/*
 	 * The node's type.  Any of 'VBLK', 'VCHR', 'VDIR', 'VFIFO',
@@ -188,8 +192,10 @@ struct tmpfs_node {
 	 */
 	enum vtype		tn_type;	/* (c) */
 
-	/* Node identifier. */
-	ino_t			tn_id;		/* (c) */
+	/*
+	 * See the top comment. Reordered here to fill LP64 hole.
+	 */
+	bool			tn_attached;	/* (m) */
 
 	/*
 	 * Node's internal status.  This is used by several file system
@@ -296,7 +302,10 @@ struct tmpfs_node {
 
 		/* Valid when tn_type == VLNK. */
 		/* The link's target, allocated from a string pool. */
-		char *			tn_link;	/* (c) */
+		struct tn_link {
+			char *			tn_link_target;	/* (c) */
+			char 			tn_link_smr;	/* (c) */
+		} tn_link;
 
 		/* Valid when tn_type == VREG. */
 		struct tn_reg {
@@ -325,7 +334,8 @@ LIST_HEAD(tmpfs_node_list, tmpfs_node);
 
 #define tn_rdev tn_spec.tn_rdev
 #define tn_dir tn_spec.tn_dir
-#define tn_link tn_spec.tn_link
+#define tn_link_target tn_spec.tn_link.tn_link_target
+#define tn_link_smr tn_spec.tn_link.tn_link_smr
 #define tn_reg tn_spec.tn_reg
 #define tn_fifo tn_spec.tn_fifo
 
@@ -535,8 +545,10 @@ tmpfs_update(struct vnode *vp)
 
 size_t tmpfs_mem_avail(void);
 size_t tmpfs_pages_used(struct tmpfs_mount *tmp);
-void tmpfs_subr_init(void);
+int tmpfs_subr_init(void);
 void tmpfs_subr_uninit(void);
+
+extern int tmpfs_pager_type;
 
 /*
  * Macros/functions to convert from generic data structures to tmpfs

@@ -50,7 +50,7 @@ static bool flag_force = false;
 static int flag_debug = 0;
 static bool flag_immutable = false;
 static bool flag_keepgoing = false;
-static bool flag_usage= false;
+static bool flag_usage = false;
 static bool flag_version = false;
 
 static void usage(void);

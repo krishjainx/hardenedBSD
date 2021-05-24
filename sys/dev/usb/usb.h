@@ -41,7 +41,7 @@
 #ifndef _USB_STANDARD_H_
 #define	_USB_STANDARD_H_
 
-#if defined(_KERNEL)
+#if defined(_KERNEL) || defined(_STANDALONE)
 #ifndef USB_GLOBAL_INCLUDE_FILE
 #include "opt_usb.h"
 #endif
@@ -57,7 +57,7 @@ SYSCTL_DECL(_hw_usb);
 
 MALLOC_DECLARE(M_USB);
 MALLOC_DECLARE(M_USBDEV);
-#endif /* _KERNEL */
+#endif	/* _KERNEL || _STANDALONE */
 
 #ifndef USB_GLOBAL_INCLUDE_FILE
 #include <dev/usb/usb_endian.h>
@@ -115,7 +115,7 @@ MALLOC_DECLARE(M_USBDEV);
 /* Allow for marginal and non-conforming devices. */
 #define	USB_PORT_RESET_DELAY		50	/* ms */
 #define	USB_PORT_ROOT_RESET_DELAY	200	/* ms */
-#define	USB_PORT_RESET_RECOVERY		250	/* ms */
+#define	USB_PORT_RESET_RECOVERY		10	/* ms */
 #define	USB_PORT_POWERUP_DELAY		300	/* ms */
 #define	USB_PORT_RESUME_DELAY		(20*2)	/* ms */
 #define	USB_SET_ADDRESS_SETTLE		10	/* ms */

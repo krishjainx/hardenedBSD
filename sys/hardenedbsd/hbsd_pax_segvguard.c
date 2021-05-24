@@ -383,7 +383,8 @@ pax_segvguard_add(struct thread *td, struct vnode *vn, sbintime_t sbt)
 
 	pr = pax_get_prison_td(td);
 
-	v = malloc(sizeof(struct pax_segvguard_entry), M_PAX, M_NOWAIT);
+	v = malloc(sizeof(struct pax_segvguard_entry), M_PAX,
+	    M_NOWAIT | M_ZERO);
 	if (v == NULL)
 		return (NULL);
 
@@ -421,6 +422,7 @@ pax_segvguard_lookup(struct thread *td, struct vnode *vn)
 		return (NULL);
 	}
 
+	memset(&sk, 0x00, sizeof(sk));
 	sk.se_inode = vap.va_fileid;
 	strncpy(sk.se_mntpoint, vn->v_mount->mnt_stat.f_mntonname, MNAMELEN);
 	sk.se_uid = td->td_ucred->cr_ruid;
@@ -574,7 +576,7 @@ pax_segvguard_sysinit(void)
 		malloc(pax_segvguard_hashsize * sizeof(struct pax_segvguard_entryhead),
 		M_PAX, M_WAITOK | M_ZERO);
 
-	for(i = 0; i < pax_segvguard_hashsize; i++)
+	for (i = 0; i < pax_segvguard_hashsize; i++)
 		PAX_SEGVGUARD_LOCK_INIT(&pax_segvguard_hashtbl[i]);
 }
 

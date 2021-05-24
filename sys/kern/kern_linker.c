@@ -132,7 +132,7 @@ retry:									\
 		}							\
 	}								\
 	(a) = next_file_id;						\
-} while(0)
+} while (0)
 
 /* XXX wrong name; we're looking at version provision tags here, not modules */
 typedef TAILQ_HEAD(, modlist) modlisthead_t;
@@ -1309,7 +1309,7 @@ kern_kldstat(struct thread *td, int fileid, struct kld_file_stat *stat)
 	bcopy(lf->filename, &stat->name[0], namelen);
 	stat->refs = lf->refs;
 	stat->id = lf->id;
-#ifdef PAX_HARDENING
+#ifdef HARDEN_KLD
 	stat->address = NULL;
 #else
 	stat->address = lf->address;
@@ -1411,7 +1411,7 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 			error = ENOENT;
 		else if (LINKER_LOOKUP_SYMBOL(lf, symstr, &sym) == 0 &&
 		    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
-#ifdef PAX_HARDENING
+#ifdef HARDEN_KLD
 			lookup.symvalue = (uintptr_t) NULL;
 #else
 			lookup.symvalue = (uintptr_t) symval.value;
@@ -1424,7 +1424,7 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 		TAILQ_FOREACH(lf, &linker_files, link) {
 			if (LINKER_LOOKUP_SYMBOL(lf, symstr, &sym) == 0 &&
 			    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
-#ifdef PAX_HARDENING
+#ifdef HARDEN_KLD
 				lookup.symvalue = (uintptr_t)NULL;
 #else
 				lookup.symvalue = (uintptr_t)symval.value;

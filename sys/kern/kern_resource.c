@@ -318,8 +318,7 @@ sys_rtprio_thread(struct thread *td, struct rtprio_thread_args *uap)
 		td1 = td;
 		PROC_LOCK(p);
 	} else {
-		/* Only look up thread in current process */
-		td1 = tdfind(uap->lwpid, curproc->p_pid);
+		td1 = tdfind(uap->lwpid, -1);
 		if (td1 == NULL)
 			return (ESRCH);
 		p = td1->td_proc;
@@ -778,7 +777,7 @@ kern_proc_setrlimit(struct thread *td, struct proc *p, u_int which,
 			}
 			addr = trunc_page(addr);
 			size = round_page(size);
-			(void)vm_map_protect(&p->p_vmspace->vm_map,
+			(void)vm_map_protect(p, &p->p_vmspace->vm_map,
 			    addr, addr + size, prot, FALSE);
 		}
 	}
@@ -1242,6 +1241,14 @@ lim_free(struct plimit *limp)
 {
 
 	if (refcount_release(&limp->pl_refcnt))
+		free((void *)limp, M_PLIMIT);
+}
+
+void
+lim_freen(struct plimit *limp, int n)
+{
+
+	if (refcount_releasen(&limp->pl_refcnt, n))
 		free((void *)limp, M_PLIMIT);
 }
 

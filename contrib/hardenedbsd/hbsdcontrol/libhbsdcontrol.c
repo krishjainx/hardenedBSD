@@ -47,7 +47,7 @@
 static const char *hbsdcontrol_version = "v001";
 
 static int hbsdcontrol_validate_state(struct pax_feature_state *feature_state);
-static const char * hbsdcontrol_get_state_string(const struct pax_feature_state *feature_state);
+static const char *hbsdcontrol_get_state_string(const struct pax_feature_state *feature_state);
 static int hbsdcontrol_get_all_feature_state(const char *file, struct pax_feature_state **feature_states);
 static void hbsdcontrol_free_all_feature_state(struct pax_feature_state **feature_states);
 

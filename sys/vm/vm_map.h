@@ -227,6 +227,7 @@ struct vm_map {
 #define	MAP_IS_SUB_MAP		0x04	/* has parent */
 #define	MAP_ASLR		0x08	/* enabled ASLR */
 #define	MAP_ASLR_IGNSTART	0x10
+#define	MAP_REPLENISH		0x20
 
 #ifdef	_KERNEL
 #if defined(KLD_MODULE) && !defined(KLD_TIED)
@@ -293,12 +294,13 @@ struct vmspace {
 	caddr_t vm_maxsaddr;	/* user VA at max stack growth */
 	vm_offset_t vm_aslr_delta_mmap;	/* mmap() random delta for ASLR */
 	vm_offset_t vm_aslr_delta_stack;	/* stack random delta for ASLR */
+	vm_offset_t vm_aslr_delta_thr_stack;	/* thread stack random delta for ASLR */
 	vm_offset_t vm_aslr_delta_exec;	/* exec base random delta for ASLR */
 	vm_offset_t vm_aslr_delta_vdso;	/* VDSO base random delta for ASLR */
 #ifdef __LP64__
 	vm_offset_t vm_aslr_delta_map32bit; /* random for MAP_32BIT mappings */
 #endif
-	volatile int vm_refcnt;	/* number of references */
+	u_int vm_refcnt;	/* number of references */
 	/*
 	 * Keep the PMAP last, so that CPU-specific variations of that
 	 * structure on a single architecture don't result in offset
@@ -402,7 +404,7 @@ long vmspace_resident_count(struct vmspace *vmspace);
  */
 #define	VM_FAULT_READ_AHEAD_MIN		7
 #define	VM_FAULT_READ_AHEAD_INIT	15
-#define	VM_FAULT_READ_AHEAD_MAX		min(atop(MAXPHYS) - 1, UINT8_MAX)
+#define	VM_FAULT_READ_AHEAD_MAX		min(atop(maxphys) - 1, UINT8_MAX)
 
 /*
  * The following "find_space" options are supported by vm_map_find().
@@ -515,7 +517,7 @@ vm_map_entry_succ(vm_map_entry_t entry)
 	for ((it) = vm_map_entry_first(map);	\
 	    (it) != &(map)->header;		\
 	    (it) = vm_map_entry_succ(it))
-int vm_map_protect (vm_map_t, vm_offset_t, vm_offset_t, vm_prot_t, boolean_t);
+int vm_map_protect (struct proc *, vm_map_t, vm_offset_t, vm_offset_t, vm_prot_t, boolean_t);
 int vm_map_remove (vm_map_t, vm_offset_t, vm_offset_t);
 void vm_map_try_merge_entries(vm_map_t map, vm_map_entry_t prev,
     vm_map_entry_t entry);

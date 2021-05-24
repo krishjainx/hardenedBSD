@@ -23,6 +23,7 @@
  * Copyright (c) 2013 Martin Matuska <mm@FreeBSD.org>. All rights reserved.
  */
 #include <os/freebsd/zfs/sys/zfs_ioctl_compat.h>
+#include <jail.h>
 #include <libzfs_impl.h>
 #include <libzfs.h>
 #include <libzutil.h>
@@ -176,11 +177,26 @@ execvpe(const char *name, char * const argv[], char * const envp[])
 	return (execvPe(name, path, argv, envp));
 }
 
+#define	ERRBUFLEN 256
+
+static __thread char errbuf[ERRBUFLEN];
+
 const char *
 libzfs_error_init(int error)
 {
+	char *msg = errbuf;
+	size_t len, msglen = ERRBUFLEN;
 
-	return (strerror(error));
+	if (modfind("zfs") < 0) {
+		len = snprintf(msg, msglen, dgettext(TEXT_DOMAIN,
+		    "Failed to load %s module: "), ZFS_KMOD);
+		msg += len;
+		msglen -= len;
+	}
+
+	(void) snprintf(msg, msglen, "%s", strerror(error));
+
+	return (errbuf);
 }
 
 int
@@ -193,16 +209,12 @@ zfs_ioctl(libzfs_handle_t *hdl, int request, zfs_cmd_t *zc)
  * Verify the required ZFS_DEV device is available and optionally attempt
  * to load the ZFS modules.  Under normal circumstances the modules
  * should already have been loaded by some external mechanism.
- *
- * Environment variables:
- * - ZFS_MODULE_LOADING="YES|yes|ON|on" - Attempt to load modules.
- * - ZFS_MODULE_TIMEOUT="<seconds>"     - Seconds to wait for ZFS_DEV
  */
 int
 libzfs_load_module(void)
 {
 
-	if (getuid()) {
+	if (getuid() || jailed()) {
 		/*
 		 * HBSD: KLD-related syscalls require a privileged
 		 * account.

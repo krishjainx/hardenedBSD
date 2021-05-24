@@ -12,7 +12,10 @@ HardenedBSD ?.?.?  (UNKNOWN)
 |      |_|  |_|\__,_|_|  \__,_|\___|_| |_|\___|\__,_|____/|_____/|_____/       |
 |                                                                              |
 +------------------------------------------------------------------------------+
-|  keywords: sysctl, hbsdcontrol, git, github.com/hardenedbsd hardenedbsd.org  |
-+------------------------------------------------------------------------------+
                 Edit /etc/motd to change this login announcement.               
 
+HardenedBSD website: https://hardenedbsd.org/
+Code repositories:   https://git.hardenedbsd.org/
+Mailing lists:       https://hardenedbsd.org/content/mailing-lists/
+Documentation:
+    https://git.hardenedbsd.org/hardenedbsd/HardenedBSD/-/wikis/home

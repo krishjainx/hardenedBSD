@@ -16,6 +16,7 @@ LDIRS=	BSD_daemon \
 	drivers \
 	etc \
 	find_interface \
+	flua \
 	hardenedbsd \
 	indent \
 	ipfw \
@@ -98,6 +99,9 @@ SE_FIND_INTERFACE= \
 	Makefile \
 	README \
 	find_interface.c
+
+SE_DIRS+=	flua
+SE_FLUA=	libjail.lua
 
 SE_DIRS+=	indent
 SE_INDENT=	indent.pro

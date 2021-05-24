@@ -147,6 +147,9 @@ struct sysentvec {
 	u_long		*sv_hwcap2;	/* Value passed in AT_HWCAP2. */
 	const char	*(*sv_machine_arch)(struct proc *);
 	vm_offset_t	sv_fxrng_gen_base;
+	void		(*sv_onexec)(struct proc *, struct image_params *);
+	void		(*sv_onexit)(struct proc *);
+	void		(*sv_ontdexit)(struct thread *td);
 };
 
 #define	SV_ILP32	0x000100	/* 32-bit executable. */
@@ -169,6 +172,11 @@ struct sysentvec {
 #define	SV_ABI_FREEBSD 	9
 #define	SV_ABI_CLOUDABI	17
 #define	SV_ABI_UNDEF	255
+
+/* sv_coredump flags */
+#define	SVC_PT_COREDUMP	0x00000001	/* dump requested by ptrace(2) */
+#define	SVC_NOCOMPRESS	0x00000002	/* disable compression. */
+#define	SVC_ALL		0x00000004	/* dump everything */
 
 #ifdef _KERNEL
 extern struct sysent sysent[];
@@ -295,26 +303,8 @@ struct nosys_args;
 int	lkmnosys(struct thread *, struct nosys_args *);
 int	lkmressys(struct thread *, struct nosys_args *);
 
-int	_syscall_thread_enter(struct thread *td, struct sysent *se);
-void	_syscall_thread_exit(struct thread *td, struct sysent *se);
-
-static inline int
-syscall_thread_enter(struct thread *td, struct sysent *se)
-{
-
-	if (__predict_true((se->sy_thrcnt & SY_THR_STATIC) != 0))
-		return (0);
-	return (_syscall_thread_enter(td, se));
-}
-
-static inline void
-syscall_thread_exit(struct thread *td, struct sysent *se)
-{
-
-	if (__predict_true((se->sy_thrcnt & SY_THR_STATIC) != 0))
-		return;
-	_syscall_thread_exit(td, se);
-}
+int	syscall_thread_enter(struct thread *td, struct sysent *se);
+void	syscall_thread_exit(struct thread *td, struct sysent *se);
 
 int shared_page_alloc(int size, int align);
 int shared_page_fill(int size, int align, const void *data);

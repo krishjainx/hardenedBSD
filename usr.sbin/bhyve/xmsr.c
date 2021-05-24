@@ -133,6 +133,14 @@ emulate_rdmsr(struct vmctx *ctx, int vcpu, uint32_t num, uint64_t *val)
 			 */
 			*val = 0 | IA32_DEBUG_INTERFACE_LOCK;
 			return (0);
+		case MSR_IA32_FEATURE_CONTROL:
+			/*
+			 * Windows guests check this MSR.
+			 * Set the lock bit to avoid writes
+			 * to this MSR.
+			 */
+			*val = IA32_FEATURE_CONTROL_LOCK;
+			break;
 		default:
 			error = -1;
 			break;

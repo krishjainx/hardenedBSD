@@ -100,15 +100,12 @@ __DEFAULT_YES_OPTIONS = \
     FILE \
     FINGER \
     FLOPPY \
-    FMTREE \
     FORTH \
     FP_LIBC \
     FTP \
     GAMES \
-    GDB \
     GH_BC \
     GNU_DIFF \
-    GNU_GREP \
     GOOGLETEST \
     GPIO \
     HAST \
@@ -129,14 +126,12 @@ __DEFAULT_YES_OPTIONS = \
     LDNS \
     LDNS_UTILS \
     LEGACY_CONSOLE \
-    LIBCPLUSPLUS \
-    LIBPTHREAD \
-    LIBTHR \
     LLD \
     LLD_BOOTSTRAP \
     LLD_IS_LD \
     LLVM_ASSERTIONS \
     LLVM_COV \
+    LLVM_CXXFILT \
     LLVM_TARGET_ALL \
     LOADER_GELI \
     LOADER_LUA \
@@ -179,7 +174,6 @@ __DEFAULT_YES_OPTIONS = \
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
     STATS \
-    SVNLITE \
     SYSCONS \
     SYSTEM_COMPILER \
     SYSTEM_LINKER \
@@ -190,6 +184,7 @@ __DEFAULT_YES_OPTIONS = \
     TEXTPROC \
     TFTP \
     UNBOUND \
+    UNINIT_AUTOINIT \
     USB \
     UTMPX \
     VI \
@@ -203,13 +198,11 @@ __DEFAULT_YES_OPTIONS = \
 __DEFAULT_NO_OPTIONS = \
     BEARSSL \
     BHYVE_SNAPSHOT \
-    BSD_GREP \
     DEVD_PIE \
     CLANG_FORMAT \
     DTRACE_TESTS \
     EXPERIMENTAL \
     FREEBSD_UPDATE \
-    GNU_GREP_COMPAT \
     HESIOD \
     LIB32 \
     LIBSOFT \
@@ -227,6 +220,7 @@ __DEFAULT_NO_OPTIONS = \
     SORT_THREADS \
     SPECTREV1_FIX \
     SVN \
+    SVNLITE \
     ZONEINFO_LEAPSECONDS_SUPPORT \
 
 # LEFT/RIGHT. Left options which default to "yes" unless their corresponding
@@ -296,10 +290,6 @@ __DEFAULT_NO_OPTIONS+=LLVM_TARGET_BPF
 
 .include <bsd.compiler.mk>
 
-# In-tree gdb is an older versions without modern architecture support.
-.if ${__T} == "aarch64" || ${__T:Mriscv*} != ""
-BROKEN_OPTIONS+=GDB
-.endif
 .if ${__T:Mriscv*} != ""
 BROKEN_OPTIONS+=OFED
 .endif
@@ -377,6 +367,13 @@ BROKEN_OPTIONS+=LOADER_UBOOT
 BROKEN_OPTIONS+=LOADER_GELI LOADER_LUA
 .endif
 
+# Kernel TLS is enabled by default on amd64 and aarch64
+.if ${__T} == "aarch64" || ${__T} == "amd64"
+__DEFAULT_YES_OPTIONS+=OPENSSL_KTLS
+.else
+__DEFAULT_NO_OPTIONS+=OPENSSL_KTLS
+.endif
+
 .if ${__T:Mmips64*}
 # profiling won't work on MIPS64 because there is only assembly for o32
 BROKEN_OPTIONS+=PROFILE
@@ -421,10 +418,6 @@ BROKEN_OPTIONS+=CLANG_BOOTSTRAP LLD_BOOTSTRAP
 #
 .if ${MK_CAPSICUM} == "no"
 MK_CASPER:=	no
-.endif
-
-.if ${MK_LIBPTHREAD} == "no"
-MK_LIBTHR:=	no
 .endif
 
 .if ${MK_SOURCELESS} == "no"
@@ -483,7 +476,7 @@ MK_LDNS:=	no
 MK_PKGBOOTSTRAP:=	no
 MK_SVN:=		no
 MK_SVNLITE:=		no
-MK_WIRELESS:=		no
+MK_ZFS:=	no
 .endif
 
 .if ${MK_LDNS} == "no"
@@ -519,7 +512,6 @@ MK_LLD_BOOTSTRAP:= no
 
 .if ${MK_TOOLCHAIN} == "no"
 MK_CLANG:=	no
-MK_GDB:=	no
 MK_INCLUDES:=	no
 MK_LLD:=	no
 MK_LLDB:=	no

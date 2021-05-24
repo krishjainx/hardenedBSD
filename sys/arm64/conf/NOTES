@@ -31,8 +31,6 @@ options 	VFP			# Floating-point support
 options 	RACCT_DEFAULT_TO_DISABLED # Set kern.racct.enable=0 by default
 options 	INTRNG
 
-nooptions 	GDB			# Support remote GDB -- not supported
-
 # SoC support
 options 	SOC_ALLWINNER_A64
 options 	SOC_ALLWINNER_H5
@@ -68,6 +66,10 @@ device		vtnet
 # CPU frequency control
 device		cpufreq
 
+# Accelerated software crypto
+device		armv8crypto		# ARMv8 OpenCrypto module
+device		ossl			# OpenSSL OpenCrypto module
+
 # Bus drivers
 device		al_pci		# Annapurna Alpine PCI-E
 options 	PCI_HP			# PCI-Express native HotPlug
@@ -76,7 +78,7 @@ options 	PCI_IOV		# PCI SR-IOV support
 # Ethernet NICs
 device		mdio
 device		awg		# Allwinner EMAC Gigabit Ethernet
-device		axgbe		# AMD Opteron A1100 integrated NIC
+device		axa		# AMD Opteron A1100 integrated NIC
 device		neta		# Marvell Armada 370/38x/XP/3700 NIC
 device  	smc		# SMSC LAN91C111
 device		vnic		# Cavium ThunderX NIC
@@ -239,3 +241,10 @@ options 	COMPAT_FREEBSD32	# Compatible with FreeBSD/arm
 # ZFS support
 
 options		ZFS
+
+#
+# HID-over-I2C support
+#
+device		iichid		# HID-over-I2C support
+options 	IICHID_DEBUG	# Enable HID-over-I2C debug messages
+options 	IICHID_SAMPLING	# Workaround missing GPIO INTR support

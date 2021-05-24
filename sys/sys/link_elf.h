@@ -69,7 +69,7 @@ typedef struct link_map {
 } Link_map;
 
 struct r_debug {
-	int		r_version;		/* not used */
+	int		r_version;		/* Currently '1' */
 	struct link_map *r_map;			/* list of loaded images */
 	void		(*r_brk)(struct r_debug *, struct link_map *);
 						/* pointer to break point */
@@ -78,7 +78,10 @@ struct r_debug {
 		RT_ADD,				/* adding a shared library */
 		RT_DELETE			/* removing a shared library */
 	}		r_state;
+	void		*r_ldbase;		/* Base address of rtld */
 };
+
+#define	R_DEBUG_VERSION		1
 
 struct dl_phdr_info
 {
@@ -97,6 +100,7 @@ __BEGIN_DECLS
 typedef int (*__dl_iterate_hdr_callback)(struct dl_phdr_info *, size_t, void *);
 extern int dl_iterate_phdr(__dl_iterate_hdr_callback, void *);
 int _rtld_addr_phdr(const void *, struct dl_phdr_info *);
+Elf_Word _rtld_get_pax_flags(void);
 int _rtld_get_stack_prot(void);
 int _rtld_is_dlopened(void *);
 

@@ -1,7 +1,7 @@
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * Copyright (c) 2013-2017, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
- * Copyright (c) 2014-2015, by Shawn Webb <shawn.webb@hardenedbsd.org>
+ * Copyright (c) 2014-2020, by Shawn Webb <shawn.webb@hardenedbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,18 +65,20 @@ __FBSDID("$FreeBSD$");
 /*-
  * generic ASLR values
  *
- *  		| 32 bit | 64 bit | compat |
- * 	+-------+--------+--------+--------+
- * 	| MMAP	| 14 bit | 30 bit | 14 bit |
- * 	+-------+--------+--------+--------+
- * 	| STACK	| 14 bit | 42 bit | 14 bit |
- * 	+-------+--------+--------+--------+
- * 	| EXEC	| 14 bit | 30 bit | 14 bit |
- * 	+-------+--------+--------+--------+
- * 	| VDSO	|  8 bit | 28 bit |  8 bit |
- * 	+-------+--------+--------+--------+
- * 	| M32B	|  N.A.  | 18 bit |  N.A.  |
- * 	+-------+--------+--------+--------+
+ *  		    | 32b  | 64b    | compat |
+ * 	+-----------+------+--------+--------+
+ * 	| MMAP	    | 14   | 30     | 14     |
+ * 	+-----------+------+--------+--------+
+ * 	| STACK	    | 14   | 42     | 14     |
+ * 	+-----------+------+--------+--------+
+ * 	| THR STACK | N.A. | 42     | N.A.   |
+ * 	+-----------+------+--------+--------+
+ * 	| EXEC	    | 14   | 30     | 14     |
+ * 	+-----------+------+--------+--------+
+ * 	| VDSO	    |  8   | 28     | 8      |
+ * 	+-----------+------+--------+--------+
+ * 	| M32B	    | N.A. | 18     | N.A.   |
+ * 	+-----------+------+--------+--------+
  *
  */
 
@@ -87,6 +89,10 @@ __FBSDID("$FreeBSD$");
 #ifndef PAX_ASLR_DELTA_STACK_LSB
 #define	PAX_ASLR_DELTA_STACK_LSB	PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_STACK_LSB */
+
+#ifndef PAX_ASLR_DELTA_THR_STACK_LSB
+#define	PAX_ASLR_DELTA_THR_STACK_LSB	3
+#endif /* PAX_ASLR_DELTA_THR_STACK_LSB */
 
 #ifndef PAX_ASLR_DELTA_STACK_WITH_GAP_LSB
 #define	PAX_ASLR_DELTA_STACK_WITH_GAP_LSB	3
@@ -118,6 +124,10 @@ __FBSDID("$FreeBSD$");
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
 #define	PAX_ASLR_DELTA_STACK_DEF_LEN	42
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
+
+#ifndef PAX_ASLR_DELTA_THR_STACK_DEF_LEN
+#define	PAX_ASLR_DELTA_THR_STACK_DEF_LEN	42
+#endif /* PAX_ASLR_DELTA_THR_STACK_DEF_LEN */
 
 #ifndef PAX_ASLR_DELTA_EXEC_DEF_LEN
 #define	PAX_ASLR_DELTA_EXEC_DEF_LEN	30
@@ -196,6 +206,7 @@ FEATURE(hbsd_aslr, "Address Space Layout Randomization.");
 static int pax_aslr_status = PAX_FEATURE_OPTOUT;
 static int pax_aslr_mmap_len = PAX_ASLR_DELTA_MMAP_DEF_LEN;
 static int pax_aslr_stack_len = PAX_ASLR_DELTA_STACK_DEF_LEN;
+static int pax_aslr_thr_stack_len = PAX_ASLR_DELTA_THR_STACK_DEF_LEN;
 static int pax_aslr_exec_len = PAX_ASLR_DELTA_EXEC_DEF_LEN;
 static int pax_aslr_vdso_len = PAX_ASLR_DELTA_VDSO_DEF_LEN;
 #ifdef MAP_32BIT
@@ -376,6 +387,12 @@ try_again:
 	    PAX_ASLR_DELTA_STACK_WITH_GAP_LSB,
 	    pax_aslr_stack_len);
 	vm->vm_aslr_delta_stack = ALIGN(vm->vm_aslr_delta_stack);
+
+	arc4rand(&rand_buf, sizeof(rand_buf), 0);
+	vm->vm_aslr_delta_thr_stack = PAX_ASLR_DELTA(rand_buf,
+	    PAX_ASLR_DELTA_THR_STACK_LSB,
+	    pax_aslr_thr_stack_len);
+	vm->vm_aslr_delta_thr_stack = ALIGN(vm->vm_aslr_delta_thr_stack);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	rand_buf = PAX_ASLR_DELTA(rand_buf,
@@ -587,7 +604,7 @@ pax_aslr_mmap(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr, int mmap
 	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
 	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
 	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
-	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
+	 * MAP_FIXED but still expect that behaviour so the hint cannot be overridden
 	 * for anonymous mappings).
 	 *
 	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30
@@ -629,6 +646,26 @@ pax_aslr_stack(struct proc *p, vm_offset_t *addr)
 }
 
 void
+pax_aslr_thr_stack(struct proc *p, vm_offset_t *addr)
+{
+	uintptr_t orig_addr;
+	uintptr_t random;
+
+	if (!pax_aslr_active(p))
+		return;
+
+	orig_addr = *addr;
+
+	/*
+	 * Apply the random offset to the mapping.
+	 * This should page aligned.
+	 */
+	random = p->p_vmspace->vm_aslr_delta_thr_stack;
+	random &= (-1UL << PAX_ASLR_DELTA_THR_STACK_LSB);
+	*addr -= random;
+}
+
+void
 pax_aslr_stack_with_gap(struct proc *p, vm_offset_t *addr)
 {
 	uintptr_t orig_addr;
@@ -639,7 +676,7 @@ pax_aslr_stack_with_gap(struct proc *p, vm_offset_t *addr)
 
 	orig_addr = *addr;
 	/*
-	 * Apply the random gap offset withing the page.
+	 * Apply the random gap offset within the page.
 	 */
 	random = p->p_vmspace->vm_aslr_delta_stack;
 	*addr -= random;
@@ -702,9 +739,9 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 	}
 
 	/*
-	* Default shlibrandom to disabled regardless of ASLR
-	* opt-in/opt-out.
-	*/
+	 * Default shlibrandom to disabled regardless of ASLR
+	 * opt-in/opt-out.
+	 */
 	if (mode & PAX_NOTE_SHLIBRANDOM) {
 		flags |= PAX_NOTE_SHLIBRANDOM;
 		flags &= ~PAX_NOTE_NOSHLIBRANDOM;
@@ -769,7 +806,7 @@ pax_aslr_mmap_map_32bit(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr
 	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
 	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
 	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
-	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
+	 * MAP_FIXED but still expect that behaviour so the hint cannot be overridden
 	 * for anonymous mappings).
 	 *
 	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30

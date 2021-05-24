@@ -41,8 +41,13 @@ BSARGS= 	DESTDIR= \
 		BWPHASE=${.TARGET} \
 		SSP_CFLAGS= \
 		MK_HTML=no NO_LINT=yes MK_MAN=no \
+<<<<<<< HEAD
 		-DNO_PIC MK_PROFILE=no \
 		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no \
+=======
+		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
+		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no \
+>>>>>>> origin/hardened/current/master
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_CLANG_FORMAT=no
 		MK_LLDB=no MK_TESTS=no \

@@ -25,7 +25,9 @@
  *
  */
 
-#define	KCSAN_RUNTIME
+#if defined(KASAN) || defined(KCSAN)
+#define	SAN_RUNTIME
+#endif
 
 #include "opt_platform.h"
 
@@ -97,9 +99,13 @@ static int
 generic_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags,
     bus_space_handle_t *bshp)
 {
+	vm_memattr_t ma;
 	void *va;
 
-	va = pmap_mapdev(bpa, size);
+	ma = VM_MEMATTR_DEVICE;
+	if (flags == BUS_SPACE_MAP_NONPOSTED)
+		ma = VM_MEMATTR_DEVICE_NP;
+	va = pmap_mapdev_attr(bpa, size, ma);
 	if (va == NULL)
 		return (ENOMEM);
 	*bshp = (bus_space_handle_t)va;
@@ -126,6 +132,46 @@ generic_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset,
 
 	*nbshp = bsh + offset;
 	return (0);
+}
+
+/*
+ * Write `count' 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle starting at `offset'.
+ */
+static void
+generic_bs_sr_1(void *t, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value, size_t count)
+{
+
+	for (; count != 0; count--, offset++)
+		generic_bs_w_1(t, bsh, offset, value);
+}
+
+static void
+generic_bs_sr_2(void *t, bus_space_handle_t bsh,
+		       bus_size_t offset, uint16_t value, size_t count)
+{
+
+	for (; count != 0; count--, offset += 2)
+		generic_bs_w_2(t, bsh, offset, value);
+}
+
+static void
+generic_bs_sr_4(void *t, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value, size_t count)
+{
+
+	for (; count != 0; count--, offset += 4)
+		generic_bs_w_4(t, bsh, offset, value);
+}
+
+static void
+generic_bs_sr_8(void *t, bus_space_handle_t bsh, bus_size_t offset,
+    uint64_t value, size_t count)
+{
+
+	for (; count != 0; count--, offset += 8)
+		generic_bs_w_8(t, bsh, offset, value);
 }
 
 struct bus_space memmap_bus = {
@@ -187,10 +233,10 @@ struct bus_space memmap_bus = {
 	.bs_sm_8 = NULL,
 
 	/* set region */
-	.bs_sr_1 = NULL,
-	.bs_sr_2 = NULL,
-	.bs_sr_4 = NULL,
-	.bs_sr_8 = NULL,
+	.bs_sr_1 =	generic_bs_sr_1,
+	.bs_sr_2 =	generic_bs_sr_2,
+	.bs_sr_4 =	generic_bs_sr_4,
+	.bs_sr_8 =	generic_bs_sr_8,
 
 	/* copy */
 	.bs_c_1 = NULL,

@@ -103,8 +103,10 @@ __FBSDID("$FreeBSD");
 
 static int setup_mac_metadata(struct archive_read_disk *,
     struct archive_entry *, int *fd);
+#ifdef ARCHIVE_XATTR_FREEBSD
 static int setup_xattrs_namespace(struct archive_read_disk *,
     struct archive_entry *, int *, int);
+#endif
 static int setup_xattrs(struct archive_read_disk *,
     struct archive_entry *, int *fd);
 static int setup_sparse(struct archive_read_disk *,
@@ -763,11 +765,15 @@ setup_xattrs_namespace(struct archive_read_disk *a,
 		size_t len = 255 & (int)*p;
 		char *name;
 
-		switch (namespace) {
-		case EXTATTR_NAMESPACE_SYSTEM:
+		if (namespace == EXTATTR_NAMESPACE_SYSTEM) {
+			if (!strcmp(p + 1, "nfs4.acl") ||
+			    !strcmp(p + 1, "posix1e.acl_access") ||
+			    !strcmp(p + 1, "posix1e.acl_default")) {
+				p += 1 + len;
+				continue;
+			}
 			strcpy(buff, "system.");
-			break;
-		default:
+		} else {
 			strcpy(buff, "user.");
 		}
 		name = buff + strlen(buff);
@@ -786,28 +792,24 @@ setup_xattrs(struct archive_read_disk *a,
     struct archive_entry *entry, int *fd)
 {
 	int namespaces[2];
-	int i, res, worstres;
+	int i, res;
 
 	namespaces[0] = EXTATTR_NAMESPACE_USER;
 	namespaces[1] = EXTATTR_NAMESPACE_SYSTEM;
-
-	worstres = ARCHIVE_OK;
 
 	for (i = 0; i < 2; i++) {
 		res = setup_xattrs_namespace(a, entry, fd,
 		    namespaces[i]);
 		switch (res) {
 			case (ARCHIVE_OK):
-				break;
 			case (ARCHIVE_WARN):
-				worstres = ARCHIVE_WARN;
 				break;
 			default:
 				return (res);
 		}
 	}
 
-	return (worstres);
+	return (ARCHIVE_OK);
 }
 
 #else

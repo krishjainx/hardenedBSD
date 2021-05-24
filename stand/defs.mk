@@ -11,6 +11,7 @@ MK_CTF=		no
 MK_SSP=		no
 MK_PROFILE=	no
 MK_SPECTREV1_FIX=	no
+MK_UNINIT_AUTOINIT=	no
 MAN=
 .if !defined(PIC)
 NO_PIC=

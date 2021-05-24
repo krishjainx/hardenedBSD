@@ -895,11 +895,27 @@ smp_rendezvous_cpus_retry(cpuset_t map,
 {
 	int cpu;
 
+	CPU_COPY(&map, &arg->cpus);
+
+	/*
+	 * Only one CPU to execute on.
+	 */
+	if (!smp_started) {
+		spinlock_enter();
+		if (setup_func != NULL)
+			setup_func(arg);
+		if (action_func != NULL)
+			action_func(arg);
+		if (teardown_func != NULL)
+			teardown_func(arg);
+		spinlock_exit();
+		return;
+	}
+
 	/*
 	 * Execute an action on all specified CPUs while retrying until they
 	 * all acknowledge completion.
 	 */
-	CPU_COPY(&map, &arg->cpus);
 	for (;;) {
 		smp_rendezvous_cpus(
 		    arg->cpus,

@@ -4,13 +4,14 @@ SHLIBDIR?=	/lib
 
 .include <src.opts.mk>
 
+PACKAGE=clibs
 LIB=rt
 SHLIB_MAJOR= 1
 CFLAGS+=-I${SRCTOP}/lib/libc/include -I${.CURDIR}
 .ifndef NO_THREAD_STACK_UNWIND
 CFLAGS+=-fexceptions
 .endif
-CFLAGS+=-Winline -Wall
+CFLAGS+=-Wall
 LIBADD=	pthread
 
 WARNS?=	2

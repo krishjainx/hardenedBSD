@@ -481,7 +481,7 @@ __rw_rlock_hard(struct rwlock *rw, struct thread *td, uintptr_t v
 #ifdef HWPMC_HOOKS
 	PMC_SOFT_CALL( , , lock, failed);
 #endif
-	lock_profile_obtain_lock_failed(&rw->lock_object,
+	lock_profile_obtain_lock_failed(&rw->lock_object, false,
 	    &contested, &waittime);
 
 	for (;;) {
@@ -681,7 +681,7 @@ __rw_rlock_int(struct rwlock *rw LOCK_FILE_LINE_ARG_DEF)
 	    !__rw_rlock_try(rw, td, &v, true LOCK_FILE_LINE_ARG)))
 		__rw_rlock_hard(rw, td, v LOCK_FILE_LINE_ARG);
 	else
-		lock_profile_obtain_lock_success(&rw->lock_object, 0, 0,
+		lock_profile_obtain_lock_success(&rw->lock_object, false, 0, 0,
 		    file, line);
 
 	LOCK_LOG_LOCK("RLOCK", &rw->lock_object, 0, 0, file, line);
@@ -856,7 +856,7 @@ _rw_runlock_cookie_int(struct rwlock *rw LOCK_FILE_LINE_ARG_DEF)
 	    !__rw_runlock_try(rw, td, &v)))
 		__rw_runlock_hard(rw, td, v LOCK_FILE_LINE_ARG);
 	else
-		lock_profile_release_lock(&rw->lock_object);
+		lock_profile_release_lock(&rw->lock_object, false);
 
 	TD_LOCKS_DEC(curthread);
 }
@@ -948,11 +948,6 @@ __rw_wlock_hard(volatile uintptr_t *c, uintptr_t v LOCK_FILE_LINE_ARG_DEF)
 	if (SCHEDULER_STOPPED())
 		return;
 
-#if defined(ADAPTIVE_RWLOCKS)
-	lock_delay_arg_init(&lda, &rw_delay);
-#elif defined(KDTRACE_HOOKS)
-	lock_delay_arg_init_noadapt(&lda);
-#endif
 	if (__predict_false(v == RW_UNLOCKED))
 		v = RW_READ_VALUE(rw);
 
@@ -971,10 +966,16 @@ __rw_wlock_hard(volatile uintptr_t *c, uintptr_t v LOCK_FILE_LINE_ARG_DEF)
 		CTR5(KTR_LOCK, "%s: %s contested (lock=%p) at %s:%d", __func__,
 		    rw->lock_object.lo_name, (void *)rw->rw_lock, file, line);
 
+#if defined(ADAPTIVE_RWLOCKS)
+	lock_delay_arg_init(&lda, &rw_delay);
+#elif defined(KDTRACE_HOOKS)
+	lock_delay_arg_init_noadapt(&lda);
+#endif
+
 #ifdef HWPMC_HOOKS
 	PMC_SOFT_CALL( , , lock, failed);
 #endif
-	lock_profile_obtain_lock_failed(&rw->lock_object,
+	lock_profile_obtain_lock_failed(&rw->lock_object, false,
 	    &contested, &waittime);
 
 	for (;;) {

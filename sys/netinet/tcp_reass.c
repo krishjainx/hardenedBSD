@@ -959,7 +959,7 @@ new_entry:
 		} else {
 			sbappendstream_locked(&so->so_rcv, m, 0);
 		}
-		sorwakeup_locked(so);
+		tp->t_flags |= TF_WAKESOR;
 		return (flags);
 	}
 	if (tcp_new_limits) {
@@ -1107,6 +1107,6 @@ present:
 #ifdef TCP_REASS_LOGGING
 	tcp_reass_log_dump(tp);
 #endif
-	sorwakeup_locked(so);
+	tp->t_flags |= TF_WAKESOR;
 	return (flags);
 }

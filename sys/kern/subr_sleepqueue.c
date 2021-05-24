@@ -441,12 +441,10 @@ sleepq_check_ast_sc_locked(struct thread *td, struct sleepqueue_chain *sc)
 
 	mtx_assert(&sc->sc_lock, MA_OWNED);
 
-	ret = 0;
 	if ((td->td_pflags & TDP_WAKEUP) != 0) {
 		td->td_pflags &= ~TDP_WAKEUP;
-		ret = EINTR;
 		thread_lock(td);
-		return (0);
+		return (EINTR);
 	}
 
 	/*
@@ -462,7 +460,7 @@ sleepq_check_ast_sc_locked(struct thread *td, struct sleepqueue_chain *sc)
 
 	p = td->td_proc;
 	CTR3(KTR_PROC, "sleepq catching signals: thread %p (pid %ld, %s)",
-		(void *)td, (long)p->p_pid, td->td_name);
+	    (void *)td, (long)p->p_pid, td->td_name);
 	PROC_LOCK(p);
 
 	/*
@@ -854,6 +852,26 @@ sleepq_remove_thread(struct sleepqueue *sq, struct thread *td)
 
 	CTR3(KTR_PROC, "sleepq_wakeup: thread %p (pid %ld, %s)",
 	    (void *)td, (long)td->td_proc->p_pid, td->td_name);
+}
+
+void
+sleepq_remove_nested(struct thread *td)
+{
+	struct sleepqueue_chain *sc;
+	struct sleepqueue *sq;
+	const void *wchan;
+
+	MPASS(TD_ON_SLEEPQ(td));
+
+	wchan = td->td_wchan;
+	sc = SC_LOOKUP(wchan);
+	mtx_lock_spin(&sc->sc_lock);
+	sq = sleepq_lookup(wchan);
+	MPASS(sq != NULL);
+	thread_lock(td);
+	sleepq_remove_thread(sq, td);
+	mtx_unlock_spin(&sc->sc_lock);
+	/* Returns with the thread lock owned. */
 }
 
 #ifdef INVARIANTS

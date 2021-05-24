@@ -181,7 +181,7 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 
 			/* 
 			 * Fast path:
-			 * compare the string's len without the the ending zero
+			 * compare the string's len without the ending zero
 			 * with the attribute name stored without zero.
 			 */
 			if (fsea_attrname_len != entry_size)

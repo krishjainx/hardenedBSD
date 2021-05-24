@@ -71,8 +71,9 @@ CFLAGS+= \
 	-include ${ZFSTOP}/include/os/freebsd/spl/sys/ccompile.h \
 	-DHAVE_ISSETUGID \
 	-include ${SRCTOP}/sys/modules/zfs/zfs_config.h \
-	-DSYSCONFDIR=\"/etc\"
+	-DSYSCONFDIR=\"/etc\" \
+	-DPKGDATADIR=\"/usr/share/zfs\"
 
-LIBADD=	geom nvpair uutil zfs zutil avl spl tpool zfs_core m
+LIBADD=	geom jail nvpair uutil zfs zutil avl spl tpool zfs_core m
 LDADD+= 	-pthread
 .include <bsd.prog.mk>

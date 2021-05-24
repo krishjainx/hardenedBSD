@@ -34,6 +34,9 @@
 : ${DIALOG_ESC=255}
 
 case `uname -r` in
+13.*)
+	_hbsd_dist_dir="pub/hardenedbsd/13-stable/`uname -m`/`uname -p`/BUILD-LATEST"
+	;;
 12.*)
 	_hbsd_dist_dir="pub/hardenedbsd/12-stable/`uname -m`/`uname -p`/BUILD-LATEST"
 	;;

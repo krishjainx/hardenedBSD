@@ -64,6 +64,20 @@
  */
 
 SYSCTL_DECL(_net_route);
+VNET_DEFINE(u_int, fib_hash_outbound) = 0;
+SYSCTL_UINT(_net_route, OID_AUTO, hash_outbound, CTLFLAG_RD | CTLFLAG_VNET,
+    &VNET_NAME(fib_hash_outbound), 0,
+    "Compute flowid for locally-originated packets");
+
+/* Default entropy to add to the hash calculation for the outbound connections*/
+uint8_t mpath_entropy_key[MPATH_ENTROPY_KEY_LEN] = {
+	0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+	0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+	0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+	0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+	0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+};
+
 
 /*
  * Tries to add @rnd_add nhop to the existing set of nhops (@nh_orig) for the
@@ -115,6 +129,17 @@ add_route_mpath(struct rib_head *rnh, struct rt_addrinfo *info,
 		RTSTAT_INC(rts_add_retry);
 	}
 
+	if (V_fib_hash_outbound == 0 && error == 0 &&
+	    NH_IS_NHGRP(rc->rc_nh_new)) {
+		/*
+		 * First multipath route got installed. Enable local
+		 * outbound connections hashing.
+		 */
+		if (bootverbose)
+			printf("FIB: enabled flowid calculation for locally-originated packets\n");
+		V_fib_hash_outbound = 1;
+	}
+
 	return (error);
 }
 
@@ -156,10 +181,15 @@ del_route_mpath(struct rib_head *rh, struct rt_addrinfo *info,
 	if ((info->rti_info[RTAX_GATEWAY] == NULL) && (info->rti_filter == NULL))
 		return (ESRCH);
 
-	error = nhgrp_get_filtered_group(rh, nhg, gw_filter_func, (void *)&ri,
-	    &rnd);
-	if (error == 0)
+	error = nhgrp_get_filtered_group(rh, nhg, gw_filter_func, (void *)&ri, &rnd);
+	if (error == 0) {
+		if (rnd.rnd_nhgrp == nhg) {
+			/* No gateway match, unreference new group and return. */
+			nhop_free_any(rnd.rnd_nhop);
+			return (ESRCH);
+		}
 		error = change_route_nhop(rh, rt, info, &rnd, rc);
+	}
 	return (error);
 }
 

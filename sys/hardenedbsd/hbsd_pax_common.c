@@ -509,15 +509,15 @@ pax_handle_prison_param(struct vfsoptlist *opts, const char *mib, pax_state_t *s
 
 	error = vfs_copyopt(opts, mib, &new_state, sizeof(new_state));
 	switch (error) {
-		case ENOENT:
-			/* use system default */
-			break;
-		case 0:
-			if (pax_feature_validate_state(&new_state))
-				*status = new_state;
-			break;
-		default:
-			return (error);
+	case ENOENT:
+		/* use system default */
+		break;
+	case 0:
+		if (pax_feature_validate_state(&new_state))
+			*status = new_state;
+		break;
+	default:
+		return (error);
 	}
 #endif /* PAX_JAIL_SUPPORT */
 

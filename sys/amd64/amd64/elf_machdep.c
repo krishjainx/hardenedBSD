@@ -106,13 +106,13 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS_LA57,
 	.sv_usrstack	= USRSTACK_LA57,
 	.sv_psstrings	= PS_STRINGS_LA57,
-	.sv_stackprot	= VM_PROT_ALL,
+	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
 	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
 	.sv_copyout_strings	= exec_copyout_strings,
 	.sv_setregs	= exec_setregs,
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
-	.sv_flags	= SV_ABI_FREEBSD | SV_ASLR | SV_LP64 | SV_SHP |
+	.sv_flags	= SV_ABI_FREEBSD | SV_LP64 | SV_SHP |
 			    SV_TIMEKEEP | SV_RNG_SEED_VER,
 	.sv_set_syscall_retval = cpu_set_syscall_retval,
 	.sv_fetch_syscall_args = cpu_fetch_syscall_args,
@@ -122,7 +122,10 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_schedtail	= NULL,
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
+	.sv_pax_aslr_init = pax_aslr_init_vmspace,
+#if !defined(PAX_ASLR)
 	.sv_stackgap	= elf64_stackgap,
+#endif
 };
 
 static void

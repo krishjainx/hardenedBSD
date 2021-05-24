@@ -238,8 +238,8 @@ iso_mountfs(devvp, mp)
 		goto out;
 	if (devvp->v_rdev->si_iosize_max != 0)
 		mp->mnt_iosize_max = devvp->v_rdev->si_iosize_max;
-	if (mp->mnt_iosize_max > MAXPHYS)
-		mp->mnt_iosize_max = MAXPHYS;
+	if (mp->mnt_iosize_max > maxphys)
+		mp->mnt_iosize_max = maxphys;
 
 	bo = &devvp->v_bufobj;
 
@@ -378,7 +378,6 @@ iso_mountfs(devvp, mp)
 	mp->mnt_data = isomp;
 	mp->mnt_stat.f_fsid.val[0] = dev2udev(dev);
 	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
-	mp->mnt_maxsymlinklen = 0;
 	MNT_ILOCK(mp);
 	if (isverified)
 		mp->mnt_flag |= MNT_VERIFIED;

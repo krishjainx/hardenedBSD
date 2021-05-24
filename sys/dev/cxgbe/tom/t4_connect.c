@@ -105,9 +105,6 @@ do_act_establish(struct sge_iq *iq, const struct rss_header *rss,
 	inp->inp_flowtype = M_HASHTYPE_OPAQUE;
 	inp->inp_flowid = tid;
 
-	if (ulp_mode(toep) == ULP_MODE_TLS)
-		tls_establish(toep);
-
 done:
 	INP_WUNLOCK(inp);
 	CURVNET_RESTORE();
@@ -259,7 +256,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct nhop_object *nh,
 		DONT_OFFLOAD_ACTIVE_OPEN(ENOSYS); /* XXX: implement lagg+TOE */
 	else
 		DONT_OFFLOAD_ACTIVE_OPEN(ENOTSUP);
-	if (sc->flags & KERN_TLS_OK)
+	if (sc->flags & KERN_TLS_ON)
 		DONT_OFFLOAD_ACTIVE_OPEN(ENOTSUP);
 
 	rw_rlock(&sc->policy_lock);
@@ -303,7 +300,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct nhop_object *nh,
 		if ((inp->inp_vflag & INP_IPV6) == 0)
 			DONT_OFFLOAD_ACTIVE_OPEN(ENOTSUP);
 
-		toep->ce = t4_hold_lip(sc, &inp->in6p_laddr, NULL);
+		toep->ce = t4_get_clip_entry(sc, &inp->in6p_laddr, true);
 		if (toep->ce == NULL)
 			DONT_OFFLOAD_ACTIVE_OPEN(ENOENT);
 
@@ -397,7 +394,7 @@ failed:
 		if (toep->l2te)
 			t4_l2t_release(toep->l2te);
 		if (toep->ce)
-			t4_release_lip(sc, toep->ce);
+			t4_release_clip_entry(sc, toep->ce);
 		free_toepcb(toep);
 	}
 

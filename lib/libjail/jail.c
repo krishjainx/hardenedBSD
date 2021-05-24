@@ -862,6 +862,23 @@ jailparam_free(struct jailparam *jp, unsigned njp)
 	}
 }
 
+int
+jailed(void)
+{
+	size_t valsz;
+	int val;
+
+	val = 0;
+	valsz = sizeof(val);
+
+	if (sysctlbyname("security.jail.jailed", &val, &valsz, NULL
+	    , 0)) {
+		return (0);
+	}
+
+	return (val);
+}
+
 /*
  * Find a parameter's type and size from its MIB.
  */

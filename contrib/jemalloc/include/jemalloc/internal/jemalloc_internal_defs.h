@@ -351,7 +351,7 @@
 /* #undef JEMALLOC_EXPORT */
 
 /* config.malloc_conf options string. */
-#define JEMALLOC_CONFIG_MALLOC_CONF "abort_conf:false"
+#define JEMALLOC_CONFIG_MALLOC_CONF "abort_conf:false,zero:true"
 
 /* If defined, jemalloc takes the malloc/free/etc. symbol names. */
 #define JEMALLOC_IS_MALLOC 1

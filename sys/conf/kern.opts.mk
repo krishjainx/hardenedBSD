@@ -41,6 +41,7 @@ __DEFAULT_YES_OPTIONS = \
     ISCSI \
     KERNEL_SYMBOLS \
     NETGRAPH \
+    OFED \
     PF \
     SCTP_SUPPORT \
     SOURCELESS_HOST \
@@ -53,7 +54,6 @@ __DEFAULT_NO_OPTIONS = \
     BHYVE_SNAPSHOT \
     EXTRA_TCP_STACKS \
     KERNEL_RETPOLINE \
-    OFED \
     RATELIMIT \
     REPRODUCIBLE_BUILD
 
@@ -66,6 +66,11 @@ __DEFAULT_NO_OPTIONS = \
 # affected by KERNEL_SYMBOLS, FORMAT_EXTENSIONS, CTF and SSP.
 
 # Things that don't work based on the CPU
+.if ${MACHINE} == "amd64"
+# PR251083 conflict between INIT_ALL_ZERO and ifunc memset
+BROKEN_OPTIONS+= INIT_ALL_ZERO
+.endif
+
 .if ${MACHINE_CPUARCH} == "arm"
 . if ${MACHINE_ARCH:Marmv[67]*} == ""
 BROKEN_OPTIONS+= CDDL ZFS

@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_param.h>
 #include <vm/vm_page.h>
 #include <vm/vm_phys.h>
+#include <vm/vm_dumpset.h>
 
 #include <net/ethernet.h>
 
@@ -79,10 +80,13 @@ platform_cpu_init()
 void
 platform_reset(void)
 {
-	ar71xx_device_stop(RST_RESET_FULL_CHIP);
-	/* Wait for reset */
-	while(1)
-		;
+	while(1) {
+		printf("%s: resetting via AHB FULL_CHIP register...\n", __func__);
+		ar71xx_device_start(RST_RESET_FULL_CHIP);
+		DELAY(100 * 1000);
+		ar71xx_device_stop(RST_RESET_FULL_CHIP);
+		DELAY(1000 * 1000);
+	}
 }
 
 /*

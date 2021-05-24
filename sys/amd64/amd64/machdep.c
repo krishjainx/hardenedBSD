@@ -58,6 +58,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
+#include <sys/asan.h>
 #include <sys/bio.h>
 #include <sys/buf.h>
 #include <sys/bus.h>
@@ -95,14 +96,15 @@ __FBSDID("$FreeBSD$");
 #include <sys/vmmeter.h>
 
 #include <vm/vm.h>
+#include <vm/vm_param.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_page.h>
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
 #include <vm/vm_pager.h>
-#include <vm/vm_param.h>
 #include <vm/vm_phys.h>
+#include <vm/vm_dumpset.h>
 
 #ifdef DDB
 #ifndef KDB
@@ -185,13 +187,6 @@ struct init_ops init_ops = {
 	.early_clock_source_init =	i8254_init,
 	.early_delay =			i8254_delay,
 	.parse_memmap =			native_parse_memmap,
-#ifdef SMP
-	.mp_bootaddress =		mp_bootaddress,
-	.start_all_aps =		native_start_all_aps,
-#endif
-#ifdef DEV_PCI
-	.msi_init =			msi_init,
-#endif
 };
 
 /*
@@ -581,6 +576,34 @@ freebsd4_sigreturn(struct thread *td, struct freebsd4_sigreturn_args *uap)
 #endif
 
 /*
+ * Reset the hardware debug registers if they were in use.
+ * They won't have any meaning for the newly exec'd process.
+ */
+void
+x86_clear_dbregs(struct pcb *pcb)
+{
+	if ((pcb->pcb_flags & PCB_DBREGS) == 0)
+		return;
+
+	pcb->pcb_dr0 = 0;
+	pcb->pcb_dr1 = 0;
+	pcb->pcb_dr2 = 0;
+	pcb->pcb_dr3 = 0;
+	pcb->pcb_dr6 = 0;
+	pcb->pcb_dr7 = 0;
+
+	if (pcb == curpcb) {
+		/*
+		 * Clear the debug registers on the running CPU,
+		 * otherwise they will end up affecting the next
+		 * process we switch to.
+		 */
+		reset_dbregs();
+	}
+	clear_pcb_flags(pcb, PCB_DBREGS);
+}
+
+/*
  * Reset registers to default values on exec.
  */
 void
@@ -616,27 +639,7 @@ exec_setregs(struct thread *td, struct image_params *imgp, uintptr_t stack)
 	regs->tf_gs = _ugssel;
 	regs->tf_flags = TF_HASSEGS;
 
-	/*
-	 * Reset the hardware debug registers if they were in use.
-	 * They won't have any meaning for the newly exec'd process.
-	 */
-	if (pcb->pcb_flags & PCB_DBREGS) {
-		pcb->pcb_dr0 = 0;
-		pcb->pcb_dr1 = 0;
-		pcb->pcb_dr2 = 0;
-		pcb->pcb_dr3 = 0;
-		pcb->pcb_dr6 = 0;
-		pcb->pcb_dr7 = 0;
-		if (pcb == curpcb) {
-			/*
-			 * Clear the debug registers on the running
-			 * CPU, otherwise they will end up affecting
-			 * the next process we switch to.
-			 */
-			reset_dbregs();
-		}
-		clear_pcb_flags(pcb, PCB_DBREGS);
-	}
+	x86_clear_dbregs(pcb);
 
 	/*
 	 * Drop the FP state if we hold it, so that the process gets a
@@ -669,10 +672,10 @@ cpu_setregs(void)
 static struct gate_descriptor idt0[NIDT];
 struct gate_descriptor *idt = &idt0[0];	/* interrupt descriptor table */
 
-static char dblfault_stack[PAGE_SIZE] __aligned(16);
-static char mce0_stack[PAGE_SIZE] __aligned(16);
-static char nmi0_stack[PAGE_SIZE] __aligned(16);
-static char dbg0_stack[PAGE_SIZE] __aligned(16);
+static char dblfault_stack[DBLFAULT_STACK_SIZE] __aligned(16);
+static char mce0_stack[MCE_STACK_SIZE] __aligned(16);
+static char nmi0_stack[NMI_STACK_SIZE] __aligned(16);
+static char dbg0_stack[DBG_STACK_SIZE] __aligned(16);
 CTASSERT(sizeof(struct nmi_pcpu) == 16);
 
 /*
@@ -958,28 +961,6 @@ ssdtosyssd(ssd, sd)
 	sd->sd_gran  = ssd->ssd_gran;
 }
 
-#if !defined(DEV_ATPIC) && defined(DEV_ISA)
-#include <isa/isavar.h>
-#include <isa/isareg.h>
-/*
- * Return a bitmap of the current interrupt requests.  This is 8259-specific
- * and is only suitable for use at probe time.
- * This is only here to pacify sio.  It is NOT FATAL if this doesn't work.
- * It shouldn't be here.  There should probably be an APIC centric
- * implementation in the apic driver code, if at all.
- */
-intrmask_t
-isa_irq_pending(void)
-{
-	u_char irr1;
-	u_char irr2;
-
-	irr1 = inb(IO_ICU1);
-	irr2 = inb(IO_ICU2);
-	return ((irr2 << 8) | irr1);
-}
-#endif
-
 u_int basemem;
 
 static int
@@ -1119,7 +1100,7 @@ add_efi_map_entries(struct efi_map_header *efihdr, vm_paddr_t *physmap,
 				type = types[p->md_type];
 			else
 				type = "<INVALID>";
-			printf("%23s %012lx %12p %08lx ", type, p->md_phys,
+			printf("%23s %012lx %012lx %08lx ", type, p->md_phys,
 			    p->md_virt, p->md_pages);
 			if (p->md_attr & EFI_MD_ATTR_UC)
 				printf("UC ");
@@ -1167,10 +1148,6 @@ add_efi_map_entries(struct efi_map_header *efihdr, vm_paddr_t *physmap,
 			break;
 	}
 }
-
-static char bootmethod[16] = "";
-SYSCTL_STRING(_machdep, OID_AUTO, bootmethod, CTLFLAG_RD, bootmethod, 0,
-    "System firmware boot method");
 
 static void
 native_parse_memmap(caddr_t kmdp, vm_paddr_t *physmap, int *physmap_idx)
@@ -1299,8 +1276,9 @@ getmemsize(caddr_t kmdp, u_int64_t first)
 	 * is configured to support APs and APs for the system start
 	 * in real mode mode (e.g. SMP bare metal).
 	 */
-	if (init_ops.mp_bootaddress)
-		init_ops.mp_bootaddress(physmap, &physmap_idx);
+#ifdef SMP
+	mp_bootaddress(physmap, &physmap_idx);
+#endif
 
 	/* call pmap initialization to make new kernel address space */
 	pmap_bootstrap(&first);
@@ -1858,8 +1836,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 * output is required. If it's grossly incorrect the kernel will never
 	 * make it this far.
 	 */
-	if ((boothowto & RB_VERBOSE) &&
-	    getenv_is_true("debug.dump_modinfo_at_boot"))
+	if (getenv_is_true("debug.dump_modinfo_at_boot"))
 		preload_dump();
 
 #ifdef DEV_ISA
@@ -1927,14 +1904,14 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	if (env != NULL)
 		strlcpy(kernelname, env, sizeof(kernelname));
 
-	cpu_probe_amdc1e();
-
 	kcsan_cpu_init(0);
 
 #ifdef FDT
 	x86_init_fdt();
 #endif
 	thread0.td_critnest = 0;
+
+	kasan_init();
 
 	TSEXIT();
 
@@ -2005,8 +1982,8 @@ efi_map_sysctl_handler(SYSCTL_HANDLER_ARGS)
 	return (SYSCTL_OUT(req, efihdr, efisize));
 }
 SYSCTL_PROC(_machdep, OID_AUTO, efi_map,
-    CTLTYPE_OPAQUE | CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, 0,
-    efi_map_sysctl_handler, "S,efi_map_header",
+    CTLTYPE_OPAQUE | CTLFLAG_RD | CTLFLAG_MPSAFE | CTLFLAG_ROOTONLY,
+    NULL, 0, efi_map_sysctl_handler, "S,efi_map_header",
     "Raw EFI Memory Map");
 
 void

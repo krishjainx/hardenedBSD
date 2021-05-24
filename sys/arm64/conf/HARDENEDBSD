@@ -1,6 +1,8 @@
 include GENERIC
 ident	HARDENEDBSD
 
+# HardenedBSD hardening options
+options 	HARDEN_KLD		# Harden the kernel module interface
 options 	PAX
 options 	PAX_CONTROL_ACL
 options 	PAX_CONTROL_ACL_OVERRIDE_SUPPORT
@@ -13,4 +15,5 @@ options		PAX_NOEXEC
 options		PAX_SEGVGUARD
 nooptions	COMPAT_FREEBSD32
 
+# Needed for ThunderX2 systems
 options 	NUMA

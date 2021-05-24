@@ -240,11 +240,16 @@ ngc_send(struct socket *so, int flags, struct mbuf *m, struct sockaddr *addr,
 		goto release;
 	}
 
+	if (sap->sg_len > NG_NODESIZ + offsetof(struct sockaddr_ng, sg_data)) {
+		error = EINVAL;
+		goto release;
+	}
+
 	/*
 	 * Allocate an expendable buffer for the path, chop off
 	 * the sockaddr header, and make sure it's NUL terminated.
 	 */
-	len = sap->sg_len - 2;
+	len = sap->sg_len - offsetof(struct sockaddr_ng, sg_data);
 	path = malloc(len + 1, M_NETGRAPH_PATH, M_WAITOK);
 	bcopy(sap->sg_data, path, len);
 	path[len] = '\0';
@@ -422,10 +427,16 @@ ngd_send(struct socket *so, int flags, struct mbuf *m, struct sockaddr *addr,
 		goto release;
 	}
 
-	if (sap == NULL)
+	if (sap == NULL) {
 		len = 0;		/* Make compiler happy. */
-	else
-		len = sap->sg_len - 2;
+	} else {
+		if (sap->sg_len > NG_NODESIZ +
+		    offsetof(struct sockaddr_ng, sg_data)) {
+			error = EINVAL;
+			goto release;
+		}
+		len = sap->sg_len - offsetof(struct sockaddr_ng, sg_data);
+	}
 
 	/*
 	 * If the user used any of these ways to not specify an address
@@ -987,6 +998,8 @@ ngs_rcvmsg(node_p node, item_p item, hook_p lasthook)
 		m_freem(m);
 		return (ENOBUFS);
 	}
+
+	/* sorwakeup_locked () releases the lock internally. */
 	sorwakeup_locked(so);
 
 	return (error);
@@ -1025,12 +1038,17 @@ ngs_rcvdata(hook_p hook, item_p item)
 	addr->sg_data[addrlen] = '\0';
 
 	/* Try to tell the socket which hook it came in on. */
-	if (sbappendaddr(&so->so_rcv, (struct sockaddr *)addr, m, NULL) == 0) {
+	SOCKBUF_LOCK(&so->so_rcv);
+	if (sbappendaddr_locked(&so->so_rcv, (struct sockaddr *)addr, m,
+	    NULL) == 0) {
+		SOCKBUF_UNLOCK(&so->so_rcv);
 		m_freem(m);
 		TRAP_ERROR;
 		return (ENOBUFS);
 	}
-	sorwakeup(so);
+
+	/* sorwakeup_locked () releases the lock internally. */
+	sorwakeup_locked(so);
 	return (0);
 }
 

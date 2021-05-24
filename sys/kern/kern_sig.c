@@ -1270,6 +1270,9 @@ kern_sigtimedwait(struct thread *td, sigset_t waitset, ksiginfo_t *ksi,
 	ets.tv_nsec = 0;
 	traced = false;
 
+	/* Ensure the sigfastblock value is up to date. */
+	sigfastblock_fetch(td);
+
 	if (timeout != NULL) {
 		if (timeout->tv_nsec >= 0 && timeout->tv_nsec < 1000000000) {
 			timevalid = 1;
@@ -1528,6 +1531,9 @@ kern_sigsuspend(struct thread *td, sigset_t mask)
 {
 	struct proc *p = td->td_proc;
 	int has_sig, sig;
+
+	/* Ensure the sigfastblock value is up to date. */
+	sigfastblock_fetch(td);
 
 	/*
 	 * When returning from sigsuspend, we want
@@ -2229,9 +2235,9 @@ tdsendsignal(struct proc *p, struct thread *td, int sig, ksiginfo_t *ksi)
 		 * is default; don't stop the process below if sleeping,
 		 * and don't clear any pending SIGCONT.
 		 */
-		if ((prop & SIGPROP_TTYSTOP) &&
-		    (p->p_pgrp->pg_jobc == 0) &&
-		    (action == SIG_DFL)) {
+		if ((prop & SIGPROP_TTYSTOP) != 0 &&
+		    (p->p_pgrp->pg_flags & PGRP_ORPHANED) != 0 &&
+		    action == SIG_DFL) {
 			if (ksi && (ksi->ksi_flags & KSI_INS))
 				ksiginfo_tryfree(ksi);
 			return (ret);
@@ -2318,7 +2324,7 @@ tdsendsignal(struct proc *p, struct thread *td, int sig, ksiginfo_t *ksi)
 				thread_unsuspend(p);
 				PROC_SUNLOCK(p);
 				sigqueue_delete(sigqueue, sig);
-				goto out;
+				goto out_cont;
 			}
 			if (action == SIG_CATCH) {
 				/*
@@ -2333,7 +2339,7 @@ tdsendsignal(struct proc *p, struct thread *td, int sig, ksiginfo_t *ksi)
 			 */
 			thread_unsuspend(p);
 			PROC_SUNLOCK(p);
-			goto out;
+			goto out_cont;
 		}
 
 		if (prop & SIGPROP_STOP) {
@@ -2418,6 +2424,9 @@ runfast:
 	PROC_SLOCK(p);
 	thread_unsuspend(p);
 	PROC_SUNLOCK(p);
+out_cont:
+	itimer_proc_continue(p);
+	kqtimer_proc_continue(p);
 out:
 	/* If we jump here, proc slock should not be owned. */
 	PROC_SLOCK_ASSERT(p, MA_NOTOWNED);
@@ -2512,6 +2521,42 @@ tdsigwakeup(struct thread *td, int sig, sig_t action, int intrval)
 out:
 	PROC_SUNLOCK(p);
 	thread_unlock(td);
+}
+
+static void
+ptrace_coredump(struct thread *td)
+{
+	struct proc *p;
+	struct thr_coredump_req *tcq;
+	void *rl_cookie;
+
+	MPASS(td == curthread);
+	p = td->td_proc;
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+	if ((td->td_dbgflags & TDB_COREDUMPRQ) == 0)
+		return;
+	KASSERT((p->p_flag & P_STOPPED_TRACE) != 0, ("not stopped"));
+
+	tcq = td->td_coredump;
+	KASSERT(tcq != NULL, ("td_coredump is NULL"));
+
+	if (p->p_sysent->sv_coredump == NULL) {
+		tcq->tc_error = ENOSYS;
+		goto wake;
+	}
+
+	PROC_UNLOCK(p);
+	rl_cookie = vn_rangelock_wlock(tcq->tc_vp, 0, OFF_MAX);
+
+	tcq->tc_error = p->p_sysent->sv_coredump(td, tcq->tc_vp,
+	    tcq->tc_limit, tcq->tc_flags);
+
+	vn_rangelock_unlock(tcq->tc_vp, rl_cookie);
+	PROC_LOCK(p);
+wake:
+	td->td_dbgflags &= ~TDB_COREDUMPRQ;
+	td->td_coredump = NULL;
+	wakeup(p);
 }
 
 static int
@@ -2641,7 +2686,15 @@ ptracestop(struct thread *td, int sig, ksiginfo_t *si)
 				td->td_dbgflags &= ~TDB_STOPATFORK;
 			}
 stopme:
+			td->td_dbgflags |= TDB_SSWITCH;
 			thread_suspend_switch(td, p);
+			td->td_dbgflags &= ~TDB_SSWITCH;
+			if ((td->td_dbgflags & TDB_COREDUMPRQ) != 0) {
+				PROC_SUNLOCK(p);
+				ptrace_coredump(td);
+				PROC_SLOCK(p);
+				goto stopme;
+			}
 			if (p->p_xthread == td)
 				p->p_xthread = NULL;
 			if (!(p->p_flag & P_TRACED))
@@ -2986,17 +3039,20 @@ issignal(struct thread *td)
 			 * should ignore tty stops.
 			 */
 			if (prop & SIGPROP_STOP) {
-				if (p->p_flag &
-				    (P_TRACED | P_WEXIT | P_SINGLE_EXIT) ||
-				    (p->p_pgrp->pg_jobc == 0 &&
-				     prop & SIGPROP_TTYSTOP))
+				mtx_unlock(&ps->ps_mtx);
+				if ((p->p_flag & (P_TRACED | P_WEXIT |
+				    P_SINGLE_EXIT)) != 0 || ((p->p_pgrp->
+				    pg_flags & PGRP_ORPHANED) != 0 &&
+				    (prop & SIGPROP_TTYSTOP) != 0)) {
+					mtx_lock(&ps->ps_mtx);
 					break;	/* == ignore */
+				}
 				if (TD_SBDRY_INTR(td)) {
 					KASSERT((td->td_flags & TDF_SBDRY) != 0,
 					    ("lost TDF_SBDRY"));
+					mtx_lock(&ps->ps_mtx);
 					return (-1);
 				}
-				mtx_unlock(&ps->ps_mtx);
 				WITNESS_WARN(WARN_GIANTOK | WARN_SLEEPOK,
 				    &p->p_mtx.lock_object, "Catching SIGSTOP");
 				sigqueue_delete(&td->td_sigqueue, sig);
@@ -4215,7 +4271,7 @@ sigfastblock_setpend1(struct thread *td)
 	int res;
 	uint32_t oldval;
 
-	if ((td->td_pflags & TDP_SIGFASTBLOCK) == 0)
+	if ((td->td_pflags & TDP_SIGFASTPENDING) == 0)
 		return;
 	res = fueword32((void *)td->td_sigblock_ptr, &oldval);
 	if (res == -1) {

@@ -18,7 +18,7 @@ PROG=	nvi
 
 CFI_OVERRIDE=-fno-sanitize=cfi-icall
 
-CFLAGS+=	-D__REGEX_PRIVATE
+CFLAGS+=	-D__REGEX_PRIVATE -D_XOPEN_SOURCE_EXTENDED=1
 
 LINKS=	${BINDIR}/${VI} ${BINDIR}/${EX} ${BINDIR}/${VI} ${BINDIR}/${VIEW}
 LINKS+= ${BINDIR}/${VI} ${BINDIR}/vi ${BINDIR}/${EX} ${BINDIR}/ex
@@ -34,7 +34,8 @@ MLINKS+=vi.1 nex.1 vi.1 nview.1 vi.1 nvi.1
 .PATH:	${SRCDIR}/vi
 .PATH:	${SRCDIR}/regex
 
-CFLAGS+=-I${.CURDIR} -I${SRCDIR} -I${SRCDIR}/regex
+CFLAGS+=-I${.CURDIR} -I${SRCDIR} -I${SRCDIR}/regex \
+	-I${.CURDIR}/ex
 
 LIBADD=	util ncursesw
 

@@ -29,6 +29,8 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_pax.h"
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
@@ -315,6 +317,7 @@ sys_modnext(struct thread *td, struct modnext_args *uap)
 	error = priv_check(td, PRIV_KLD_STAT);
 	if (error)
 		return (error);
+	error = 0;
 
 	td->td_retval[0] = -1;
 

@@ -109,7 +109,7 @@ void
 db_ps(db_expr_t addr, bool hasaddr, db_expr_t count, char *modif)
 {
 	struct proc *p;
-	int i, j;
+	int i;
 
 	ps_mode = modif[0] == 'a' ? PRINT_ARGS : PRINT_NONE;
 
@@ -127,14 +127,12 @@ db_ps(db_expr_t addr, bool hasaddr, db_expr_t count, char *modif)
 		db_ps_proc(p);
 
 	/*
-	 * Do zombies.
+	 * Processes such as zombies not in allproc.
 	 */
-	for (i = 0; i < pidhashlock + 1 && !db_pager_quit; i++) {
-		for (j = i; j <= pidhash && !db_pager_quit; j += pidhashlock + 1) {
-			LIST_FOREACH(p, &pidhashtbl[j], p_hash) {
-				if (p->p_state == PRS_ZOMBIE)
-					db_ps_proc(p);
-			}
+	for (i = 0; i <= pidhash && !db_pager_quit; i++) {
+		LIST_FOREACH(p, &pidhashtbl[i], p_hash) {
+			if (p->p_list.le_prev == NULL)
+				db_ps_proc(p);
 		}
 	}
 }
@@ -177,9 +175,9 @@ db_ps_proc(struct proc *p)
 			 */
 			rflag = sflag = dflag = lflag = wflag = 0;
 			FOREACH_THREAD_IN_PROC(p, td) {
-				if (td->td_state == TDS_RUNNING ||
-				    td->td_state == TDS_RUNQ ||
-				    td->td_state == TDS_CAN_RUN)
+				if (TD_GET_STATE(td) == TDS_RUNNING ||
+				    TD_GET_STATE(td) == TDS_RUNQ ||
+				    TD_GET_STATE(td) == TDS_CAN_RUN)
 					rflag++;
 				if (TD_ON_LOCK(td))
 					lflag++;
@@ -271,7 +269,7 @@ dumpthread(volatile struct proc *p, volatile struct thread *td, int all)
 
 	if (all) {
 		db_printf("%6d                  ", td->td_tid);
-		switch (td->td_state) {
+		switch (TD_GET_STATE(td)) {
 		case TDS_RUNNING:
 			snprintf(state, sizeof(state), "Run");
 			break;
@@ -374,7 +372,7 @@ DB_SHOW_COMMAND(thread, db_show_thread)
 	pax_db_printf_flags_td(td, PAX_LOG_DEFAULT);
 #endif
 	db_printf(" state: ");
-	switch (td->td_state) {
+	switch (TD_GET_STATE(td)) {
 	case TDS_INACTIVE:
 		db_printf("INACTIVE\n");
 		break;
@@ -420,7 +418,7 @@ DB_SHOW_COMMAND(thread, db_show_thread)
 		db_printf("}\n");
 		break;
 	default:
-		db_printf("??? (%#x)\n", td->td_state);
+		db_printf("??? (%#x)\n", TD_GET_STATE(td));
 		break;
 	}
 	if (TD_ON_LOCK(td))
@@ -492,6 +490,8 @@ DB_SHOW_COMMAND(proc, db_show_proc)
 		    p->p_leader);
 	if (p->p_sysent != NULL)
 		db_printf(" ABI: %s\n", p->p_sysent->sv_name);
+	db_printf(" flag: %#x ", p->p_flag);
+	db_printf(" flag2: %#x\n", p->p_flag2);
 	if (p->p_args != NULL) {
 		db_printf(" arguments: ");
 		dump_args(p);
@@ -522,7 +522,6 @@ void
 db_findstack_cmd(db_expr_t addr, bool have_addr, db_expr_t dummy3 __unused,
     char *dummy4 __unused)
 {
-	struct proc *p;
 	struct thread *td;
 	vm_offset_t saddr;
 
@@ -533,13 +532,10 @@ db_findstack_cmd(db_expr_t addr, bool have_addr, db_expr_t dummy3 __unused,
 		return;
 	}
 
-	FOREACH_PROC_IN_SYSTEM(p) {
-		FOREACH_THREAD_IN_PROC(p, td) {
-			if (td->td_kstack <= saddr && saddr < td->td_kstack +
-			    PAGE_SIZE * td->td_kstack_pages) {
-				db_printf("Thread %p\n", td);
-				return;
-			}
+	for (td = kdb_thr_first(); td != NULL; td = kdb_thr_next(td)) {
+		if (kstack_contains(td, saddr, 1)) {
+			db_printf("Thread %p\n", td);
+			return;
 		}
 	}
 }

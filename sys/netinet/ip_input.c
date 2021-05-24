@@ -83,6 +83,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/in_cksum.h>
 #include <netinet/ip_carp.h>
 #include <netinet/in_rss.h>
+#include <netinet/ip_mroute.h>
 
 #include <netipsec/ipsec_support.h>
 
@@ -112,8 +113,11 @@ SYSCTL_INT(_net_inet_ip, IPCTL_FORWARDING, forwarding, CTLFLAG_VNET | CTLFLAG_RW
     &VNET_NAME(ipforwarding), 0,
     "Enable IP forwarding between interfaces");
 
-VNET_DEFINE_STATIC(int, ipsendredirects) = 1;	/* XXX */
-#define	V_ipsendredirects	VNET(ipsendredirects)
+/*
+ * Respond with an ICMP host redirect when we forward a packet out of
+ * the same interface on which it was received.  See RFC 792.
+ */
+VNET_DEFINE(int, ipsendredirects) = 1;
 SYSCTL_INT(_net_inet_ip, IPCTL_SENDREDIRECTS, redirect, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(ipsendredirects), 0,
     "Enable sending IP redirects");
@@ -382,7 +386,6 @@ ip_init(void)
 static void
 ip_destroy(void *unused __unused)
 {
-	struct ifnet *ifp;
 	int error;
 
 #ifdef	RSS
@@ -408,10 +411,7 @@ ip_destroy(void *unused __unused)
 	in_ifscrub_all();
 
 	/* Make sure the IPv4 routes are gone as well. */
-	IFNET_RLOCK();
-	CK_STAILQ_FOREACH(ifp, &V_ifnet, if_link)
-		rt_flushifroutes_af(ifp, AF_INET);
-	IFNET_RUNLOCK();
+	rib_flush_routes_family(AF_INET);
 
 	/* Destroy IP reassembly queue. */
 	ipreass_destroy();
@@ -458,6 +458,7 @@ ip_direct_input(struct mbuf *m)
 void
 ip_input(struct mbuf *m)
 {
+	MROUTER_RLOCK_TRACKER;
 	struct rm_priotracker in_ifa_tracker;
 	struct ip *ip = NULL;
 	struct in_ifaddr *ia = NULL;
@@ -577,7 +578,7 @@ tooshort:
 	 * case skip another inbound firewall processing and update
 	 * ip pointer.
 	 */
-	if (V_ipforwarding != 0 && V_ipsendredirects == 0
+	if (V_ipforwarding != 0
 #if defined(IPSEC) || defined(IPSEC_SUPPORT)
 	    && (!IPSEC_ENABLED(ipv4) ||
 	    IPSEC_CAPS(ipv4, m, IPSEC_CAP_OPERABLE) == 0)
@@ -743,14 +744,13 @@ passin:
 		}
 		ia = NULL;
 	}
-	/* RFC 3927 2.7: Do not forward datagrams for 169.254.0.0/16. */
-	if (IN_LINKLOCAL(ntohl(ip->ip_dst.s_addr))) {
-		IPSTAT_INC(ips_cantforward);
-		m_freem(m);
-		return;
-	}
 	if (IN_MULTICAST(ntohl(ip->ip_dst.s_addr))) {
-		if (V_ip_mrouter) {
+		MROUTER_RLOCK();
+		/*
+		 * RFC 3927 2.7: Do not forward multicast packets from
+		 * IN_LINKLOCAL.
+		 */
+		if (V_ip_mrouter && !IN_LINKLOCAL(ntohl(ip->ip_src.s_addr))) {
 			/*
 			 * If we are acting as a multicast router, all
 			 * incoming multicast packets are passed to the
@@ -760,6 +760,7 @@ passin:
 			 * must be discarded, else it may be accepted below.
 			 */
 			if (ip_mforward && ip_mforward(ip, ifp, m, 0) != 0) {
+				MROUTER_RUNLOCK();
 				IPSTAT_INC(ips_cantforward);
 				m_freem(m);
 				return;
@@ -770,10 +771,13 @@ passin:
 			 * all multicast IGMP packets, whether or not this
 			 * host belongs to their destination groups.
 			 */
-			if (ip->ip_p == IPPROTO_IGMP)
+			if (ip->ip_p == IPPROTO_IGMP) {
+				MROUTER_RUNLOCK();
 				goto ours;
+			}
 			IPSTAT_INC(ips_forward);
 		}
+		MROUTER_RUNLOCK();
 		/*
 		 * Assume the packet is for us, to avoid prematurely taking
 		 * a lock on the in_multi hash. Protocols must perform
@@ -785,6 +789,13 @@ passin:
 		goto ours;
 	if (ip->ip_dst.s_addr == INADDR_ANY)
 		goto ours;
+	/* RFC 3927 2.7: Do not forward packets to or from IN_LINKLOCAL. */
+	if (IN_LINKLOCAL(ntohl(ip->ip_dst.s_addr)) ||
+	    IN_LINKLOCAL(ntohl(ip->ip_src.s_addr))) {
+		IPSTAT_INC(ips_cantforward);
+		m_freem(m);
+		return;
+	}
 
 	/*
 	 * Not for us; forward if possible and desirable.
@@ -984,11 +995,7 @@ ip_forward(struct mbuf *m, int srcrt)
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(*sin);
 	sin->sin_addr = ip->ip_dst;
-#ifdef RADIX_MPATH
-	flowid = ntohl(ip->ip_src.s_addr ^ ip->ip_dst.s_addr);
-#else
 	flowid = m->m_pkthdr.flowid;
-#endif
 	ro.ro_nh = fib4_lookup(M_GETFIB(m), ip->ip_dst, 0, NHR_REF, flowid);
 	if (ro.ro_nh != NULL) {
 		ia = ifatoia(ro.ro_nh->nh_ifa);

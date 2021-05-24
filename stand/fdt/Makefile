@@ -21,4 +21,6 @@ CFLAGS+=	-Wformat -Wall
 NOPIE=		1
 .endif
 
+.include "${BOOTSRC}/veriexec.mk"
+
 .include <bsd.lib.mk>

@@ -15,7 +15,9 @@ CFLAGS+=${COPTS}
 
 .if ${MK_ASSERT_DEBUG} == "no"
 CFLAGS+= -DNDEBUG
-NO_WERROR=
+# XXX: shouldn't we ensure that !asserts marks potentially unused variables as
+# __unused instead of disabling -Werror globally?
+MK_WERROR=	no
 .endif
 
 .if defined(DEBUG_FLAGS)
@@ -114,6 +116,13 @@ LDFLAGS+=	-fsanitize-cfi-cross-dso
 .if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
 CFLAGS+=	-mretpoline
 CXXFLAGS+=	-mretpoline
+.endif
+
+.if defined(MK_UNINIT_AUTOINIT) && ${MK_UNINIT_AUTOINIT} != "no"
+CFLAGS+=	-ftrivial-auto-var-init=zero
+CFLAGS+=	-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
+CXXFLAGS+=	-ftrivial-auto-var-init=zero
+CXXFLAGS+=	-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
 .endif
 
 .if defined(MK_BIND_NOW) && ${MK_BIND_NOW} != "no"
@@ -247,7 +256,12 @@ MAN1=	${MAN}
 .if defined(_SKIP_BUILD)
 all:
 .else
+.if target(afterbuild)
+.ORDER: ${PROG} afterbuild
+all: ${PROG} ${SCRIPTS} afterbuild
+.else
 all: ${PROG} ${SCRIPTS}
+.endif
 .if ${MK_MAN} != "no"
 all: all-man
 .endif
@@ -276,11 +290,7 @@ _EXTRADEPEND:
 .else
 	echo ${PROG_FULL}: ${LIBC} ${DPADD} >> ${DEPENDFILE}
 .if defined(PROG_CXX)
-.if ${COMPILER_TYPE} == "clang" && empty(CXXFLAGS:M-stdlib=libstdc++)
 	echo ${PROG_FULL}: ${LIBCPLUSPLUS} >> ${DEPENDFILE}
-.else
-	echo ${PROG_FULL}: ${LIBSTDCPLUSPLUS} >> ${DEPENDFILE}
-.endif
 .endif
 .endif
 .endif	# !defined(NO_EXTRADEPEND)

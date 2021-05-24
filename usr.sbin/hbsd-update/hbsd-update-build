@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2015-2018 HardenedBSD
+# Copyright (c) 2015-2021 HardenedBSD
 # Author: Shawn Webb <shawn.webb@hardenedbsd.org>
 #
 # This work originally sponsored by G2, Inc
@@ -448,6 +448,7 @@ add_extra_files() {
 	local res
 
 	cat <<EOF > ${STAGEDIR}/skip.txt
+./boot/efi
 ./etc
 ./proc
 ./root/.profile
