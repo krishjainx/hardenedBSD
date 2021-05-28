@@ -46,6 +46,7 @@ BSARGS= 	DESTDIR= \
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_CLANG_FORMAT=no
 		MK_LLDB=no MK_TESTS=no \
+		MK_LTLLIB=no \
 		MK_INCLUDES=yes
 
 # We will handle building the toolchain and cross-compiler.

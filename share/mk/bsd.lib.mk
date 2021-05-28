@@ -136,6 +136,12 @@ LDFLAGS+=	-Wl,-z,now
 .endif
 .endif
 
+.if defined(MK_LTOLIB) && ${MK_LTOLIB} != "no"
+CFLAGS+=	-flto
+CXXFLAGS+=	-flto
+LDFLAGS+=	-flto
+.endif
+
 .if defined(MK_SPECTREV1_FIX) && ${MK_SPECTREV1_FIX} != "no"
 CFLAGS+=	-mspeculative-load-hardening
 .endif

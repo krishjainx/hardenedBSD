@@ -1,3 +1,9 @@
+[20210528] Introduce LTO libs on amd64
+__HardenedBSD_version = 1400001
+
+	As an initial first step towards supporting Cross-DSO CFI,
+	build both static and shared libraries with LTO.
+
 [20200221] Removal of LibreSSL and OpenNTPD
 __HardenedBSD_version = 1300061
 

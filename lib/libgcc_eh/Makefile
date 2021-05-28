@@ -6,6 +6,7 @@ PACKAGE=	clibs
 LIB=		gcc_eh
 NO_PIC=
 MK_SSP=		no
+MK_LTOLIB=	no
 WARNS?=	2
 
 SRCS_EXC+=	int_util.c
