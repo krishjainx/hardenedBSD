@@ -12,6 +12,7 @@ SHLIBDIR=	${LIBDIR}
 
 NO_PIC=
 MK_PROFILE=	no
+MK_LTOLIB=	no
 
 WARNS?=		0
 

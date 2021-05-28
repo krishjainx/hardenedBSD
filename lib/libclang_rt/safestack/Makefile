@@ -3,6 +3,7 @@
 .include <bsd.init.mk>
 
 NOCFI=		yes
+MK_LTOLIB=	no
 
 LIB=		clang_rt.safestack-${CRTARCH}
 

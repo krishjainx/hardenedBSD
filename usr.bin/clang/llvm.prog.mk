@@ -29,4 +29,10 @@ LIBADD+=	z
 
 NOCFI=		yes
 
+.if ${MK_LTOLIB} != "no"
+CFLAGS+=	-flto
+CXXFLAGS+=	-flto
+LDFLAGS+=	-flto
+.endif
+
 .include <bsd.prog.mk>
