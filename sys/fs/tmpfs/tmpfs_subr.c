@@ -838,7 +838,7 @@ loop:
 		 * Make sure the vnode is still there after
 		 * getting the interlock to avoid racing a free.
 		 */
-		if (node->tn_vnode == NULL || node->tn_vnode != vp) {
+		if (node->tn_vnode != vp) {
 			vput(vp);
 			TMPFS_NODE_LOCK(node);
 			goto loop;
@@ -1443,10 +1443,7 @@ tmpfs_dir_getdotdotdent(struct tmpfs_mount *tm, struct tmpfs_node *node,
 	if (parent == NULL)
 		return (ENOENT);
 
-	TMPFS_NODE_LOCK(parent);
 	dent.d_fileno = parent->tn_id;
-	TMPFS_NODE_UNLOCK(parent);
-
 	dent.d_off = next;
 	dent.d_type = DT_DIR;
 	dent.d_namlen = 2;

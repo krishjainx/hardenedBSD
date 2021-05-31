@@ -6,6 +6,8 @@ NO_WMISSING_VARIABLE_DECLARATIONS=
 
 .include <src.opts.mk>
 
+MK_LTOLIB=	no
+
 .if !defined(BUILDING_TESTS)
 
 OBJS+=	Scrt1.o crt1.o gcrt1.o

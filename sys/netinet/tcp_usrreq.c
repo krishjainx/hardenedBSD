@@ -1818,11 +1818,14 @@ tcp_ctloutput(struct socket *so, struct sockopt *sopt)
 		 * new one already.
 		 */
 		if (tp->t_fb->tfb_tcp_fb_fini) {
+			struct epoch_tracker et;
 			/*
 			 * Tell the stack to cleanup with 0 i.e.
 			 * the tcb is not going away.
 			 */
+			NET_EPOCH_ENTER(et);
 			(*tp->t_fb->tfb_tcp_fb_fini)(tp, 0);
+			NET_EPOCH_EXIT(et);
 		}
 #ifdef TCPHPTS
 		/* Assure that we are not on any hpts */
@@ -2636,6 +2639,22 @@ tcp_usrclosed(struct tcpcb *tp)
 	case TCPS_CLOSE_WAIT:
 		tcp_state_change(tp, TCPS_LAST_ACK);
 		break;
+	}
+	if ((tp->t_state == TCPS_LAST_ACK) &&
+	    (tp->t_flags & TF_SENTFIN)) {
+		/*
+		 * If we have reached LAST_ACK, and
+		 * we sent a FIN (e.g. via MSG_EOR), then
+		 * we really should move to either FIN_WAIT_1
+		 * or FIN_WAIT_2 depending on snd_max/snd_una.
+		 */
+		if (tp->snd_una == tp->snd_max) {
+			/* The FIN is acked */
+			tcp_state_change(tp, TCPS_FIN_WAIT_2);
+		} else {
+			/* The FIN is still outstanding */
+			tcp_state_change(tp, TCPS_FIN_WAIT_1);
+		}
 	}
 	if (tp->t_state >= TCPS_FIN_WAIT_2) {
 		soisdisconnected(tp->t_inpcb->inp_socket);

@@ -5,6 +5,7 @@
 PACKAGE=	lib${LIB}
 LIB=		compiler_rt
 MK_SSP=		no
+MK_LTOLIB=	no
 NO_PIC=
 MK_CROSS_DSO_CFI=	no
 WARNS?=		2

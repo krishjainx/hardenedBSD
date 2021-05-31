@@ -311,7 +311,7 @@ while [ 1 ]; do
 			exit 1
 		fi
 		BOOTDISKS="-d ${isofile}"
-		installer_opt="-s 31:0,ahci-cd,${isofile}"
+		installer_opt="-s 30:0,ahci-cd,${isofile}"
 	else
 		BOOTDISKS=""
 		i=0

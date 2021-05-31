@@ -7,6 +7,7 @@ SHLIBDIR?=	/lib
 .include <bsd.opts.mk>
 
 MK_SSP=		no
+MK_LTOLIB=	no
 WARNS?=	2
 
 LDFLAGS+=	-nodefaultlibs
