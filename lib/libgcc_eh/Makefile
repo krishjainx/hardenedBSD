@@ -6,11 +6,7 @@ PACKAGE=	clibs
 LIB=		gcc_eh
 NO_PIC=
 MK_SSP=		no
-<<<<<<< HEAD
-MK_CROSS_DSO_CFI=	no
-=======
 MK_LTOLIB=	no
->>>>>>> origin/hardened/current/master
 WARNS?=	2
 
 SRCS_EXC+=	int_util.c

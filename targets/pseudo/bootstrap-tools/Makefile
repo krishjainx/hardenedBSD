@@ -46,13 +46,9 @@ BSARGS= 	DESTDIR= \
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_CLANG_FORMAT=no
 		MK_LLDB=no MK_TESTS=no \
-<<<<<<< HEAD
 		MK_INCLUDES=yes MK_RETPOLINE=no MK_SAFESTACK=no \
-		MK_CFI=no MK_CROSS_DSO_CFI=no
-=======
-		MK_LTLLIB=no \
+		MK_CFI=no MK_CROSS_DSO_CFI=no MK_LTLLIB=no \
 		MK_INCLUDES=yes
->>>>>>> origin/hardened/current/master
 
 # We will handle building the toolchain and cross-compiler.
 BSARGS+= MK_CROSS_COMPILER=no MK_CLANG=no
