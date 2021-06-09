@@ -367,20 +367,20 @@ rl_add_syctl_entries(struct sysctl_oid *rl_sysctl_root, struct tcp_rate_set *rs)
 				       OID_AUTO, "pacetime", CTLFLAG_RD,
 				       &rs->rs_rlt[i].time_between, 0,
 				       "Time hardware inserts between 1500 byte sends");
-			SYSCTL_ADD_U64(&rs->sysctl_ctx,
+			SYSCTL_ADD_LONG(&rs->sysctl_ctx,
 				       SYSCTL_CHILDREN(rl_rate_num),
 				       OID_AUTO, "rate", CTLFLAG_RD,
-				       &rs->rs_rlt[i].rate, 0,
+				       &rs->rs_rlt[i].rate,
 				       "Rate in bytes per second");
-			SYSCTL_ADD_U64(&rs->sysctl_ctx,
+			SYSCTL_ADD_LONG(&rs->sysctl_ctx,
 				       SYSCTL_CHILDREN(rl_rate_num),
 				       OID_AUTO, "using", CTLFLAG_RD,
-				       &rs->rs_rlt[i].using, 0,
+				       &rs->rs_rlt[i].using,
 				       "Number of flows using");
-			SYSCTL_ADD_U64(&rs->sysctl_ctx,
+			SYSCTL_ADD_LONG(&rs->sysctl_ctx,
 				       SYSCTL_CHILDREN(rl_rate_num),
 				       OID_AUTO, "enobufs", CTLFLAG_RD,
-				       &rs->rs_rlt[i].rs_num_enobufs, 0,
+				       &rs->rs_rlt[i].rs_num_enobufs,
 				       "Number of enobufs logged on this rate");
 
 		}
@@ -1214,9 +1214,11 @@ use_real_interface:
 			rte = NULL;
 		} else {
 			KASSERT((inp->inp_snd_tag != NULL) ,
-				("Setup rate has no snd_tag inp:%p rte:%p rate:%lu rs:%p",
-				 inp, rte, rte->rate, rs));
+				("Setup rate has no snd_tag inp:%p rte:%p rate:%llu rs:%p",
+				 inp, rte, (unsigned long long)rte->rate, rs));
+#ifdef INET
 			counter_u64_add(rate_limit_new, 1);
+#endif
 		}
 	}
 	if (rte) {
@@ -1462,8 +1464,11 @@ tcp_chg_pacing_rate(const struct tcp_hwrate_limit_table *crte,
 		if (error)
 			*error = err;
 		return (NULL);
-	} else
+	} else {
+#ifdef INET
 		counter_u64_add(rate_limit_chg, 1);
+#endif
+	}
 	if (error)
 		*error = 0;
 	tp->t_pacing_rate = nrte->rate;

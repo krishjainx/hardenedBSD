@@ -518,6 +518,10 @@ static void
 bbr_log_pacing_delay_calc(struct tcp_bbr *bbr, uint16_t gain, uint32_t len,
     uint32_t cts, uint32_t usecs, uint64_t bw, uint32_t override, int mod);
 
+static int
+bbr_ctloutput(struct socket *so, struct sockopt *sopt, struct inpcb *inp,
+    struct tcpcb *tp);
+
 static inline uint8_t
 bbr_state_val(struct tcp_bbr *bbr)
 {
@@ -3930,6 +3934,9 @@ bbr_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type, struct bbr_s
 	struct tcp_bbr *bbr;
 
 	INP_WLOCK_ASSERT(tp->t_inpcb);
+#ifdef STATS
+	stats_voi_update_abs_u32(tp->t_stats, VOI_TCP_CSIG, type);
+#endif
 	bbr = (struct tcp_bbr *)tp->t_fb_ptr;
 	switch (type) {
 	case CC_NDUPACK:
@@ -4403,6 +4410,7 @@ bbr_clone_rsm(struct tcp_bbr *bbr, struct bbr_sendmap *nrsm, struct bbr_sendmap 
 	nrsm->r_start = start;
 	nrsm->r_end = rsm->r_end;
 	nrsm->r_rtr_cnt = rsm->r_rtr_cnt;
+	nrsm-> r_rtt_not_allowed = rsm->r_rtt_not_allowed;
 	nrsm->r_flags = rsm->r_flags;
 	/* We don't transfer forward the SYN flag */
 	nrsm->r_flags &= ~BBR_HAS_SYN;
@@ -6430,65 +6438,6 @@ tcp_bbr_xmit_timer_commit(struct tcp_bbr *bbr, struct tcpcb *tp, uint32_t cts)
 }
 
 static void
-bbr_earlier_retran(struct tcpcb *tp, struct tcp_bbr *bbr, struct bbr_sendmap *rsm,
-		   uint32_t t, uint32_t cts, int ack_type)
-{
-	/*
-	 * For this RSM, we acknowledged the data from a previous
-	 * transmission, not the last one we made. This means we did a false
-	 * retransmit.
-	 */
-	if (rsm->r_flags & BBR_HAS_FIN) {
-		/*
-		 * The sending of the FIN often is multiple sent when we
-		 * have everything outstanding ack'd. We ignore this case
-		 * since its over now.
-		 */
-		return;
-	}
-	if (rsm->r_flags & BBR_TLP) {
-		/*
-		 * We expect TLP's to have this occur often
-		 */
-		bbr->rc_tlp_rtx_out = 0;
-		return;
-	}
-	if (ack_type != BBR_CUM_ACKED) {
-		/*
-		 * If it was not a cum-ack we
-		 * don't really know for sure since
-		 * the timestamp could be from some
-		 * other transmission.
-		 */
-		return;
-	}
-
-	if (rsm->r_flags & BBR_WAS_SACKPASS) {
-		/*
-		 * We retransmitted based on a sack and the earlier
-		 * retransmission ack'd it - re-ordering is occuring.
-		 */
-		BBR_STAT_INC(bbr_reorder_seen);
-		bbr->r_ctl.rc_reorder_ts = cts;
-	}
-	/* Back down the loss count */
-	if (rsm->r_flags & BBR_MARKED_LOST) {
-		bbr->r_ctl.rc_lost -= rsm->r_end - rsm->r_start;
-		bbr->r_ctl.rc_lost_bytes -= rsm->r_end - rsm->r_start;
-		rsm->r_flags &= ~BBR_MARKED_LOST;
-		if (SEQ_GT(bbr->r_ctl.rc_lt_lost, bbr->r_ctl.rc_lost))
-			/* LT sampling also needs adjustment */
-			bbr->r_ctl.rc_lt_lost = bbr->r_ctl.rc_lost;
-	}
-	/***** RRS HERE ************************/
-	/* Do we need to do this???            */
-	/* bbr_reset_lt_bw_sampling(bbr, cts); */
-	/***** RRS HERE ************************/
-	BBR_STAT_INC(bbr_badfr);
-	BBR_STAT_ADD(bbr_badfr_bytes, (rsm->r_end - rsm->r_start));
-}
-
-static void
 bbr_set_reduced_rtt(struct tcp_bbr *bbr, uint32_t cts, uint32_t line)
 {
 	bbr->r_ctl.rc_rtt_shrinks = cts;
@@ -6869,6 +6818,10 @@ bbr_update_rtt(struct tcpcb *tp, struct tcp_bbr *bbr,
 		/* Already done */
 		return (0);
 	}
+	if (rsm->r_rtt_not_allowed) {
+		/* Not allowed */
+		return (0);
+	}
 	if (rsm->r_rtr_cnt == 1) {
 		/*
 		 * Only one transmit. Hopefully the normal case.
@@ -6926,7 +6879,7 @@ bbr_update_rtt(struct tcpcb *tp, struct tcp_bbr *bbr,
 						    rsm->r_tim_lastsent[i], ack_type, to);
 				if ((i + 1) < rsm->r_rtr_cnt) {
 					/* Likely */
-					bbr_earlier_retran(tp, bbr, rsm, t, cts, ack_type);
+					return (0);
 				} else if (rsm->r_flags & BBR_TLP) {
 					bbr->rc_tlp_rtx_out = 0;
 				}
@@ -6974,7 +6927,7 @@ bbr_update_rtt(struct tcpcb *tp, struct tcp_bbr *bbr,
 				t = 1;
 			bbr_update_bbr_info(bbr, rsm, t, cts, to->to_tsecr, uts, BBR_RTT_BY_EARLIER_RET,
 					    rsm->r_tim_lastsent[i], ack_type, to);
-			bbr_earlier_retran(tp, bbr, rsm, t, cts, ack_type);
+			return (0);
 		} else {
 			/*
 			 * Too many prior transmissions, just
@@ -8368,6 +8321,7 @@ bbr_process_data(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			 * trimming from the head.
 			 */
 			tcp_seq temp = save_start;
+
 			thflags = tcp_reass(tp, th, &temp, &tlen, m);
 			tp->t_flags |= TF_ACKNOW;
 		}
@@ -10207,7 +10161,7 @@ bbr_init(struct tcpcb *tp)
 			tp->t_fb_ptr = NULL;
 			return (ENOMEM);
 		}
-		rsm->r_flags = BBR_OVERMAX;
+		rsm->r_rtt_not_allowed = 1;
 		rsm->r_tim_lastsent[0] = cts;
 		rsm->r_rtr_cnt = 1;
 		rsm->r_rtr_bytes = 0;
@@ -10320,6 +10274,10 @@ bbr_fini(struct tcpcb *tp, int32_t tcb_is_purged)
 			counter_u64_add(bbr_flows_whdwr_pacing, -1);
 		else
 			counter_u64_add(bbr_flows_nohdwr_pacing, -1);
+		if (bbr->r_ctl.crte != NULL) {
+			tcp_rel_pacing_rate(bbr->r_ctl.crte, tp);
+			bbr->r_ctl.crte = NULL;
+		}
 		rsm = TAILQ_FIRST(&bbr->r_ctl.rc_map);
 		while (rsm) {
 			TAILQ_REMOVE(&bbr->r_ctl.rc_map, rsm, r_next);
@@ -13401,7 +13359,7 @@ send:
 	if (isipv6) {
 		ip6 = mtod(m, struct ip6_hdr *);
 		if (tp->t_port) {
-			udp = (struct udphdr *)((caddr_t)ip6 + ipoptlen + sizeof(struct ip6_hdr));
+			udp = (struct udphdr *)((caddr_t)ip6 + sizeof(struct ip6_hdr));
 			udp->uh_sport = htons(V_tcp_udp_tunneling_port);
 			udp->uh_dport = tp->t_port;
 			ulen = hdrlen + len - sizeof(struct ip6_hdr);
@@ -13419,7 +13377,7 @@ send:
 		ipov = (struct ipovly *)ip;
 #endif
 		if (tp->t_port) {
-			udp = (struct udphdr *)((caddr_t)ip + ipoptlen + sizeof(struct ip));
+			udp = (struct udphdr *)((caddr_t)ip + sizeof(struct ip));
 			udp->uh_sport = htons(V_tcp_udp_tunneling_port);
 			udp->uh_dport = tp->t_port;
 			ulen = hdrlen + len - sizeof(struct ip);
@@ -13463,15 +13421,6 @@ send:
 				th->th_seq = htonl(tp->snd_max);
 				bbr_seq = tp->snd_max;
 			}
-		} else if (flags & TH_RST) {
-			/*
-			 * For a Reset send the last cum ack in sequence
-			 * (this like any other choice may still generate a
-			 * challenge ack, if a ack-update packet is in
-			 * flight).
-			 */
-			th->th_seq = htonl(tp->snd_una);
-			bbr_seq = tp->snd_una;
 		} else {
 			/*
 			 * len == 0 and not persist we use snd_max, sending
@@ -14253,6 +14202,33 @@ bbr_mtu_chg(struct tcpcb *tp)
 	}
 }
 
+static int
+bbr_pru_options(struct tcpcb *tp, int flags)
+{
+	if (flags & PRUS_OOB)
+		return (EOPNOTSUPP);
+	return (0);
+}
+
+struct tcp_function_block __tcp_bbr = {
+	.tfb_tcp_block_name = __XSTRING(STACKNAME),
+	.tfb_tcp_output = bbr_output,
+	.tfb_do_queued_segments = ctf_do_queued_segments,
+	.tfb_do_segment_nounlock = bbr_do_segment_nounlock,
+	.tfb_tcp_do_segment = bbr_do_segment,
+	.tfb_tcp_ctloutput = bbr_ctloutput,
+	.tfb_tcp_fb_init = bbr_init,
+	.tfb_tcp_fb_fini = bbr_fini,
+	.tfb_tcp_timer_stop_all = bbr_stopall,
+	.tfb_tcp_timer_activate = bbr_timer_activate,
+	.tfb_tcp_timer_active = bbr_timer_active,
+	.tfb_tcp_timer_stop = bbr_timer_stop,
+	.tfb_tcp_rexmit_tmr = bbr_remxt_tmr,
+	.tfb_tcp_handoff_ok = bbr_handoff_ok,
+	.tfb_tcp_mtu_chg = bbr_mtu_chg,
+	.tfb_pru_options = bbr_pru_options,
+};
+
 /*
  * bbr_ctloutput() must drop the inpcb lock before performing copyin on
  * socket option arguments.  When it re-acquires the lock after the copy, it
@@ -14325,6 +14301,10 @@ bbr_set_sockopt(struct socket *so, struct sockopt *sopt,
 		return (ECONNRESET);
 	}
 	tp = intotcpcb(inp);
+	if (tp->t_fb != &__tcp_bbr) {
+		INP_WUNLOCK(inp);
+		return (ENOPROTOOPT);
+	}
 	bbr = (struct tcp_bbr *)tp->t_fb_ptr;
 	switch (sopt->sopt_name) {
 	case TCP_BBR_PACE_PER_SEC:
@@ -14536,9 +14516,9 @@ bbr_set_sockopt(struct socket *so, struct sockopt *sopt,
 		} else {
 			bbr->bbr_hdw_pace_ena = 0;
 #ifdef RATELIMIT
-			if (bbr->bbr_hdrw_pacing) {
-				bbr->bbr_hdrw_pacing = 0;
-				in_pcbdetach_txrtlmt(bbr->rc_inp);
+			if (bbr->r_ctl.crte != NULL) {
+				tcp_rel_pacing_rate(bbr->r_ctl.crte, tp);
+				bbr->r_ctl.crte = NULL;
 			}
 #endif
 		}
@@ -14827,33 +14807,6 @@ out:
 	INP_WUNLOCK(inp);
 	return (error);
 }
-
-static int
-bbr_pru_options(struct tcpcb *tp, int flags)
-{
-	if (flags & PRUS_OOB)
-		return (EOPNOTSUPP);
-	return (0);
-}
-
-struct tcp_function_block __tcp_bbr = {
-	.tfb_tcp_block_name = __XSTRING(STACKNAME),
-	.tfb_tcp_output = bbr_output,
-	.tfb_do_queued_segments = ctf_do_queued_segments,
-	.tfb_do_segment_nounlock = bbr_do_segment_nounlock,
-	.tfb_tcp_do_segment = bbr_do_segment,
-	.tfb_tcp_ctloutput = bbr_ctloutput,
-	.tfb_tcp_fb_init = bbr_init,
-	.tfb_tcp_fb_fini = bbr_fini,
-	.tfb_tcp_timer_stop_all = bbr_stopall,
-	.tfb_tcp_timer_activate = bbr_timer_activate,
-	.tfb_tcp_timer_active = bbr_timer_active,
-	.tfb_tcp_timer_stop = bbr_timer_stop,
-	.tfb_tcp_rexmit_tmr = bbr_remxt_tmr,
-	.tfb_tcp_handoff_ok = bbr_handoff_ok,
-	.tfb_tcp_mtu_chg = bbr_mtu_chg,
-	.tfb_pru_options = bbr_pru_options,
-};
 
 static const char *bbr_stack_names[] = {
 	__XSTRING(STACKNAME),
