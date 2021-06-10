@@ -176,7 +176,6 @@ __DEFAULT_YES_OPTIONS = \
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
     STATS \
-    SVNLITE \
     SYSCONS \
     SYSTEM_COMPILER \
     SYSTEM_LINKER \
@@ -224,6 +223,7 @@ __DEFAULT_NO_OPTIONS = \
     SORT_THREADS \
     SPECTREV1_FIX \
     SVN \
+    SVNLITE \
     ZONEINFO_LEAPSECONDS_SUPPORT \
 
 # LEFT/RIGHT. Left options which default to "yes" unless their corresponding
