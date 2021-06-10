@@ -91,6 +91,7 @@ cddl/dev/dtrace/x86/dis_tables.c			optional dtrace_fbt | dtraceall compile-with 
 cddl/dev/dtrace/x86/instr_size.c			optional dtrace_fbt | dtraceall compile-with "${DTRACE_C}"
 compat/linprocfs/linprocfs.c	optional linprocfs
 compat/linsysfs/linsysfs.c	optional linsysfs
+compat/linux/linux_dummy.c	optional compat_linux
 compat/linux/linux_event.c	optional compat_linux
 compat/linux/linux_emul.c	optional compat_linux
 compat/linux/linux_errno.c	optional compat_linux
@@ -528,7 +529,7 @@ i386/i386/vm86.c		standard
 i386/i386/vm_machdep.c		standard
 i386/linux/imgact_linux.c	optional compat_linux
 i386/linux/linux_copyout.c	optional compat_linux
-i386/linux/linux_dummy.c	optional compat_linux
+i386/linux/linux_dummy_machdep.c	optional compat_linux
 i386/linux/linux_machdep.c	optional compat_linux
 i386/linux/linux_ptrace.c	optional compat_linux
 i386/linux/linux_sysent.c	optional compat_linux
@@ -592,6 +593,7 @@ x86/isa/isa.c			optional isa
 x86/isa/isa_dma.c		optional isa
 x86/isa/nmi.c			standard
 x86/isa/orm.c			optional isa
+x86/linux/linux_dummy_x86.c	optional compat_linux
 x86/pci/pci_bus.c		optional pci
 x86/pci/qpi.c			optional pci
 x86/x86/autoconf.c		standard
