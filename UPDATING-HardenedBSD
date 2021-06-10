@@ -1,5 +1,5 @@
-[20210528] Introduce LTO libs on amd64
-__HardenedBSD_version = 1400001
+[20210610] Introduce LTO libs on amd64
+__HardenedBSD_version = 1300062
 
 	As an initial first step towards supporting Cross-DSO CFI,
 	build both static and shared libraries with LTO.
