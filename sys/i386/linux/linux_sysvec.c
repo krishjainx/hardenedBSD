@@ -840,8 +840,6 @@ linux_get_machine(const char **dst)
 	}
 }
 
-<<<<<<< HEAD
-=======
 struct sysentvec linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,
 	.sv_table	= linux_sysent,
@@ -879,7 +877,6 @@ struct sysentvec linux_sysvec = {
 };
 INIT_SYSENTVEC(aout_sysvec, &linux_sysvec);
 
->>>>>>> origin/freebsd/13-stable/main
 struct sysentvec elf_linux_sysvec = {
 	.sv_size	= LINUX_SYS_MAXSYSCALL,
 	.sv_table	= linux_sysent,
