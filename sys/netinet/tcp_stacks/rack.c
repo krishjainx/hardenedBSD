@@ -589,8 +589,6 @@ rack_set_cc_pacing(struct tcp_rack *rack)
 	rack->rc_pacing_cc_set = 1;
 	if (strcmp(tp->cc_algo->name, CCALGONAME_NEWRENO) != 0) {
 		/* Not new-reno we can't play games with beta! */
-		printf("cc_algo:%s is not NEWRENO:%s\n",
-		       tp->cc_algo->name, CCALGONAME_NEWRENO);
 		goto out;
 	}
 	ptr = ((struct newreno *)tp->ccv->cc_data);
@@ -17673,9 +17671,11 @@ send:
 		th = rack->r_ctl.fsb.th;
 		udp = rack->r_ctl.fsb.udp;
 		if (udp) {
+#ifdef INET6
 			if (isipv6)
 				ulen = hdrlen + len - sizeof(struct ip6_hdr);
 			else
+#endif				/* INET6 */
 				ulen = hdrlen + len - sizeof(struct ip);
 			udp->uh_ulen = htons(ulen);
 		}
