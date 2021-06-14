@@ -633,6 +633,7 @@ SRCS_EXT+=	ExecutionEngine/Orc/OrcABISupport.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/RTDyldObjectLinkingLayer.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/Shared/OrcError.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/Shared/RPCError.cpp
+SRCS_EXT+=	ExecutionEngine/Orc/Shared/TargetProcessControlTypes.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/Speculation.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/TargetProcess/RegisterEHFrames.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/TargetProcess/TargetExecutionUtils.cpp
