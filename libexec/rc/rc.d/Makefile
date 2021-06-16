@@ -85,6 +85,7 @@ CONFS=	DAEMON \
 	pf \
 	pflog \
 	pfsync \
+	powerd \
 	ppp \
 	pppoed \
 	pwcheck \
@@ -140,10 +141,6 @@ ACCTPACKAGE=	acct
 CONFGROUPS+=	ACPI
 ACPI=		power_profile
 ACPIPACKAGE=	acpi
-.endif
-
-.if ${MK_ACPI} != "no" || ${MK_APM} != "no"
-CONFS+=		powerd
 .endif
 
 .if ${MK_AMD} != "no"
