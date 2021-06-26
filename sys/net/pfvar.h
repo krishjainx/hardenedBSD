@@ -50,6 +50,13 @@
 
 #include <net/radix.h>
 #include <netinet/in.h>
+#ifdef _KERNEL
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
+#endif
 
 #include <netpfil/pf/pf.h>
 #include <netpfil/pf/pf_altq.h>
@@ -896,6 +903,7 @@ struct pfi_kkif {
 #define	PFI_IFLAG_REFS		0x0001	/* has state references */
 #define PFI_IFLAG_SKIP		0x0100	/* skip filtering on interface */
 
+#ifdef _KERNEL
 struct pf_pdesc {
 	struct {
 		int	 done;
@@ -903,14 +911,14 @@ struct pf_pdesc {
 		gid_t	 gid;
 	}		 lookup;
 	u_int64_t	 tot_len;	/* Make Mickey money */
-	union {
-		struct tcphdr		*tcp;
-		struct udphdr		*udp;
-		struct icmp		*icmp;
+	union pf_headers {
+		struct tcphdr		tcp;
+		struct udphdr		udp;
+		struct icmp		icmp;
 #ifdef INET6
-		struct icmp6_hdr	*icmp6;
+		struct icmp6_hdr	icmp6;
 #endif /* INET6 */
-		void			*any;
+		char any[0];
 	} hdr;
 
 	struct pf_krule	*nat_rule;	/* nat/rdr rule applied to packet */
@@ -935,6 +943,7 @@ struct pf_pdesc {
 	u_int8_t	 sidx;		/* key index for source */
 	u_int8_t	 didx;		/* key index for destination */
 };
+#endif
 
 /* flags for RDR options */
 #define PF_DPORT_RANGE	0x01		/* Dest port uses range */
