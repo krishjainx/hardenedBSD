@@ -4,15 +4,11 @@
 PACKAGE=runtime
 PROG=	md5
 
-<<<<<<< HEAD
 CFI_OVERRIDE=-fno-sanitize=cfi-icall
 
-LINKS=	${BINDIR}/md5 ${BINDIR}/rmd160 \
-=======
 LINKS=	${BINDIR}/md5 ${BINDIR}/md5sum \
 	${BINDIR}/md5 ${BINDIR}/rmd160 \
 	${BINDIR}/md5 ${BINDIR}/rmd160sum \
->>>>>>> origin/freebsd/13-stable/main
 	${BINDIR}/md5 ${BINDIR}/sha1 \
 	${BINDIR}/md5 ${BINDIR}/sha1sum \
 	${BINDIR}/md5 ${BINDIR}/sha224 \
