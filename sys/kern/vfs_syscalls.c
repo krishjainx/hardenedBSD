@@ -1331,6 +1331,7 @@ kern_mknodat(struct thread *td, int fd, const char *path, enum uio_seg pathseg,
 	}
 	if (error != 0)
 		return (error);
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, CREATE, LOCKPARENT | SAVENAME | AUDITVNODE1 |
@@ -1439,6 +1440,7 @@ kern_mkfifoat(struct thread *td, int fd, const char *path,
 	int error;
 
 	AUDIT_ARG_MODE(mode);
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, CREATE, LOCKPARENT | SAVENAME | AUDITVNODE1 |
@@ -1579,6 +1581,7 @@ kern_linkat(struct thread *td, int fd1, int fd2, const char *path1,
 	struct nameidata nd;
 	int error;
 
+	NDPREINIT(&nd);
 	do {
 		bwillwrite();
 		NDINIT_ATRIGHTS(&nd, LOOKUP, follow | AUDITVNODE1, segflag,
@@ -1726,6 +1729,7 @@ kern_symlinkat(struct thread *td, const char *path1, int fd, const char *path2,
 		syspath = tmppath;
 	}
 	AUDIT_ARG_TEXT(syspath);
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, CREATE, LOCKPARENT | SAVENAME | AUDITVNODE1 |
@@ -1790,6 +1794,7 @@ sys_undelete(struct thread *td, struct undelete_args *uap)
 	struct nameidata nd;
 	int error;
 
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT(&nd, DELETE, LOCKPARENT | DOWHITEOUT | AUDITVNODE1,
@@ -1903,6 +1908,7 @@ kern_funlinkat(struct thread *td, int dfd, const char *path, int fd,
 			return (error);
 	}
 
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, DELETE, LOCKPARENT | LOCKLEAF | AUDITVNODE1 |
@@ -3437,6 +3443,7 @@ kern_truncate(struct thread *td, const char *path, enum uio_seg pathseg,
 
 	if (length < 0)
 		return (EINVAL);
+	NDPREINIT(&nd);
 retry:
 	NDINIT(&nd, LOOKUP, FOLLOW | AUDITVNODE1, pathseg, path, td);
 	if ((error = namei(&nd)) != 0)
@@ -3804,6 +3811,7 @@ kern_mkdirat(struct thread *td, int fd, const char *path, enum uio_seg segflg,
 	int error;
 
 	AUDIT_ARG_MODE(mode);
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, CREATE, LOCKPARENT | SAVENAME | AUDITVNODE1 |
@@ -3874,6 +3882,7 @@ kern_frmdirat(struct thread *td, int dfd, const char *path, int fd,
 			return (error);
 	}
 
+	NDPREINIT(&nd);
 restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, DELETE, LOCKPARENT | LOCKLEAF | AUDITVNODE1 |
