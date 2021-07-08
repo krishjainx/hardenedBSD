@@ -56,6 +56,11 @@
 #define TSTMP_LRO		0x0100
 #define TSTMP_HDWR		0x0200
 #define HAS_TSTMP		0x0400
+/*
+ * Default number of interrupts on the same cpu in a row
+ * that will cause us to declare a "affinity cpu".
+ */
+#define TCP_LRO_CPU_DECLARATION_THRESH 50
 
 struct inpcb;
 
@@ -140,7 +145,7 @@ struct lro_entry {
 	uint16_t		uncompressed;
 	uint16_t		window;
 	uint16_t		timestamp;	/* flag, not a TCP hdr field. */
-	sbintime_t		alloc_time;	/* time when entry was allocated */
+	struct bintime		alloc_time;	/* time when entry was allocated */
 };
 
 LIST_HEAD(lro_head, lro_entry);
@@ -154,7 +159,7 @@ struct lro_mbuf_sort {
 struct lro_ctrl {
 	struct ifnet	*ifp;
 	struct lro_mbuf_sort *lro_mbuf_data;
-	sbintime_t	lro_last_queue_time;	/* last time data was queued */
+	struct bintime	lro_last_queue_time;	/* last time data was queued */
 	uint64_t	lro_queued;
 	uint64_t	lro_flushed;
 	uint64_t	lro_bad_csum;
@@ -162,12 +167,15 @@ struct lro_ctrl {
 	unsigned	lro_mbuf_count;
 	unsigned	lro_mbuf_max;
 	unsigned short	lro_ackcnt_lim;		/* max # of aggregated ACKs */
+	unsigned short	lro_cpu;		/* Guess at the cpu we have affinity too */
 	unsigned 	lro_length_lim;		/* max len of aggregated data */
-
 	u_long		lro_hashsz;
+	uint32_t	lro_last_cpu;
+	uint32_t 	lro_cnt_of_same_cpu;
 	struct lro_head	*lro_hash;
 	struct lro_head	lro_active;
 	struct lro_head	lro_free;
+	uint8_t		lro_cpu_is_set;		/* Flag to say its ok to set the CPU on the inp */
 };
 
 struct tcp_ackent {

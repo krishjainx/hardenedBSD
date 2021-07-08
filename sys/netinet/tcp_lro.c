@@ -107,6 +107,11 @@ SYSCTL_UINT(_net_inet_tcp_lro, OID_AUTO, entries,
     CTLFLAG_RDTUN | CTLFLAG_MPSAFE, &tcp_lro_entries, 0,
     "default number of LRO entries");
 
+static uint32_t tcp_lro_cpu_set_thresh = TCP_LRO_CPU_DECLARATION_THRESH;
+SYSCTL_UINT(_net_inet_tcp_lro, OID_AUTO, lro_cpu_threshold,
+    CTLFLAG_RDTUN | CTLFLAG_MPSAFE, &tcp_lro_cpu_set_thresh, 0,
+    "Number of interrups in a row on the same CPU that will make us declare an 'affinity' cpu?");
+
 SYSCTL_COUNTER_U64(_net_inet_tcp_lro, OID_AUTO, fullqueue, CTLFLAG_RD,
     &tcp_inp_lro_direct_queue, "Number of lro's fully queued to transport");
 SYSCTL_COUNTER_U64(_net_inet_tcp_lro, OID_AUTO, wokeup, CTLFLAG_RD,
@@ -562,16 +567,18 @@ void
 tcp_lro_flush_inactive(struct lro_ctrl *lc, const struct timeval *timeout)
 {
 	struct lro_entry *le, *le_tmp;
-	sbintime_t sbt;
+	uint64_t now, tov;
+	struct bintime bt;
 
 	if (LIST_EMPTY(&lc->lro_active))
 		return;
 
-	/* get timeout time */
-	sbt = getsbinuptime() - tvtosbt(*timeout);
-
+	/* get timeout time and current time in ns */
+	binuptime(&bt);
+	now = bintime2ns(&bt);
+	tov = ((timeout->tv_sec * 1000000000) + (timeout->tv_usec * 1000));
 	LIST_FOREACH_SAFE(le, &lc->lro_active, next, le_tmp) {
-		if (sbt >= le->alloc_time) {
+		if (now >= (bintime2ns(&le->alloc_time) + tov)) {
 			tcp_lro_active_remove(le);
 			tcp_lro_flush(lc, le);
 		}
@@ -610,7 +617,7 @@ tcp_lro_log(struct tcpcb *tp, const struct lro_ctrl *lc,
 {
 	if (tp->t_logstate != TCP_LOG_STATE_OFF) {
 		union tcp_log_stackspecific log;
-		struct timeval tv;
+		struct timeval tv, btv;
 		uint32_t cts;
 
 		cts = tcp_get_usecs(&tv);
@@ -629,15 +636,17 @@ tcp_lro_log(struct tcpcb *tp, const struct lro_ctrl *lc,
 			log.u_bbr.rttProp = le->m_head->m_pkthdr.rcv_tstmp;
 		}
 		log.u_bbr.inflight = th_seq;
+		log.u_bbr.delivered = th_ack;
 		log.u_bbr.timeStamp = cts;
 		log.u_bbr.epoch = le->next_seq;
-		log.u_bbr.delivered = th_ack;
 		log.u_bbr.lt_epoch = le->ack_seq;
 		log.u_bbr.pacing_gain = th_win;
 		log.u_bbr.cwnd_gain = le->window;
+		log.u_bbr.lost = curcpu;
 		log.u_bbr.cur_del_rate = (uintptr_t)m;
 		log.u_bbr.bw_inuse = (uintptr_t)le->m_head;
-		log.u_bbr.flex6 = sbttous(lc->lro_last_queue_time);
+		bintime2timeval(&lc->lro_last_queue_time, &btv);
+		log.u_bbr.flex6 = tcp_tv_to_usectick(&btv);
 		log.u_bbr.flex7 = le->compressed;
 		log.u_bbr.pacing_gain = le->uncompressed;
 		if (in_epoch(net_epoch_preempt))
@@ -1270,7 +1279,10 @@ tcp_lro_flush_tcphpts(struct lro_ctrl *lc, struct lro_entry *le)
 		INP_WUNLOCK(inp);
 		return (TCP_LRO_CANNOT);
 	}
-
+	if ((inp->inp_irq_cpu_set == 0)  && (lc->lro_cpu_is_set == 1)) {
+		inp->inp_irq_cpu = lc->lro_last_cpu;
+		inp->inp_irq_cpu_set = 1;
+	}
 	/* Check if the transport doesn't support the needed optimizations. */
 	if ((inp->inp_flags2 & (INP_SUPPORTS_MBUFQ | INP_MBUF_ACKCMP)) == 0) {
 		INP_WUNLOCK(inp);
@@ -1442,11 +1454,21 @@ tcp_lro_flush_all(struct lro_ctrl *lc)
 	/* check if no mbufs to flush */
 	if (lc->lro_mbuf_count == 0)
 		goto done;
-
+	if (lc->lro_cpu_is_set == 0) {
+		if (lc->lro_last_cpu == curcpu) {
+			lc->lro_cnt_of_same_cpu++;
+			/* Have we reached the threshold to declare a cpu? */
+			if (lc->lro_cnt_of_same_cpu > tcp_lro_cpu_set_thresh)
+				lc->lro_cpu_is_set = 1;
+		} else {
+			lc->lro_last_cpu = curcpu;
+			lc->lro_cnt_of_same_cpu = 0;
+		}
+	}
 	CURVNET_SET(lc->ifp->if_vnet);
 
 	/* get current time */
-	lc->lro_last_queue_time = getsbinuptime();
+	binuptime(&lc->lro_last_queue_time);
 
 	/* sort all mbufs according to stream */
 	tcp_lro_sort(lc->lro_mbuf_data, lc->lro_mbuf_count);
@@ -1483,6 +1505,9 @@ done:
 	/* flush active streams */
 	tcp_lro_rx_done(lc);
 
+#ifdef TCPHPTS
+	tcp_run_hpts();
+#endif
 	lc->lro_mbuf_count = 0;
 }
 
@@ -1739,7 +1764,7 @@ tcp_lro_rx_common(struct lro_ctrl *lc, struct mbuf *m, uint32_t csum, bool use_h
 #endif
 	/* If no hardware or arrival stamp on the packet add timestamp */
 	if ((m->m_flags & (M_TSTMP_LRO | M_TSTMP)) == 0) {
-		m->m_pkthdr.rcv_tstmp = sbttons(lc->lro_last_queue_time);
+		m->m_pkthdr.rcv_tstmp = bintime2ns(&lc->lro_last_queue_time); 
 		m->m_flags |= M_TSTMP_LRO;
 	}
 
@@ -1834,7 +1859,7 @@ tcp_lro_rx(struct lro_ctrl *lc, struct mbuf *m, uint32_t csum)
 	int error;
 
 	/* get current time */
-	lc->lro_last_queue_time = getsbinuptime();
+	binuptime(&lc->lro_last_queue_time);
 
 	CURVNET_SET(lc->ifp->if_vnet);
 	error = tcp_lro_rx_common(lc, m, csum, true);

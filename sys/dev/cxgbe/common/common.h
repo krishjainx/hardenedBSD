@@ -405,8 +405,10 @@ struct adapter_params {
 
 	bool ulptx_memwrite_dsgl;	/* use of T5 DSGL allowed */
 	bool fr_nsmr_tpte_wr_support;	/* FW support for FR_NSMR_TPTE_WR */
+	bool dev_512sgl_mr;		/* FW support for 512 SGL per FR MR */
 	bool viid_smt_extn_support;	/* FW returns vin, vfvld & smt index? */
 	unsigned int max_pkts_per_eth_tx_pkts_wr;
+	uint8_t nsched_cls;		/* # of usable sched classes per port */
 };
 
 #define CHELSIO_T4		0x4

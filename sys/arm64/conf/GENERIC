@@ -211,6 +211,7 @@ device		aw_ccu		# Allwinner clock controller
 
 # Interrupt controllers
 device		aw_nmi		# Allwinner NMI support
+device		aw_r_intc	# Allwinner RINTC support
 device		mv_cp110_icu	# Marvell CP110 ICU
 device		mv_ap806_gicp	# Marvell AP806 GICP
 device		mv_ap806_sei	# Marvell AP806 SEI
@@ -272,6 +273,7 @@ device		pl011
 
 # PCI/PCI-X/PCIe Ethernet NICs that use iflib infrastructure
 device		iflib
+device		enetc			# NXP Gigabit NIC
 device		em			# Intel PRO/1000 Gigabit Ethernet Family
 device		ix			# Intel 10Gb Ethernet Family
 device		vmx			# VMware VMXNET3 Ethernet
@@ -356,8 +358,11 @@ device		smsc
 device		ure
 
 # Sound support
-device sound
-device a10_codec
+device		sound
+device		a10_codec		# Allwinner A10 codec
+device		aw_i2s			# Allwinner I2S
+device		a33_codec		# Allwinner A33 codec
+device		a64_codec		# Allwinner A64 Analog codec
 
 # MMC/SD/SDIO Card slot support
 device		sdhci

@@ -35,18 +35,6 @@
 
 : logo ( x y -- ) \ B/W HardenedBSD mascot (15 rows x 33 columns)
 
-	framebuffer? if
-		s" term-putimage" sfind if
-			>r 2dup			( x y x y )
-			>r 0 swap r>		( x y 0 x y )
-			dup 0 swap 15 +		( x y 0 x y 0 y+15 )
-			s" /boot/images/hardenedbsd-logo-rev.png"
-			r> execute if 2drop exit then
-		else
-			drop
-		then
-	then
-
 	s" uKOS2qsmkfe38kEuXLimP+7XoBiuIt5k" logo+
 	s" BMHardenedBSDxfOL9QwvfA6yxGHkNMG" logo+
 	s" 2I7ADmw7Mp/P8Y4wjnBFDNKvNzdZa/uu" logo+

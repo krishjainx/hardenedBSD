@@ -25,6 +25,7 @@
  * Copyright (c) 2017, Intel Corporation.
  * Copyright (c) 2019, Klara Inc.
  * Copyright (c) 2019, Allan Jude
+ * Copyright (c) 2021, Datto, Inc.
  */
 
 #include <sys/sysmacros.h>
@@ -247,13 +248,10 @@ zio_init(void)
 void
 zio_fini(void)
 {
-	size_t i, j, n;
-	kmem_cache_t *cache;
-
-	n = SPA_MAXBLOCKSIZE >> SPA_MINBLOCKSHIFT;
+	size_t n = SPA_MAXBLOCKSIZE >> SPA_MINBLOCKSHIFT;
 
 #if defined(ZFS_DEBUG) && !defined(_KERNEL)
-	for (i = 0; i < n; i++) {
+	for (size_t i = 0; i < n; i++) {
 		if (zio_buf_cache_allocs[i] != zio_buf_cache_frees[i])
 			(void) printf("zio_fini: [%d] %llu != %llu\n",
 			    (int)((i + 1) << SPA_MINBLOCKSHIFT),
@@ -267,11 +265,11 @@ zio_fini(void)
 	 * and zio_data_buf_cache. Do a wasteful but trivially correct scan to
 	 * sort it out.
 	 */
-	for (i = 0; i < n; i++) {
-		cache = zio_buf_cache[i];
+	for (size_t i = 0; i < n; i++) {
+		kmem_cache_t *cache = zio_buf_cache[i];
 		if (cache == NULL)
 			continue;
-		for (j = i; j < n; j++) {
+		for (size_t j = i; j < n; j++) {
 			if (cache == zio_buf_cache[j])
 				zio_buf_cache[j] = NULL;
 			if (cache == zio_data_buf_cache[j])
@@ -280,22 +278,20 @@ zio_fini(void)
 		kmem_cache_destroy(cache);
 	}
 
-	for (i = 0; i < n; i++) {
-		cache = zio_data_buf_cache[i];
+	for (size_t i = 0; i < n; i++) {
+		kmem_cache_t *cache = zio_data_buf_cache[i];
 		if (cache == NULL)
 			continue;
-		for (j = i; j < n; j++) {
+		for (size_t j = i; j < n; j++) {
 			if (cache == zio_data_buf_cache[j])
 				zio_data_buf_cache[j] = NULL;
 		}
 		kmem_cache_destroy(cache);
 	}
 
-	for (i = 0; i < n; i++) {
-		if (zio_buf_cache[i] != NULL)
-			panic("zio_fini: zio_buf_cache[%zd] != NULL", i);
-		if (zio_data_buf_cache[i] != NULL)
-			panic("zio_fini: zio_data_buf_cache[%zd] != NULL", i);
+	for (size_t i = 0; i < n; i++) {
+		VERIFY3P(zio_buf_cache[i], ==, NULL);
+		VERIFY3P(zio_data_buf_cache[i], ==, NULL);
 	}
 
 	kmem_cache_destroy(zio_link_cache);
@@ -1110,9 +1106,6 @@ zio_read(zio_t *pio, spa_t *spa, const blkptr_t *bp,
     zio_priority_t priority, enum zio_flag flags, const zbookmark_phys_t *zb)
 {
 	zio_t *zio;
-
-	(void) zfs_blkptr_verify(spa, bp, flags & ZIO_FLAG_CONFIG_WRITER,
-	    BLK_VERIFY_HALT);
 
 	zio = zio_create(pio, spa, BP_PHYSICAL_BIRTH(bp), bp,
 	    data, size, size, done, private,
@@ -2021,18 +2014,24 @@ zio_deadman_impl(zio_t *pio, int ziodepth)
 
 		zfs_dbgmsg("slow zio[%d]: zio=%px timestamp=%llu "
 		    "delta=%llu queued=%llu io=%llu "
-		    "path=%s last=%llu "
-		    "type=%d priority=%d flags=0x%x "
-		    "stage=0x%x pipeline=0x%x pipeline-trace=0x%x "
-		    "objset=%llu object=%llu level=%llu blkid=%llu "
-		    "offset=%llu size=%llu error=%d",
+		    "path=%s "
+		    "last=%llu type=%d "
+		    "priority=%d flags=0x%x stage=0x%x "
+		    "pipeline=0x%x pipeline-trace=0x%x "
+		    "objset=%llu object=%llu "
+		    "level=%llu blkid=%llu "
+		    "offset=%llu size=%llu "
+		    "error=%d",
 		    ziodepth, pio, pio->io_timestamp,
-		    delta, pio->io_delta, pio->io_delay,
-		    vd ? vd->vdev_path : "NULL", vq ? vq->vq_io_complete_ts : 0,
-		    pio->io_type, pio->io_priority, pio->io_flags,
-		    pio->io_stage, pio->io_pipeline, pio->io_pipeline_trace,
-		    zb->zb_objset, zb->zb_object, zb->zb_level, zb->zb_blkid,
-		    pio->io_offset, pio->io_size, pio->io_error);
+		    (u_longlong_t)delta, pio->io_delta, pio->io_delay,
+		    vd ? vd->vdev_path : "NULL",
+		    vq ? vq->vq_io_complete_ts : 0, pio->io_type,
+		    pio->io_priority, pio->io_flags, pio->io_stage,
+		    pio->io_pipeline, pio->io_pipeline_trace,
+		    (u_longlong_t)zb->zb_objset, (u_longlong_t)zb->zb_object,
+		    (u_longlong_t)zb->zb_level, (u_longlong_t)zb->zb_blkid,
+		    (u_longlong_t)pio->io_offset, (u_longlong_t)pio->io_size,
+		    pio->io_error);
 		(void) zfs_ereport_post(FM_EREPORT_ZFS_DEADMAN,
 		    pio->io_spa, vd, zb, pio, 0);
 
@@ -3540,7 +3539,8 @@ zio_dva_allocate(zio_t *zio)
 		if (zfs_flags & ZFS_DEBUG_METASLAB_ALLOC) {
 			zfs_dbgmsg("%s: metaslab allocation failure, "
 			    "trying normal class: zio %px, size %llu, error %d",
-			    spa_name(spa), zio, zio->io_size, error);
+			    spa_name(spa), zio, (u_longlong_t)zio->io_size,
+			    error);
 		}
 
 		error = metaslab_alloc(spa, mc, zio->io_size, bp,
@@ -3552,7 +3552,8 @@ zio_dva_allocate(zio_t *zio)
 		if (zfs_flags & ZFS_DEBUG_METASLAB_ALLOC) {
 			zfs_dbgmsg("%s: metaslab allocation failure, "
 			    "trying ganging: zio %px, size %llu, error %d",
-			    spa_name(spa), zio, zio->io_size, error);
+			    spa_name(spa), zio, (u_longlong_t)zio->io_size,
+			    error);
 		}
 		return (zio_write_gang_block(zio, mc));
 	}
@@ -3561,7 +3562,8 @@ zio_dva_allocate(zio_t *zio)
 		    (zfs_flags & ZFS_DEBUG_METASLAB_ALLOC)) {
 			zfs_dbgmsg("%s: metaslab allocation failure: zio %px, "
 			    "size %llu, error %d",
-			    spa_name(spa), zio, zio->io_size, error);
+			    spa_name(spa), zio, (u_longlong_t)zio->io_size,
+			    error);
 		}
 		zio->io_error = error;
 	}
@@ -3687,7 +3689,8 @@ zio_alloc_zil(spa_t *spa, objset_t *os, uint64_t txg, blkptr_t *new_bp,
 		}
 	} else {
 		zfs_dbgmsg("%s: zil block allocation failure: "
-		    "size %llu, error %d", spa_name(spa), size, error);
+		    "size %llu, error %d", spa_name(spa), (u_longlong_t)size,
+		    error);
 	}
 
 	return (error);
@@ -4570,7 +4573,7 @@ zio_done(zio_t *zio)
 			uint64_t asize = P2ROUNDUP(psize, align);
 			abd_t *adata = zio->io_abd;
 
-			if (asize != psize) {
+			if (adata != NULL && asize != psize) {
 				adata = abd_alloc(asize, B_TRUE);
 				abd_copy(adata, zio->io_abd, psize);
 				abd_zero_off(adata, psize, asize - psize);
@@ -4581,7 +4584,7 @@ zio_done(zio_t *zio)
 			zcr->zcr_finish(zcr, adata);
 			zfs_ereport_free_checksum(zcr);
 
-			if (asize != psize)
+			if (adata != NULL && asize != psize)
 				abd_free(adata);
 		}
 	}

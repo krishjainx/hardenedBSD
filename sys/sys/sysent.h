@@ -99,6 +99,7 @@ struct proc;
 struct __sigset;
 struct trapframe;
 struct vnode;
+struct note_info_list;
 
 struct sysentvec {
 	int		sv_size;	/* number of entries */
@@ -114,6 +115,10 @@ struct sysentvec {
 	char		*sv_name;	/* name of binary type */
 	int		(*sv_coredump)(struct thread *, struct vnode *, off_t, int);
 					/* function to dump core, or NULL */
+	int		sv_elf_core_osabi;
+	const char	*sv_elf_core_abi_vendor;
+	void		(*sv_elf_core_prepare_notes)(struct thread *,
+			    struct note_info_list *, size_t *);
 	int		(*sv_imgact_try)(struct image_params *);
 	void		(*sv_stackgap)(struct image_params *, uintptr_t *);
 	int		(*sv_copyout_auxargs)(struct image_params *,
@@ -147,9 +152,12 @@ struct sysentvec {
 	u_long		*sv_hwcap2;	/* Value passed in AT_HWCAP2. */
 	const char	*(*sv_machine_arch)(struct proc *);
 	vm_offset_t	sv_fxrng_gen_base;
+	void		(*sv_onexec_old)(struct thread *td);
 	void		(*sv_onexec)(struct proc *, struct image_params *);
 	void		(*sv_onexit)(struct proc *);
 	void		(*sv_ontdexit)(struct thread *td);
+	int		(*sv_setid_allowed)(struct thread *td,
+			    struct image_params *imgp);
 };
 
 #define	SV_ILP32	0x000100	/* 32-bit executable. */
@@ -161,6 +169,8 @@ struct sysentvec {
 #define	SV_TIMEKEEP	0x040000	/* Shared page timehands. */
 #define	SV_ASLR		0x080000	/* ASLR allowed. */
 #define	SV_RNG_SEED_VER	0x100000	/* random(4) reseed generation. */
+#define	SV_SIG_DISCIGN	0x200000	/* Do not discard ignored signals */
+#define	SV_SIG_WAITNDQ	0x400000	/* Wait does not dequeue SIGCHLD */
 
 #define	SV_ABI_MASK	0xff
 #define	SV_PROC_FLAG(p, x)	((p)->p_sysent->sv_flags & (x))
@@ -312,6 +322,9 @@ void shared_page_write(int base, int size, const void *data);
 void exec_sysvec_init(void *param);
 void exec_sysvec_init_secondary(struct sysentvec *sv, struct sysentvec *sv2);
 void exec_inittk(void);
+
+void exit_onexit(struct proc *p);
+void exec_onexec_old(struct thread *td);
 
 #define INIT_SYSENTVEC(name, sv)					\
     SYSINIT(name, SI_SUB_EXEC, SI_ORDER_ANY,				\

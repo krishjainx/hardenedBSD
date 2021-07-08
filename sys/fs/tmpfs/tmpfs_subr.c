@@ -580,35 +580,34 @@ tmpfs_free_node_locked(struct tmpfs_mount *tmp, struct tmpfs_node *node,
 	if (!last)
 		return (false);
 
+	TMPFS_NODE_UNLOCK(node);
+
 #ifdef INVARIANTS
 	MPASS(node->tn_vnode == NULL);
 	MPASS((node->tn_vpstate & TMPFS_VNODE_ALLOCATING) == 0);
-#endif
-	TMPFS_NODE_UNLOCK(node);
-	TMPFS_UNLOCK(tmp);
 
+	/*
+	 * Make sure this is a node type we can deal with. Everything is explicitly
+	 * enumerated without the 'default' clause so the the compiler can throw an
+	 * error in case a new type is added.
+	 */
 	switch (node->tn_type) {
 	case VBLK:
-		/* FALLTHROUGH */
 	case VCHR:
-		/* FALLTHROUGH */
 	case VDIR:
-		/* FALLTHROUGH */
 	case VFIFO:
-		/* FALLTHROUGH */
 	case VSOCK:
-		break;
-
 	case VLNK:
-		symlink = node->tn_link_target;
-		atomic_store_ptr(&node->tn_link_target, NULL);
-		if (atomic_load_char(&node->tn_link_smr)) {
-			cache_symlink_free(symlink, node->tn_size + 1);
-		} else {
-			free(symlink, M_TMPFSNAME);
-		}
+	case VREG:
 		break;
+	case VNON:
+	case VBAD:
+	case VMARKER:
+		panic("%s: bad type %d for node %p", __func__, (int)node->tn_type, node);
+	}
+#endif
 
+	switch (node->tn_type) {
 	case VREG:
 		LIST_FOREACH_SAFE(attr, &(node->tn_reg.tn_extattr_list),
 		    tele_entries, tattr) {
@@ -619,19 +618,33 @@ tmpfs_free_node_locked(struct tmpfs_mount *tmp, struct tmpfs_node *node,
 		if (uobj != NULL) {
 			if (uobj->size != 0)
 				atomic_subtract_long(&tmp->tm_pages_used, uobj->size);
+		}
+
+		tmpfs_free_tmp(tmp);
+
+		if (uobj != NULL) {
 			KASSERT((uobj->flags & OBJ_TMPFS) == 0,
 			    ("leaked OBJ_TMPFS node %p vm_obj %p", node, uobj));
 			vm_object_deallocate(uobj);
 		}
 		break;
+	case VLNK:
+		tmpfs_free_tmp(tmp);
 
+		symlink = node->tn_link_target;
+		atomic_store_ptr(&node->tn_link_target, NULL);
+		if (atomic_load_char(&node->tn_link_smr)) {
+			cache_symlink_free(symlink, node->tn_size + 1);
+		} else {
+			free(symlink, M_TMPFSNAME);
+		}
+		break;
 	default:
-		panic("tmpfs_free_node: type %p %d", node, (int)node->tn_type);
+		tmpfs_free_tmp(tmp);
+		break;
 	}
 
 	uma_zfree_smr(tmpfs_node_pool, node);
-	TMPFS_LOCK(tmp);
-	tmpfs_free_tmp(tmp);
 	return (true);
 }
 

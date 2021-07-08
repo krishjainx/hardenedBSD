@@ -202,6 +202,25 @@ static struct zstd_fallback_mem zstd_dctx_fallback;
 static struct zstd_pool *zstd_mempool_cctx;
 static struct zstd_pool *zstd_mempool_dctx;
 
+/*
+ * The library zstd code expects these if ADDRESS_SANITIZER gets defined,
+ * and while ASAN does this, KASAN defines that and does not. So to avoid
+ * changing the external code, we do this.
+ */
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define	ADDRESS_SANITIZER 1
+#endif
+#elif defined(__SANITIZE_ADDRESS__)
+#define	ADDRESS_SANITIZER 1
+#endif
+#if defined(_KERNEL) && defined(ADDRESS_SANITIZER)
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+void __asan_poison_memory_region(void const volatile *addr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size) {};
+void __asan_poison_memory_region(void const volatile *addr, size_t size) {};
+#endif
+
 
 static void
 zstd_mempool_reap(struct zstd_pool *zstd_mempool)
@@ -258,7 +277,7 @@ zstd_mempool_alloc(struct zstd_pool *zstd_mempool, size_t size)
 	for (int i = 0; i < ZSTD_POOL_MAX; i++) {
 		pool = &zstd_mempool[i];
 		/*
-		 * This lock is simply a marker for a pool object beeing in use.
+		 * This lock is simply a marker for a pool object being in use.
 		 * If it's already hold, it will be skipped.
 		 *
 		 * We need to create it before checking it to avoid race
@@ -488,7 +507,7 @@ zfs_zstd_decompress_level(void *s_start, void *d_start, size_t s_len,
 
 	/*
 	 * NOTE: We ignore the ZSTD version for now. As soon as any
-	 * incompatibility occurrs, it has to be handled accordingly.
+	 * incompatibility occurs, it has to be handled accordingly.
 	 * The version can be accessed via `hdr_copy.version`.
 	 */
 

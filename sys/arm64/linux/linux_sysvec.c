@@ -60,13 +60,14 @@ __FBSDID("$FreeBSD$");
 #include <compat/linux/linux_util.h>
 #include <compat/linux/linux_vdso.h>
 
+#include <machine/md_var.h>
+
 #ifdef VFP
 #include <machine/vfp.h>
 #endif
 
 MODULE_VERSION(linux64elf, 1);
 
-const char *linux_kplatform;
 static int linux_szsigcode;
 static vm_object_t linux_shared_page_obj;
 static char *linux_shared_page_mapping;
@@ -172,9 +173,7 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	issetugid = p->p_flag & P_SUGID ? 1 : 0;
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
 	    imgp->proc->p_shared_page_base);
-#if 0	/* LINUXTODO: implement arm64 LINUX_AT_HWCAP */
-	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, cpu_feature);
-#endif
+	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, *imgp->sysent->sv_hwcap);
 	AUXARGS_ENTRY(pos, AT_PAGESZ, args->pagesz);
 	AUXARGS_ENTRY(pos, LINUX_AT_CLKTCK, stclohz);
 	AUXARGS_ENTRY(pos, AT_PHDR, args->phdr);
@@ -189,6 +188,7 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	AUXARGS_ENTRY(pos, AT_EGID, imgp->proc->p_ucred->cr_svgid);
 	AUXARGS_ENTRY(pos, LINUX_AT_SECURE, issetugid);
 	AUXARGS_ENTRY_PTR(pos, LINUX_AT_RANDOM, imgp->canary);
+	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP2, *imgp->sysent->sv_hwcap2);
 	if (imgp->execpathp != 0)
 		AUXARGS_ENTRY_PTR(pos, LINUX_AT_EXECFN, imgp->execpathp);
 	if (args->execfd != -1)
@@ -419,6 +419,9 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_szsigcode	= &linux_szsigcode,
 	.sv_name	= "Linux ELF64",
 	.sv_coredump	= elf64_coredump,
+	.sv_elf_core_osabi = ELFOSABI_NONE,
+	.sv_elf_core_abi_vendor = LINUX_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = linux64_prepare_notes,
 	.sv_imgact_try	= linux_exec_imgact_try,
 	.sv_minsigstksz	= LINUX_MINSIGSTKSZ,
 	.sv_minuser	= VM_MIN_ADDRESS,
@@ -431,7 +434,8 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_setregs	= linux_exec_setregs,
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
-	.sv_flags	= SV_ABI_LINUX | SV_LP64 | SV_SHP,
+	.sv_flags	= SV_ABI_LINUX | SV_LP64 | SV_SHP | SV_SIG_DISCIGN |
+	    SV_SIG_WAITNDQ,
 	.sv_set_syscall_retval = linux_set_syscall_retval,
 	.sv_fetch_syscall_args = linux_fetch_syscall_args,
 	.sv_syscallnames = NULL,
@@ -441,9 +445,12 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_thread_detach = linux_thread_detach,
 	.sv_trap	= linux_vsyscall,
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
+	.sv_hwcap	= &elf_hwcap,
+	.sv_hwcap2	= &elf_hwcap2,
 	.sv_onexec	= linux_on_exec,
 	.sv_onexit	= linux_on_exit,
 	.sv_ontdexit	= linux_thread_dtor,
+	.sv_setid_allowed = &linux_setid_allowed_query,
 };
 
 static void
@@ -466,9 +473,6 @@ linux_vdso_install(const void *param)
 	memcpy(linux_shared_page_mapping, elf_linux_sysvec.sv_sigcode,
 	    linux_szsigcode);
 	elf_linux_sysvec.sv_shared_page_obj = linux_shared_page_obj;
-
-	linux_kplatform = linux_shared_page_mapping +
-	    (linux_platform - (caddr_t)elf_linux_sysvec.sv_shared_page_base);
 }
 SYSINIT(elf_linux_vdso_init, SI_SUB_EXEC, SI_ORDER_ANY,
     linux_vdso_install, NULL);

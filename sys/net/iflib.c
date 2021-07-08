@@ -2122,7 +2122,7 @@ iflib_fl_refill(if_ctx_t ctx, iflib_fl_t fl, int count)
 		    BUS_DMASYNC_PREREAD);
 
 		if (sd_m[frag_idx] == NULL) {
-			m = m_gethdr(M_NOWAIT, MT_NOINIT);
+			m = m_gethdr_raw(M_NOWAIT, 0);
 			if (__predict_false(m == NULL))
 				break;
 			sd_m[frag_idx] = m;
@@ -2238,7 +2238,7 @@ iflib_fl_bufs_free(iflib_fl_t fl)
 			*sd_cl = NULL;
 			if (*sd_m != NULL) {
 				m_init(*sd_m, M_NOWAIT, MT_DATA, 0);
-				uma_zfree(zone_mbuf, *sd_m);
+				m_free_raw(*sd_m);
 				*sd_m = NULL;
 			}
 		} else {
@@ -2604,7 +2604,12 @@ iflib_stop(if_ctx_t ctx)
 			iflib_txsd_free(ctx, txq, j);
 		}
 		txq->ift_processed = txq->ift_cleaned = txq->ift_cidx_processed = 0;
-		txq->ift_in_use = txq->ift_gen = txq->ift_cidx = txq->ift_pidx = txq->ift_no_desc_avail = 0;
+		txq->ift_in_use = txq->ift_gen = txq->ift_no_desc_avail = 0;
+		if (sctx->isc_flags & IFLIB_PRESERVE_TX_INDICES)
+			txq->ift_cidx = txq->ift_pidx;
+		else
+			txq->ift_cidx = txq->ift_pidx = 0;
+
 		txq->ift_closed = txq->ift_mbuf_defrag = txq->ift_mbuf_defrag_failed = 0;
 		txq->ift_no_tx_dma_setup = txq->ift_txd_encap_efbig = txq->ift_map_failed = 0;
 		txq->ift_pullups = 0;

@@ -39,8 +39,10 @@
 #include <netinet/tcp_fsm.h>
 
 #ifdef _KERNEL
+#include "opt_kern_tls.h"
 #include <net/vnet.h>
 #include <sys/mbuf.h>
+#include <sys/ktls.h>
 #endif
 
 #define TCP_END_BYTE_INFO 8	/* Bytes that makeup the "end information array" */
@@ -261,6 +263,8 @@ struct tcpcb {
 	uint32_t t_maxpeakrate;		/* max peak rate set by user, in bytes/s */
 	uint32_t t_sndtlppack;		/* tail loss probe packets sent */
 	uint64_t t_sndtlpbyte;		/* total tail loss probe bytes sent */
+	uint64_t t_sndbytes;		/* total bytes sent */
+	uint64_t t_snd_rxt_bytes;	/* total bytes retransmitted */
 
 	uint8_t t_tfo_client_cookie_len; /* TCP Fast Open client cookie length */
 	uint32_t t_end_info_status;	/* Status flag of end info */
@@ -365,6 +369,7 @@ struct tcp_function_block {
 	int	(*tfb_tcp_handoff_ok)(struct tcpcb *);
 	void	(*tfb_tcp_mtu_chg)(struct tcpcb *);
 	int	(*tfb_pru_options)(struct tcpcb *, int);
+	void	(*tfb_hwtls_change)(struct tcpcb *, int);
 	volatile uint32_t tfb_refcnt;
 	uint32_t  tfb_flags;
 	uint8_t	tfb_id;
@@ -1132,6 +1137,30 @@ tcp_fields_to_net(struct tcphdr *th)
 	th->th_ack = htonl(th->th_ack);
 	th->th_win = htons(th->th_win);
 	th->th_urp = htons(th->th_urp);
+}
+
+static inline void
+tcp_account_for_send(struct tcpcb *tp, uint32_t len, uint8_t is_rxt,
+    uint8_t is_tlp, int hw_tls)
+{
+	uint64_t rexmit_percent;
+
+	if (is_tlp) {
+		tp->t_sndtlppack++;
+		tp->t_sndtlpbyte += len;
+	}
+	/* To get total bytes sent you must add t_snd_rxt_bytes to t_sndbytes */
+	if (is_rxt)
+		tp->t_snd_rxt_bytes += len;
+	else
+		tp->t_sndbytes += len;
+
+	if (hw_tls && is_rxt) {
+		rexmit_percent = (1000ULL * tp->t_snd_rxt_bytes) / (10ULL * (tp->t_snd_rxt_bytes + tp->t_sndbytes));
+		if (rexmit_percent > ktls_ifnet_max_rexmit_pct)
+			ktls_disable_ifnet(tp);
+	}
+
 }
 #endif /* _KERNEL */
 

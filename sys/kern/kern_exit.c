@@ -105,6 +105,11 @@ SYSCTL_INT(_kern, OID_AUTO, kill_on_debugger_exit, CTLFLAG_RWTUN,
     &kern_kill_on_dbg_exit, 0,
     "Kill ptraced processes when debugger exits");
 
+static bool kern_wait_dequeue_sigchld = 1;
+SYSCTL_BOOL(_kern, OID_AUTO, wait_dequeue_sigchld, CTLFLAG_RWTUN,
+    &kern_wait_dequeue_sigchld, 0,
+    "Dequeue SIGCHLD on wait(2) for live process");
+
 struct proc *
 proc_realparent(struct proc *child)
 {
@@ -188,6 +193,13 @@ proc_clear_orphan(struct proc *p)
 	}
 	LIST_REMOVE(p, p_orphan);
 	p->p_treeflag &= ~P_TREE_ORPHANED;
+}
+
+void
+exit_onexit(struct proc *p)
+{
+	MPASS(p->p_numthreads == 1);
+	umtx_thread_exit(FIRST_THREAD_IN_PROC(p));
 }
 
 /*
@@ -335,9 +347,6 @@ exit1(struct thread *td, int rval, int signo)
 
 	itimers_exit(p);
 
-	if (p->p_sysent->sv_onexit != NULL)
-		p->p_sysent->sv_onexit(p);
-
 	/*
 	 * Check if any loadable modules need anything done at process exit.
 	 * E.g. SYSV IPC stuff.
@@ -368,7 +377,8 @@ exit1(struct thread *td, int rval, int signo)
 
 	PROC_UNLOCK(p);
 
-	umtx_thread_exit(td);
+	if (p->p_sysent->sv_onexit != NULL)
+		p->p_sysent->sv_onexit(p);
 	seltdfini(td);
 
 	/*
@@ -1207,9 +1217,12 @@ report_alive_proc(struct thread *td, struct proc *p, siginfo_t *siginfo,
 			p->p_flag &= ~P_CONTINUED;
 		else
 			p->p_flag |= P_WAITED;
-		PROC_LOCK(td->td_proc);
-		sigqueue_take(p->p_ksi);
-		PROC_UNLOCK(td->td_proc);
+		if (kern_wait_dequeue_sigchld &&
+		    (td->td_proc->p_sysent->sv_flags & SV_SIG_WAITNDQ) == 0) {
+			PROC_LOCK(td->td_proc);
+			sigqueue_take(p->p_ksi);
+			PROC_UNLOCK(td->td_proc);
+		}
 	}
 	sx_xunlock(&proctree_lock);
 	if (siginfo != NULL) {

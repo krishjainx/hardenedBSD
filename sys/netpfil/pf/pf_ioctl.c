@@ -94,7 +94,6 @@ __FBSDID("$FreeBSD$");
 #include <net/altq/altq.h>
 #endif
 
-SDT_PROVIDER_DECLARE(pf);
 SDT_PROBE_DEFINE3(pf, ioctl, ioctl, error, "int", "int", "int");
 SDT_PROBE_DEFINE3(pf, ioctl, function, error, "char *", "int", "int");
 SDT_PROBE_DEFINE2(pf, ioctl, addrule, error, "int", "int");
@@ -1958,7 +1957,7 @@ pf_label_match(const struct pf_krule *rule, const char *label)
 static unsigned int
 pf_kill_matching_state(struct pf_state_key_cmp *key, int dir)
 {
-	struct pf_state *match;
+	struct pf_kstate *match;
 	int more = 0;
 	unsigned int killed = 0;
 
@@ -1976,7 +1975,7 @@ pf_kill_matching_state(struct pf_state_key_cmp *key, int dir)
 static int
 pf_killstates_row(struct pf_kstate_kill *psk, struct pf_idhash *ih)
 {
-	struct pf_state		*s;
+	struct pf_kstate	*s;
 	struct pf_state_key	*sk;
 	struct pf_addr		*srcaddr, *dstaddr;
 	struct pf_state_key_cmp	 match_key;
@@ -2427,7 +2426,7 @@ DIOCADDRULENV_error:
 			ERROUT(ENOMEM);
 
 		/* Copy the request in */
-		nvlpacked = malloc(nv->len, M_TEMP, M_WAITOK);
+		nvlpacked = malloc(nv->len, M_NVLIST, M_WAITOK);
 		if (nvlpacked == NULL)
 			ERROUT(ENOMEM);
 
@@ -2505,7 +2504,7 @@ DIOCADDRULENV_error:
 			ERROUT(EBUSY);
 		}
 
-		free(nvlpacked, M_TEMP);
+		free(nvlpacked, M_NVLIST);
 		nvlpacked = nvlist_pack(nvl, &nv->len);
 		if (nvlpacked == NULL) {
 			PF_RULES_WUNLOCK();
@@ -2521,8 +2520,6 @@ DIOCADDRULENV_error:
 			ERROUT(ENOSPC);
 		}
 
-		error = copyout(nvlpacked, nv->data, nv->len);
-
 		if (clear_counter) {
 			counter_u64_zero(rule->evaluations);
 			for (int i = 0; i < 2; i++) {
@@ -2533,9 +2530,11 @@ DIOCADDRULENV_error:
 		}
 		PF_RULES_WUNLOCK();
 
+		error = copyout(nvlpacked, nv->data, nv->len);
+
 #undef ERROUT
 DIOCGETRULENV_error:
-		free(nvlpacked, M_TEMP);
+		free(nvlpacked, M_NVLIST);
 		nvlist_destroy(nvrule);
 		nvlist_destroy(nvl);
 
@@ -2808,7 +2807,7 @@ DIOCCHANGERULE_error:
 
 	case DIOCGETSTATE: {
 		struct pfioc_state	*ps = (struct pfioc_state *)addr;
-		struct pf_state		*s;
+		struct pf_kstate	*s;
 
 		s = pf_find_state_byid(ps->state.id, ps->state.creatorid);
 		if (s == NULL) {
@@ -2828,7 +2827,7 @@ DIOCCHANGERULE_error:
 
 	case DIOCGETSTATES: {
 		struct pfioc_states	*ps = (struct pfioc_states *)addr;
-		struct pf_state		*s;
+		struct pf_kstate	*s;
 		struct pfsync_state	*pstore, *p;
 		int i, nr;
 
@@ -2943,7 +2942,7 @@ DIOCGETSTATES_full:
 	case DIOCNATLOOK: {
 		struct pfioc_natlook	*pnl = (struct pfioc_natlook *)addr;
 		struct pf_state_key	*sk;
-		struct pf_state		*state;
+		struct pf_kstate	*state;
 		struct pf_state_key_cmp	 key;
 		int			 m = 0, direction = pnl->direction;
 		int			 sidx, didx;
@@ -3726,10 +3725,12 @@ DIOCCHANGEADDR_error:
 			error = ENODEV;
 			break;
 		}
-		PF_RULES_WLOCK();
+		PF_TABLE_STATS_LOCK();
+		PF_RULES_RLOCK();
 		n = pfr_table_count(&io->pfrio_table, io->pfrio_flags);
 		if (n < 0) {
-			PF_RULES_WUNLOCK();
+			PF_RULES_RUNLOCK();
+			PF_TABLE_STATS_UNLOCK();
 			error = EINVAL;
 			break;
 		}
@@ -3740,12 +3741,14 @@ DIOCCHANGEADDR_error:
 		    sizeof(struct pfr_tstats), M_TEMP, M_NOWAIT);
 		if (pfrtstats == NULL) {
 			error = ENOMEM;
-			PF_RULES_WUNLOCK();
+			PF_RULES_RUNLOCK();
+			PF_TABLE_STATS_UNLOCK();
 			break;
 		}
 		error = pfr_get_tstats(&io->pfrio_table, pfrtstats,
 		    &io->pfrio_size, io->pfrio_flags | PFR_FLAG_USERIOCTL);
-		PF_RULES_WUNLOCK();
+		PF_RULES_RUNLOCK();
+		PF_TABLE_STATS_UNLOCK();
 		if (error == 0)
 			error = copyout(pfrtstats, io->pfrio_buffer, totlen);
 		free(pfrtstats, M_TEMP);
@@ -3773,21 +3776,19 @@ DIOCCHANGEADDR_error:
 
 		totlen = io->pfrio_size * sizeof(struct pfr_table);
 		pfrts = mallocarray(io->pfrio_size, sizeof(struct pfr_table),
-		    M_TEMP, M_NOWAIT);
-		if (pfrts == NULL) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfrts, totlen);
 		if (error) {
 			free(pfrts, M_TEMP);
 			break;
 		}
 
-		PF_RULES_WLOCK();
+		PF_TABLE_STATS_LOCK();
+		PF_RULES_RLOCK();
 		error = pfr_clr_tstats(pfrts, io->pfrio_size,
 		    &io->pfrio_nzero, io->pfrio_flags | PFR_FLAG_USERIOCTL);
-		PF_RULES_WUNLOCK();
+		PF_RULES_RUNLOCK();
+		PF_TABLE_STATS_UNLOCK();
 		free(pfrts, M_TEMP);
 		break;
 	}
@@ -3862,11 +3863,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -3900,11 +3897,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -3942,11 +3935,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = count * sizeof(struct pfr_addr);
 		pfras = mallocarray(count, sizeof(struct pfr_addr), M_TEMP,
-		    M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -3981,11 +3970,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		PF_RULES_RLOCK();
 		error = pfr_get_addrs(&io->pfrio_table, pfras,
 		    &io->pfrio_size, io->pfrio_flags | PFR_FLAG_USERIOCTL);
@@ -4013,11 +3998,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_astats);
 		pfrastats = mallocarray(io->pfrio_size,
-		    sizeof(struct pfr_astats), M_TEMP, M_NOWAIT);
-		if (! pfrastats) {
-			error = ENOMEM;
-			break;
-		}
+		    sizeof(struct pfr_astats), M_TEMP, M_WAITOK);
 		PF_RULES_RLOCK();
 		error = pfr_get_astats(&io->pfrio_table, pfrastats,
 		    &io->pfrio_size, io->pfrio_flags | PFR_FLAG_USERIOCTL);
@@ -4045,11 +4026,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -4083,11 +4060,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -4121,11 +4094,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = io->pfrio_size * sizeof(struct pfr_addr);
 		pfras = mallocarray(io->pfrio_size, sizeof(struct pfr_addr),
-		    M_TEMP, M_NOWAIT);
-		if (! pfras) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->pfrio_buffer, pfras, totlen);
 		if (error) {
 			free(pfras, M_TEMP);
@@ -4174,11 +4143,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = sizeof(struct pfioc_trans_e) * io->size;
 		ioes = mallocarray(io->size, sizeof(struct pfioc_trans_e),
-		    M_TEMP, M_NOWAIT);
-		if (! ioes) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->array, ioes, totlen);
 		if (error) {
 			free(ioes, M_TEMP);
@@ -4251,11 +4216,7 @@ DIOCCHANGEADDR_error:
 		}
 		totlen = sizeof(struct pfioc_trans_e) * io->size;
 		ioes = mallocarray(io->size, sizeof(struct pfioc_trans_e),
-		    M_TEMP, M_NOWAIT);
-		if (! ioes) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->array, ioes, totlen);
 		if (error) {
 			free(ioes, M_TEMP);
@@ -4330,11 +4291,7 @@ DIOCCHANGEADDR_error:
 
 		totlen = sizeof(struct pfioc_trans_e) * io->size;
 		ioes = mallocarray(io->size, sizeof(struct pfioc_trans_e),
-		    M_TEMP, M_NOWAIT);
-		if (ioes == NULL) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 		error = copyin(io->array, ioes, totlen);
 		if (error) {
 			free(ioes, M_TEMP);
@@ -4537,11 +4494,7 @@ DIOCCHANGEADDR_error:
 
 		bufsiz = io->pfiio_size * sizeof(struct pfi_kif);
 		ifstore = mallocarray(io->pfiio_size, sizeof(struct pfi_kif),
-		    M_TEMP, M_NOWAIT);
-		if (ifstore == NULL) {
-			error = ENOMEM;
-			break;
-		}
+		    M_TEMP, M_WAITOK);
 
 		PF_RULES_RLOCK();
 		pfi_get_ifaces(io->pfiio_name, ifstore, &io->pfiio_size);
@@ -4584,7 +4537,7 @@ fail:
 }
 
 void
-pfsync_state_export(struct pfsync_state *sp, struct pf_state *st)
+pfsync_state_export(struct pfsync_state *sp, struct pf_kstate *st)
 {
 	bzero(sp, sizeof(struct pfsync_state));
 
@@ -4637,12 +4590,10 @@ pfsync_state_export(struct pfsync_state *sp, struct pf_state *st)
 	else
 		sp->nat_rule = htonl(st->nat_rule.ptr->nr);
 
-	pf_state_counter_hton(counter_u64_fetch(st->packets[0]),
-	    sp->packets[0]);
-	pf_state_counter_hton(counter_u64_fetch(st->packets[1]),
-	    sp->packets[1]);
-	pf_state_counter_hton(counter_u64_fetch(st->bytes[0]), sp->bytes[0]);
-	pf_state_counter_hton(counter_u64_fetch(st->bytes[1]), sp->bytes[1]);
+	pf_state_counter_hton(st->packets[0], sp->packets[0]);
+	pf_state_counter_hton(st->packets[1], sp->packets[1]);
+	pf_state_counter_hton(st->bytes[0], sp->bytes[0]);
+	pf_state_counter_hton(st->bytes[1], sp->bytes[1]);
 
 }
 
@@ -4667,7 +4618,7 @@ pf_tbladdr_copyout(struct pf_addr_wrap *aw)
 static void
 pf_clear_all_states(void)
 {
-	struct pf_state	*s;
+	struct pf_kstate	*s;
 	u_int i;
 
 	for (i = 0; i <= pf_hashmask; i++) {
@@ -4702,7 +4653,7 @@ pf_clear_tables(void)
 static void
 pf_clear_srcnodes(struct pf_ksrc_node *n)
 {
-	struct pf_state *s;
+	struct pf_kstate *s;
 	int i;
 
 	for (i = 0; i <= pf_hashmask; i++) {
@@ -4766,7 +4717,7 @@ pf_kill_srcnodes(struct pfioc_src_node_kill *psnk)
 
 	for (int i = 0; i <= pf_hashmask; i++) {
 		struct pf_idhash *ih = &V_pf_idhash[i];
-		struct pf_state *s;
+		struct pf_kstate *s;
 
 		PF_HASHROW_LOCK(ih);
 		LIST_FOREACH(s, &ih->states, entry) {
@@ -4820,7 +4771,7 @@ static unsigned int
 pf_clear_states(const struct pf_kstate_kill *kill)
 {
 	struct pf_state_key_cmp	 match_key;
-	struct pf_state	*s;
+	struct pf_kstate	*s;
 	struct pfi_kkif	*kif;
 	int		 idx;
 	unsigned int	 killed = 0, dir;
@@ -4886,7 +4837,7 @@ relock_DIOCCLRSTATES:
 static int
 pf_killstates(struct pf_kstate_kill *kill, unsigned int *killed)
 {
-	struct pf_state		*s;
+	struct pf_kstate	*s;
 
 	if (kill->psk_pfcmp.id) {
 		if (kill->psk_pfcmp.creatorid == 0)
@@ -4919,7 +4870,7 @@ pf_killstates_nv(struct pfioc_nv *nv)
 	if (nv->len > pf_ioctl_maxcount)
 		ERROUT(ENOMEM);
 
-	nvlpacked = malloc(nv->len, M_TEMP, M_WAITOK);
+	nvlpacked = malloc(nv->len, M_NVLIST, M_WAITOK);
 	if (nvlpacked == NULL)
 		ERROUT(ENOMEM);
 
@@ -4936,8 +4887,10 @@ pf_killstates_nv(struct pfioc_nv *nv)
 		ERROUT(error);
 
 	error = pf_killstates(&kill, &killed);
+	if (error)
+		ERROUT(error);
 
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	nvlpacked = NULL;
 	nvlist_destroy(nvl);
 	nvl = nvlist_create(0);
@@ -4959,7 +4912,7 @@ pf_killstates_nv(struct pfioc_nv *nv)
 
 on_error:
 	nvlist_destroy(nvl);
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	return (error);
 }
 
@@ -4977,7 +4930,7 @@ pf_clearstates_nv(struct pfioc_nv *nv)
 	if (nv->len > pf_ioctl_maxcount)
 		ERROUT(ENOMEM);
 
-	nvlpacked = malloc(nv->len, M_TEMP, M_WAITOK);
+	nvlpacked = malloc(nv->len, M_NVLIST, M_WAITOK);
 	if (nvlpacked == NULL)
 		ERROUT(ENOMEM);
 
@@ -4995,7 +4948,7 @@ pf_clearstates_nv(struct pfioc_nv *nv)
 
 	killed = pf_clear_states(&kill);
 
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	nvlpacked = NULL;
 	nvlist_destroy(nvl);
 	nvl = nvlist_create(0);
@@ -5018,25 +4971,25 @@ pf_clearstates_nv(struct pfioc_nv *nv)
 #undef ERROUT
 on_error:
 	nvlist_destroy(nvl);
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	return (error);
 }
 
 static int
 pf_getstate(struct pfioc_nv *nv)
 {
-	nvlist_t	*nvl = NULL, *nvls;
-	void		*nvlpacked = NULL;
-	struct pf_state	*s = NULL;
-	int		 error = 0;
-	uint64_t	 id, creatorid;
+	nvlist_t		*nvl = NULL, *nvls;
+	void			*nvlpacked = NULL;
+	struct pf_kstate	*s = NULL;
+	int			 error = 0;
+	uint64_t		 id, creatorid;
 
 #define ERROUT(x)	ERROUT_FUNCTION(errout, x)
 
 	if (nv->len > pf_ioctl_maxcount)
 		ERROUT(ENOMEM);
 
-	nvlpacked = malloc(nv->len, M_TEMP, M_WAITOK);
+	nvlpacked = malloc(nv->len, M_NVLIST, M_WAITOK);
 	if (nvlpacked == NULL)
 		ERROUT(ENOMEM);
 
@@ -5055,7 +5008,7 @@ pf_getstate(struct pfioc_nv *nv)
 	if (s == NULL)
 		ERROUT(ENOENT);
 
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	nvlpacked = NULL;
 	nvlist_destroy(nvl);
 	nvl = nvlist_create(0);
@@ -5084,7 +5037,7 @@ pf_getstate(struct pfioc_nv *nv)
 errout:
 	if (s != NULL)
 		PF_STATE_UNLOCK(s);
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	nvlist_destroy(nvl);
 	return (error);
 }
@@ -5092,11 +5045,11 @@ errout:
 static int
 pf_getstates(struct pfioc_nv *nv)
 {
-	nvlist_t	*nvl = NULL, *nvls;
-	void		*nvlpacked = NULL;
-	struct pf_state	*s = NULL;
-	int		 error = 0;
-	uint64_t	 count = 0;
+	nvlist_t		*nvl = NULL, *nvls;
+	void			*nvlpacked = NULL;
+	struct pf_kstate	*s = NULL;
+	int			 error = 0;
+	uint64_t		 count = 0;
 
 #define ERROUT(x)	ERROUT_FUNCTION(errout, x)
 
@@ -5109,10 +5062,19 @@ pf_getstates(struct pfioc_nv *nv)
 	for (int i = 0; i < pf_hashmask; i++) {
 		struct pf_idhash *ih = &V_pf_idhash[i];
 
+		/* Avoid taking the lock if there are no states in the row. */
+		if (LIST_EMPTY(&ih->states))
+			continue;
+
 		PF_HASHROW_LOCK(ih);
 		LIST_FOREACH(s, &ih->states, entry) {
 			if (s->timeout == PFTM_UNLINKED)
 				continue;
+
+			if (SIGPENDING(curthread)) {
+				PF_HASHROW_UNLOCK(ih);
+				ERROUT(EINTR);
+			}
 
 			nvls = pf_state_to_nvstate(s);
 			if (nvls == NULL) {
@@ -5126,6 +5088,7 @@ pf_getstates(struct pfioc_nv *nv)
 				goto DIOCGETSTATESNV_full;
 			}
 			nvlist_append_nvlist_array(nvl, "states", nvls);
+			nvlist_destroy(nvls);
 			count++;
 		}
 		PF_HASHROW_UNLOCK(ih);
@@ -5152,7 +5115,7 @@ DIOCGETSTATESNV_full:
 
 #undef ERROUT
 errout:
-	free(nvlpacked, M_TEMP);
+	free(nvlpacked, M_NVLIST);
 	nvlist_destroy(nvl);
 	return (error);
 }

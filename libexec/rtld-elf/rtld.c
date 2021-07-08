@@ -2327,7 +2327,8 @@ init_rtld(caddr_t mapbase, Elf_Auxinfo **aux_info)
     obj_rtld.path = xstrdup(ld_path_rtld);
 
     parse_rtld_phdr(&obj_rtld);
-    obj_enforce_relro(&obj_rtld);
+    if (obj_enforce_relro(&obj_rtld) == -1)
+	rtld_die();
 
     r_debug.r_version = R_DEBUG_VERSION;
     r_debug.r_brk = r_debug_state;
@@ -5920,7 +5921,7 @@ parse_args(char* argv[], int argc, bool *use_pathp, int *fdp,
 				break;
 			} else if (opt == 'p') {
 				*use_pathp = true;
-			} else if (opt == 't') {
+			} else if (opt == 'u') {
 				trust = false;
 			} else if (opt == 'v') {
 				machine[0] = '\0';
@@ -5992,7 +5993,7 @@ print_usage(const char *argv0)
 	    "  -b <exe>  Execute <exe> instead of <binary>, arg0 is <binary>\n"
 	    "  -f <FD>   Execute <FD> instead of searching for <binary>\n"
 	    "  -p        Search in PATH for named binary\n"
-	    "  -t        Ignore LD_ environment variables\n"
+	    "  -u        Ignore LD_ environment variables\n"
 	    "  -v        Display identification information\n"
 	    "  --        End of RTLD options\n"
 	    "  <binary>  Name of process to execute\n"

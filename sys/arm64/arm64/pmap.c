@@ -2227,7 +2227,6 @@ pv_to_chunk(pv_entry_t pv)
 
 static const uint64_t pc_freemask[_NPCM] = { PC_FREE0, PC_FREE1, PC_FREE2 };
 
-#if 0
 #ifdef PV_STATS
 static int pc_chunk_count, pc_chunk_allocs, pc_chunk_frees, pc_chunk_tryfail;
 
@@ -2252,7 +2251,6 @@ SYSCTL_LONG(_vm_pmap, OID_AUTO, pv_entry_count, CTLFLAG_RD, &pv_entry_count, 0,
 SYSCTL_INT(_vm_pmap, OID_AUTO, pv_entry_spare, CTLFLAG_RD, &pv_entry_spare, 0,
 	"Current number of spare pv entries");
 #endif
-#endif /* 0 */
 
 /*
  * We are in a serious low memory condition.  Resort to
@@ -2835,8 +2833,7 @@ pmap_remove_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva,
 {
 	struct md_page *pvh;
 	pt_entry_t old_l2;
-	vm_offset_t eva, va;
-	vm_page_t m, ml3;
+	vm_page_t m, ml3, mt;
 
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
 	KASSERT((sva & L2_OFFSET) == 0, ("pmap_remove_l2: sva is not aligned"));
@@ -2854,19 +2851,18 @@ pmap_remove_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva,
 		pmap->pm_stats.wired_count -= L2_SIZE / PAGE_SIZE;
 	pmap_resident_count_dec(pmap, L2_SIZE / PAGE_SIZE);
 	if (old_l2 & ATTR_SW_MANAGED) {
+		m = PHYS_TO_VM_PAGE(old_l2 & ~ATTR_MASK);
+		pvh = page_to_pvh(m);
 		CHANGE_PV_LIST_LOCK_TO_PHYS(lockp, old_l2 & ~ATTR_MASK);
-		pvh = pa_to_pvh(old_l2 & ~ATTR_MASK);
 		pmap_pvh_free(pvh, pmap, sva);
-		eva = sva + L2_SIZE;
-		for (va = sva, m = PHYS_TO_VM_PAGE(old_l2 & ~ATTR_MASK);
-		    va < eva; va += PAGE_SIZE, m++) {
+		for (mt = m; mt < &m[L2_SIZE / PAGE_SIZE]; mt++) {
 			if (pmap_pte_dirty(pmap, old_l2))
-				vm_page_dirty(m);
+				vm_page_dirty(mt);
 			if (old_l2 & ATTR_AF)
-				vm_page_aflag_set(m, PGA_REFERENCED);
-			if (TAILQ_EMPTY(&m->md.pv_list) &&
+				vm_page_aflag_set(mt, PGA_REFERENCED);
+			if (TAILQ_EMPTY(&mt->md.pv_list) &&
 			    TAILQ_EMPTY(&pvh->pv_list))
-				vm_page_aflag_clear(m, PGA_WRITEABLE);
+				vm_page_aflag_clear(mt, PGA_WRITEABLE);
 		}
 	}
 	if (pmap == kernel_pmap) {
@@ -3135,8 +3131,8 @@ pmap_remove_all(vm_page_t m)
 	SLIST_INIT(&free);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-retry:
 	rw_wlock(lock);
+retry:
 	while ((pv = TAILQ_FIRST(&pvh->pv_list)) != NULL) {
 		pmap = PV_PMAP(pv);
 		if (!PMAP_TRYLOCK(pmap)) {
@@ -3145,7 +3141,6 @@ retry:
 			PMAP_LOCK(pmap);
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
-				rw_wunlock(lock);
 				PMAP_UNLOCK(pmap);
 				goto retry;
 			}
@@ -3156,7 +3151,6 @@ retry:
 		    ("pmap_remove_all: no page table entry found"));
 		KASSERT(lvl == 2,
 		    ("pmap_remove_all: invalid pte level %d", lvl));
-
 		pmap_demote_l2_locked(pmap, pte, va, &lock);
 		PMAP_UNLOCK(pmap);
 	}
@@ -3170,7 +3164,6 @@ retry:
 			PMAP_LOCK(pmap);
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
-				rw_wunlock(lock);
 				PMAP_UNLOCK(pmap);
 				goto retry;
 			}
@@ -3231,9 +3224,11 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
 	 * Return if the L2 entry already has the desired access restrictions
 	 * in place.
 	 */
-retry:
 	if ((old_l2 & mask) == nbits)
 		return;
+
+	while (!atomic_fcmpset_64(l2, &old_l2, (old_l2 & ~mask) | nbits))
+		cpu_spinwait();
 
 	/*
 	 * When a dirty read/write superpage mapping is write protected,
@@ -3247,9 +3242,6 @@ retry:
 		for (mt = m; mt < &m[L2_SIZE / PAGE_SIZE]; mt++)
 			vm_page_dirty(mt);
 	}
-
-	if (!atomic_fcmpset_64(l2, &old_l2, (old_l2 & ~mask) | nbits))
-		goto retry;
 
 	/*
 	 * Since a promotion must break the 4KB page mappings before making
@@ -3342,7 +3334,7 @@ pmap_protect(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot)
 		for (l3p = pmap_l2_to_l3(l2, sva); sva != va_next; l3p++,
 		    sva += L3_SIZE) {
 			l3 = pmap_load(l3p);
-retry:
+
 			/*
 			 * Go to the next L3 entry if the current one is
 			 * invalid or already has the desired access
@@ -3359,6 +3351,10 @@ retry:
 				continue;
 			}
 
+			while (!atomic_fcmpset_64(l3p, &l3, (l3 & ~mask) |
+			    nbits))
+				cpu_spinwait();
+
 			/*
 			 * When a dirty read/write mapping is write protected,
 			 * update the page's dirty field.
@@ -3368,8 +3364,6 @@ retry:
 			    pmap_pte_dirty(pmap, l3))
 				vm_page_dirty(PHYS_TO_VM_PAGE(l3 & ~ATTR_MASK));
 
-			if (!atomic_fcmpset_64(l3p, &l3, (l3 & ~mask) | nbits))
-				goto retry;
 			if (va == va_next)
 				va = sva;
 		}
@@ -3475,7 +3469,7 @@ pmap_pv_promote_l2(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
 	va = va & ~L2_OFFSET;
 	pv = pmap_pvh_remove(&m->md, pmap, va);
 	KASSERT(pv != NULL, ("pmap_pv_promote_l2: pv not found"));
-	pvh = pa_to_pvh(pa);
+	pvh = page_to_pvh(m);
 	TAILQ_INSERT_TAIL(&pvh->pv_list, pv, pv_next);
 	pvh->pv_gen++;
 	/* Free the remaining NPTEPG - 1 pv entries. */
@@ -3509,7 +3503,6 @@ pmap_promote_l2(pmap_t pmap, pd_entry_t *l2, vm_offset_t va,
 	firstl3 = pmap_l2_to_l3(l2, sva);
 	newl2 = pmap_load(firstl3);
 
-setl2:
 	if (((newl2 & (~ATTR_MASK | ATTR_AF)) & L2_OFFSET) != ATTR_AF) {
 		atomic_add_long(&pmap_l2_p_failures, 1);
 		CTR2(KTR_PMAP, "pmap_promote_l2: failure for va %#lx"
@@ -3517,9 +3510,14 @@ setl2:
 		return;
 	}
 
+setl2:
 	if ((newl2 & (ATTR_S1_AP_RW_BIT | ATTR_SW_DBM)) ==
 	    (ATTR_S1_AP(ATTR_S1_AP_RO) | ATTR_SW_DBM)) {
-		if (!atomic_fcmpset_64(l2, &newl2, newl2 & ~ATTR_SW_DBM))
+		/*
+		 * When the mapping is clean, i.e., ATTR_S1_AP_RO is set,
+		 * ATTR_SW_DBM can be cleared without a TLB invalidation.
+		 */
+		if (!atomic_fcmpset_64(firstl3, &newl2, newl2 & ~ATTR_SW_DBM))
 			goto setl2;
 		newl2 &= ~ATTR_SW_DBM;
 	}
@@ -3530,6 +3528,11 @@ setl2:
 setl3:
 		if ((oldl3 & (ATTR_S1_AP_RW_BIT | ATTR_SW_DBM)) ==
 		    (ATTR_S1_AP(ATTR_S1_AP_RO) | ATTR_SW_DBM)) {
+			/*
+			 * When the mapping is clean, i.e., ATTR_S1_AP_RO is
+			 * set, ATTR_SW_DBM can be cleared without a TLB
+			 * invalidation.
+			 */
 			if (!atomic_fcmpset_64(l3, &oldl3, oldl3 &
 			    ~ATTR_SW_DBM))
 				goto setl3;
@@ -3888,7 +3891,7 @@ havel3:
 			if ((om->a.flags & PGA_WRITEABLE) != 0 &&
 			    TAILQ_EMPTY(&om->md.pv_list) &&
 			    ((om->flags & PG_FICTITIOUS) != 0 ||
-			    TAILQ_EMPTY(&pa_to_pvh(opa)->pv_list)))
+			    TAILQ_EMPTY(&page_to_pvh(om)->pv_list)))
 				vm_page_aflag_clear(om, PGA_WRITEABLE);
 		} else {
 			KASSERT((orig_l3 & ATTR_AF) != 0,
@@ -4565,11 +4568,8 @@ pmap_copy(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
 			    ((srcptepaddr & ATTR_SW_MANAGED) == 0 ||
 			    pmap_pv_insert_l2(dst_pmap, addr, srcptepaddr,
 			    PMAP_ENTER_NORECLAIM, &lock))) {
-				mask = ATTR_AF | ATTR_SW_WIRED;
-				nbits = 0;
-				if ((srcptepaddr & ATTR_SW_DBM) != 0)
-					nbits |= ATTR_S1_AP_RW_BIT;
-				pmap_store(l2, (srcptepaddr & ~mask) | nbits);
+				mask = ATTR_SW_WIRED;
+				pmap_store(l2, srcptepaddr & ~mask);
 				pmap_resident_count_inc(dst_pmap, L2_SIZE /
 				    PAGE_SIZE);
 				atomic_add_long(&pmap_l2_mappings, 1);
@@ -4995,7 +4995,7 @@ pmap_remove_pages(pmap_t pmap)
 				case 1:
 					pmap_resident_count_dec(pmap,
 					    L2_SIZE / PAGE_SIZE);
-					pvh = pa_to_pvh(tpte & ~ATTR_MASK);
+					pvh = page_to_pvh(m);
 					TAILQ_REMOVE(&pvh->pv_list, pv,pv_next);
 					pvh->pv_gen++;
 					if (TAILQ_EMPTY(&pvh->pv_list)) {
@@ -5223,8 +5223,8 @@ pmap_remove_write(vm_page_t m)
 		return;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-retry_pv_loop:
 	rw_wlock(lock);
+retry:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
 		PMAP_ASSERT_STAGE1(pmap);
@@ -5235,12 +5235,11 @@ retry_pv_loop:
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
-				rw_wunlock(lock);
-				goto retry_pv_loop;
+				goto retry;
 			}
 		}
 		va = pv->pv_va;
-		pte = pmap_pte(pmap, pv->pv_va, &lvl);
+		pte = pmap_pte(pmap, va, &lvl);
 		if ((pmap_load(pte) & ATTR_SW_DBM) != 0)
 			(void)pmap_demote_l2_locked(pmap, pte, va, &lock);
 		KASSERT(lock == VM_PAGE_TO_PV_LIST_LOCK(m),
@@ -5260,17 +5259,15 @@ retry_pv_loop:
 			if (pvh_gen != pvh->pv_gen ||
 			    md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
-				rw_wunlock(lock);
-				goto retry_pv_loop;
+				goto retry;
 			}
 		}
 		pte = pmap_pte(pmap, pv->pv_va, &lvl);
 		oldpte = pmap_load(pte);
-retry:
 		if ((oldpte & ATTR_SW_DBM) != 0) {
-			if (!atomic_fcmpset_long(pte, &oldpte,
+			while (!atomic_fcmpset_64(pte, &oldpte,
 			    (oldpte | ATTR_S1_AP_RW_BIT) & ~ATTR_SW_DBM))
-				goto retry;
+				cpu_spinwait();
 			if ((oldpte & ATTR_S1_AP_RW_BIT) ==
 			    ATTR_S1_AP(ATTR_S1_AP_RW))
 				vm_page_dirty(m);
@@ -5659,8 +5656,7 @@ restart:
 		l2 = pmap_l2(pmap, pv->pv_va);
 		l3 = pmap_l2_to_l3(l2, pv->pv_va);
 		oldl3 = pmap_load(l3);
-		if (pmap_l3_valid(oldl3) &&
-		    (oldl3 & (ATTR_S1_AP_RW_BIT | ATTR_SW_DBM)) == ATTR_SW_DBM){
+		if ((oldl3 & (ATTR_S1_AP_RW_BIT | ATTR_SW_DBM)) == ATTR_SW_DBM){
 			pmap_set_bits(l3, ATTR_S1_AP(ATTR_S1_AP_RO));
 			pmap_invalidate_page(pmap, pv->pv_va);
 		}
@@ -6010,7 +6006,8 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 	    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED)) == NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
-		return (NULL);
+		l2 = NULL;
+		goto fail;
 	}
 
 	l2phys = VM_PAGE_TO_PHYS(ml2);
@@ -6039,6 +6036,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 
 	pmap_update_entry(pmap, l1, l2phys | L1_TABLE, va, PAGE_SIZE);
 
+fail:
 	if (tmpl1 != 0) {
 		pmap_kremove(tmpl1);
 		kva_free(tmpl1, PAGE_SIZE);

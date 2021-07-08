@@ -60,8 +60,6 @@ __FBSDID("$FreeBSD$");
 #include <cam/scsi/scsi_message.h>
 #include <cam/scsi/scsi_sg.h>
 
-#include <compat/linux/linux_ioctl.h>
-
 typedef enum {
 	SG_FLAG_LOCKED		= 0x01,
 	SG_FLAG_INVALID		= 0x02
@@ -108,7 +106,6 @@ struct sg_softc {
 	int			sg_timeout;
 	int			sg_user_timeout;
 	uint8_t			pd_type;
-	union ccb		saved_ccb;
 };
 
 static d_open_t		sgopen;

@@ -109,7 +109,7 @@ _Static_assert(offsetof(struct proc, p_filemon) == 0x3b8,
     "struct proc KBI p_filemon");
 _Static_assert(offsetof(struct proc, p_comm) == 0x3d0,
     "struct proc KBI p_comm");
-_Static_assert(offsetof(struct proc, p_emuldata) == 0x4b0,
+_Static_assert(offsetof(struct proc, p_emuldata) == 0x4b8,
     "struct proc KBI p_emuldata");
 #endif
 #ifdef __i386__
@@ -729,10 +729,7 @@ thread_reap_callout_cb(void *arg __unused)
 void
 thread_reap_barrier(void)
 {
-	struct thread *td;
 	struct task *t;
-
-	td = curthread;
 
 	/*
 	 * First do context switches to each CPU to ensure that all

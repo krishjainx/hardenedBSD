@@ -101,7 +101,7 @@ if [ "$BSDINSTALL_LOG" != "${debugFile#+}" ]; then
 	export debugFile="$BSDINSTALL_LOG"
 	f_quietly f_debug_init
 	# NB: Being scripted, let debug go to terminal for invalid debugFile
-	f_dprintf "Began Instalation at %s" "$( date )"
+	f_dprintf "Began Installation at %s" "$( date )"
 fi
 
 # Make partitions
@@ -162,9 +162,7 @@ fi
 if [ -f $TMPDIR/bsdinstall-installscript-ab ]; then
 	cp $TMPDIR/bsdinstall-installscript-ab $BSDINSTALL_CHROOT/tmp/installscript
 	chmod a+x $BSDINSTALL_CHROOT/tmp/installscript
-	mount -t devfs devfs "$BSDINSTALL_CHROOT/dev"
 	chroot $BSDINSTALL_CHROOT /tmp/installscript $@ 2>&1
-	umount "$BSDINSTALL_CHROOT/dev"
 	rm $BSDINSTALL_CHROOT/tmp/installscript
 fi
 
