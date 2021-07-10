@@ -406,7 +406,12 @@ fetch_update() {
 		fi
 	fi
 
-	# Step 3: Untar the update archive
+	# Step 3: Check whether to continue
+	if [ ${downloadonly} = 1 ]; then
+		exit 0
+	fi
+
+	# Step 4: Untar the update archive
 	${TAR} -xf ${tmpdir}/update.tar \
 		-C ${tmpdir}
 	res=${?}
@@ -1260,9 +1265,8 @@ main() {
 	fi
 
 	if [ ${downloadonly} = 1 ]; then
-		debug_print "[*] Download the latest update to the current folder."
-		${FETCH} ${net_flag} -o update-$(get_version).tar -arR \
-		${baseurl}/update-$(get_version).tar
+		debug_print "[*] Download the latest update in ${tmpdir}"
+		fetch_update
 		exit 0
 	fi
 
