@@ -142,7 +142,6 @@ __DEFAULT_YES_OPTIONS = \
     LOCATE \
     LPR \
     LS_COLORS \
-    LZMA_SUPPORT \
     MAIL \
     MAILWRAPPER \
     MAKE \
