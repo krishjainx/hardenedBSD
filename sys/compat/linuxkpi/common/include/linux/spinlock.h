@@ -66,6 +66,7 @@ typedef struct {
 
 #define	spin_lock_bh(_l) do {			\
 	spin_lock(_l);				\
+	local_bh_disable();			\
 } while (0)
 
 #define	spin_lock_irq(_l) do {			\
@@ -80,6 +81,7 @@ typedef struct {
 } while (0)
 
 #define	spin_unlock_bh(_l) do {			\
+	local_bh_enable();			\
 	spin_unlock(_l);			\
 } while (0)
 
@@ -101,6 +103,11 @@ typedef struct {
 
 #define	spin_trylock_irq(_l)			\
 	spin_trylock(_l)
+
+#define	spin_trylock_irqsave(_l, flags) ({	\
+	(flags) = 0;				\
+	spin_trylock(_l);			\
+})
 
 #define	spin_lock_nested(_l, _n) do {		\
 	if (SPIN_SKIP())			\
