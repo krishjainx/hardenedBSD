@@ -134,12 +134,9 @@ struct sysentvec elf64_freebsd_sysvec_v2 = {
 	.sv_trap	= NULL,
 	.sv_hwcap	= &cpu_features,
 	.sv_hwcap2	= &cpu_features2,
-<<<<<<< HEAD
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
-=======
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
->>>>>>> origin/freebsd/13-stable/main
 };
 
 static boolean_t ppc64_elfv1_header_match(struct image_params *params,
