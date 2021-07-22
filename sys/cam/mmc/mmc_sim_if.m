@@ -1,7 +1,7 @@
 #-
 # SPDX-License-Identifier: BSD-2-Clause-FreeBSD
 #
-# Copyright (c) 2018 Emmanuel Vadot <manu@FreeBSD.org>
+# Copyright (c) 2020 Emmanuel Vadot <manu@FreeBSD.org>
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -25,91 +25,30 @@
 # SUCH DAMAGE.
 #
 # $FreeBSD$
-#
 
-#include <sys/bus.h>
+#include <sys/types.h>
+#include <sys/callout.h>
 
-INTERFACE pwmbus;
+#include <cam/cam.h>
+#include <cam/cam_ccb.h>
+#include <cam/cam_debug.h>
+#include <cam/cam_sim.h>
+#include <cam/cam_xpt_sim.h>
+#include <cam/mmc/mmc_sim.h>
 
-CODE {
-	static int
-	pwm_default_set_flags(device_t bus, u_int channel, uint32_t flags)
-	{
+INTERFACE mmc_sim;
 
-		return (EOPNOTSUPP);
-	}
-
-	static int
-	pwm_default_get_flags(device_t bus, u_int channel, uint32_t *flags)
-	{
-
-		*flags = 0;
-		return (0);
-	}
+METHOD int get_tran_settings {
+	device_t dev;
+	struct ccb_trans_settings_mmc *cts;
 };
 
-#
-# Config the period (Total number of cycle in ns) and
-# the duty (active number of cycle in ns)
-#
-METHOD int channel_config {
-	device_t bus;
-	u_int channel;
-	u_int period;
-	u_int duty;
+METHOD int set_tran_settings {
+	device_t dev;
+	struct ccb_trans_settings_mmc *cts;
 };
 
-#
-# Get the period (Total number of cycle in ns) and
-# the duty (active number of cycle in ns)
-#
-METHOD int channel_get_config {
-	device_t bus;
-	u_int channel;
-	u_int *period;
-	u_int *duty;
-};
-
-#
-# Set the flags
-#
-METHOD int channel_set_flags {
-	device_t bus;
-	u_int channel;
-	uint32_t flags;
-} DEFAULT pwm_default_set_flags;
-
-#
-# Get the flags
-#
-METHOD int channel_get_flags {
-	device_t bus;
-	u_int channel;
-	uint32_t *flags;
-} DEFAULT pwm_default_get_flags;
-
-#
-# Enable the pwm output
-#
-METHOD int channel_enable {
-	device_t bus;
-	u_int channel;
-	bool enable;
-};
-
-#
-# Is the pwm output enabled
-#
-METHOD int channel_is_enabled {
-	device_t bus;
-	u_int channel;
-	bool *enabled;
-};
-
-#
-# Get the number of channels
-#
-METHOD int channel_count {
-	device_t bus;
-	u_int *nchannel;
+METHOD int cam_request {
+	device_t dev;
+	union ccb *ccb;
 };
