@@ -135,6 +135,8 @@ struct sysentvec elf32_freebsd_sysvec = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
 	.sv_hwcap	= &cpu_features,
 	.sv_hwcap2	= &cpu_features2,
+	.sv_onexec_old	= exec_onexec_old,
+	.sv_onexit	= exit_onexit,
 };
 INIT_SYSENTVEC(elf32_sysvec, &elf32_freebsd_sysvec);
 

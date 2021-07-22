@@ -87,7 +87,12 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 #if !defined(PAX_ASLR)
 	.sv_stackgap	= elf64_stackgap,
+<<<<<<< HEAD
 #endif
+=======
+	.sv_onexec_old	= exec_onexec_old,
+	.sv_onexit	= exit_onexit,
+>>>>>>> origin/freebsd/13-stable/main
 };
 
 struct sysentvec elf64_freebsd_sysvec_la57 = {
@@ -123,6 +128,8 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
 	.sv_stackgap	= elf64_stackgap,
+	.sv_onexec_old	= exec_onexec_old,
+	.sv_onexit	= exit_onexit,
 };
 
 static void
