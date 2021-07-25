@@ -1058,6 +1058,9 @@ pf_state_key_attach(struct pf_state_key *skw, struct pf_state_key *sks,
 	kh = khw;
 	idx = PF_SK_WIRE;
 
+	MPASS(s->lock == NULL);
+	s->lock = &V_pf_idhash[PF_IDHASH(s)].lock;
+
 keyattach:
 	LIST_FOREACH(cur, &kh->keys, entry)
 		if (bcmp(cur, sk, sizeof(struct pf_state_key_cmp)) == 0)
@@ -1380,7 +1383,7 @@ pf_find_state(struct pfi_kkif *kif, struct pf_state_key_cmp *key, u_int dir)
 		if (s->kif == V_pfi_all || s->kif == kif) {
 			PF_STATE_LOCK(s);
 			PF_HASHROW_UNLOCK(kh);
-			if (s->timeout >= PFTM_MAX) {
+			if (__predict_false(s->timeout >= PFTM_MAX)) {
 				/*
 				 * State is either being processed by
 				 * pf_unlink_state() in an other thread, or
