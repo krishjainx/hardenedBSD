@@ -96,22 +96,32 @@ struct pfi_dynaddr {
 #define	PF_HASHROW_LOCK(h)	mtx_lock(&(h)->lock)
 #define	PF_HASHROW_UNLOCK(h)	mtx_unlock(&(h)->lock)
 
+#ifdef INVARIANTS
 #define	PF_STATE_LOCK(s)						\
 	do {								\
-		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH(s)];	\
-		PF_HASHROW_LOCK(_ih);					\
+		struct pf_kstate *_s = (s);				\
+		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH(_s)];	\
+		MPASS(_s->lock == &_ih->lock);				\
+		mtx_lock(_s->lock);					\
 	} while (0)
-
 #define	PF_STATE_UNLOCK(s)						\
 	do {								\
-		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH((s))];	\
-		PF_HASHROW_UNLOCK(_ih);					\
+		struct pf_kstate *_s = (s);				\
+		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH(_s)];	\
+		MPASS(_s->lock == &_ih->lock);				\
+		mtx_unlock(_s->lock);					\
 	} while (0)
+#else
+#define	PF_STATE_LOCK(s)	mtx_lock(s->lock)
+#define	PF_STATE_UNLOCK(s)	mtx_unlock(s->lock)
+#endif
 
 #ifdef INVARIANTS
 #define	PF_STATE_LOCK_ASSERT(s)						\
 	do {								\
-		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH(s)];	\
+		struct pf_kstate *_s = (s);				\
+		struct pf_idhash *_ih = &V_pf_idhash[PF_IDHASH(_s)];	\
+		MPASS(_s->lock == &_ih->lock);				\
 		PF_HASHROW_ASSERT(_ih);					\
 	} while (0)
 #else /* !INVARIANTS */
@@ -578,12 +588,23 @@ _Static_assert(sizeof(struct pf_state_export) == 384, "size incorrect");
 
 #ifdef _KERNEL
 struct pf_kstate {
+	/*
+	 * Area shared with pf_state_cmp
+	 */
 	u_int64_t		 id;
 	u_int32_t		 creatorid;
 	u_int8_t		 direction;
 	u_int8_t		 pad[3];
+	/*
+	 * end of the area
+	 */
 
+	u_int8_t		 state_flags;
+	u_int8_t		 timeout;
+	u_int8_t		 sync_state; /* PFSYNC_S_x */
+	u_int8_t		 sync_updates; /* XXX */
 	u_int			 refs;
+	struct mtx		*lock;
 	TAILQ_ENTRY(pf_kstate)	 sync_list;
 	TAILQ_ENTRY(pf_kstate)	 key_list[2];
 	LIST_ENTRY(pf_kstate)	 entry;
@@ -606,13 +627,6 @@ struct pf_kstate {
 	u_int32_t		 pfsync_time;
 	u_int16_t		 tag;
 	u_int8_t		 log;
-	u_int8_t		 state_flags;
-	u_int8_t		 timeout;
-	u_int8_t		 sync_state; /* PFSYNC_S_x */
-
-	/* XXX */
-	u_int8_t		 sync_updates;
-	u_int8_t		_tail[3];
 };
 
 /*
