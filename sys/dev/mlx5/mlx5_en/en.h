@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015-2019 Mellanox Technologies. All rights reserved.
+ * Copyright (c) 2015-2021 Mellanox Technologies. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -627,6 +627,7 @@ struct mlx5e_rq_stats {
   m(+1, u64, defragged, "defragged", "Transmitted packets")		\
   m(+1, u64, dropped, "dropped", "Transmitted packets")			\
   m(+1, u64, enobuf, "enobuf", "Transmitted packets")			\
+  m(+1, u64, cqe_err, "cqe_err", "Transmit CQE errors")			\
   m(+1, u64, nop, "nop", "Transmitted packets")
 
 #define	MLX5E_SQ_STATS_NUM (0 MLX5E_SQ_STATS(MLX5E_STATS_COUNT))
@@ -709,7 +710,9 @@ struct mlx5e_params {
   m(+1, u64, diag_general_enable, "diag_general_enable", "0: Disabled 1: Enabled") \
   m(+1, u64, hw_mtu, "hw_mtu", "Current hardware MTU value") \
   m(+1, u64, mc_local_lb, "mc_local_lb", "0: Local multicast loopback enabled 1: Disabled") \
-  m(+1, u64, uc_local_lb, "uc_local_lb", "0: Local unicast loopback enabled 1: Disabled")
+  m(+1, u64, uc_local_lb, "uc_local_lb", "0: Local unicast loopback enabled 1: Disabled") \
+  m(+1, s64, irq_cpu_base, "irq_cpu_base", "-1: Don't bind IRQ 0..NCPU-1: select this base CPU when binding IRQs") \
+  m(+1, s64, irq_cpu_stride, "irq_cpu_stride", "0..NCPU-1: Distance between IRQ vectors when binding them")
 
 #define	MLX5E_PARAMS_NUM (0 MLX5E_PARAMS(MLX5E_STATS_COUNT))
 
@@ -869,6 +872,7 @@ mlx5e_sq_queue_level(struct mlx5e_sq *sq)
 struct mlx5e_channel {
 	struct mlx5e_rq rq;
 	struct m_snd_tag tag;
+	struct mlx5_sq_bfreg bfreg;
 	struct mlx5e_sq sq[MLX5E_MAX_TX_NUM_TC];
 	struct mlx5e_priv *priv;
 	struct completion completion;
@@ -1072,8 +1076,6 @@ struct mlx5e_priv {
 	struct mlx5e_dcbx dcbx;
 	bool	sw_is_port_buf_owner;
 
-	struct mlx5_sq_bfreg bfreg;
-
 	struct pfil_head *pfil;
 	struct mlx5e_channel channel[];
 };
@@ -1200,7 +1202,8 @@ int	mlx5e_open_cq(struct mlx5e_priv *, struct mlx5e_cq_param *,
 void	mlx5e_close_cq(struct mlx5e_cq *);
 void	mlx5e_free_sq_db(struct mlx5e_sq *);
 int	mlx5e_alloc_sq_db(struct mlx5e_sq *);
-int	mlx5e_enable_sq(struct mlx5e_sq *, struct mlx5e_sq_param *, int tis_num);
+int	mlx5e_enable_sq(struct mlx5e_sq *, struct mlx5e_sq_param *,
+    const struct mlx5_sq_bfreg *, int tis_num);
 int	mlx5e_modify_sq(struct mlx5e_sq *, int curr_state, int next_state);
 void	mlx5e_disable_sq(struct mlx5e_sq *);
 void	mlx5e_drain_sq(struct mlx5e_sq *);
