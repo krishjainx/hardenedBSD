@@ -276,6 +276,14 @@ pflog_packet_t			*pflog_packet_ptr = NULL;
 
 extern u_long	pf_ioctl_maxcount;
 
+#define	ERROUT_FUNCTION(target, x)					\
+	do {								\
+		error = (x);						\
+		SDT_PROBE3(pf, ioctl, function, error, __func__, error,	\
+		    __LINE__);						\
+		goto target;						\
+	} while (0)
+
 static void
 pfattach_vnet(void)
 {
@@ -285,6 +293,7 @@ pfattach_vnet(void)
 	pfr_initialize();
 	pfi_initialize_vnet();
 	pf_normalize_init();
+	pf_syncookies_init();
 
 	V_pf_limits[PF_LIMIT_STATES].limit = PFSTATE_HIWAT;
 	V_pf_limits[PF_LIMIT_SRC_NODES].limit = PFSNODE_HIWAT;
@@ -2137,6 +2146,7 @@ pfioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags, struct thread *td
 		case DIOCOSFPGET:
 		case DIOCGETSRCNODES:
 		case DIOCCLRSRCNODES:
+		case DIOCGETSYNCOOKIES:
 		case DIOCIGETIFACES:
 		case DIOCGIFSPEEDV0:
 		case DIOCGIFSPEEDV1:
@@ -2184,6 +2194,7 @@ pfioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags, struct thread *td
 		case DIOCRTSTADDRS:
 		case DIOCOSFPGET:
 		case DIOCGETSRCNODES:
+		case DIOCGETSYNCOOKIES:
 		case DIOCIGETIFACES:
 		case DIOCGIFSPEEDV1:
 		case DIOCGIFSPEEDV0:
@@ -4601,6 +4612,14 @@ DIOCCHANGEADDR_error:
 		error = pf_keepcounters((struct pfioc_nv *)addr);
 		break;
 
+	case DIOCGETSYNCOOKIES:
+		error = pf_get_syncookies((struct pfioc_nv *)addr);
+		break;
+
+	case DIOCSETSYNCOOKIES:
+		error = pf_set_syncookies((struct pfioc_nv *)addr);
+		break;
+
 	case DIOCSETHOSTID: {
 		u_int32_t	*hostid = (u_int32_t *)addr;
 
@@ -5575,7 +5594,7 @@ pf_load(void)
 {
 	int error;
 
-	rm_init(&pf_rules_lock, "pf rulesets");
+	rm_init_flags(&pf_rules_lock, "pf rulesets", RM_RECURSE);
 	sx_init(&pf_ioctl_lock, "pf ioctl");
 	sx_init(&pf_end_lock, "pf end thread");
 
@@ -5614,6 +5633,7 @@ pf_unload_vnet(void)
 	}
 
 	PF_RULES_WLOCK();
+	pf_syncookies_cleanup();
 	shutdown_pf();
 	PF_RULES_WUNLOCK();
 
