@@ -2531,8 +2531,12 @@ _tcsh=bin/csh
 _libmagic=lib/libmagic
 .endif
 
+<<<<<<< HEAD
 .if ${MK_PMC} != "no" && \
     (${TARGET_ARCH} == "aarch64" || ${TARGET_ARCH} == "amd64")
+=======
+.if ${MK_PMC} != "no"
+>>>>>>> origin/freebsd/13-stable/main
 _jevents=lib/libpmc/pmu-events
 .endif
 
