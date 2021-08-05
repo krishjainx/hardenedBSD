@@ -6,16 +6,13 @@
 PACKAGE=rescue
 MAN=
 MK_SSP=	no
-<<<<<<< HEAD
 MK_CFI=	no
-=======
 # Static-PIE is not supported so we should not be linking against _pie.a libs.
 # This is also needed to avoid linking against sanitizer-instrumented libraries
 # since MK_ASAN/MK_UBSAN will instrument the .pieo object files.
 MK_PIE=	no
 NO_SHARED=	yes
 CRUNCH_BUILDOPTS+=	MK_PIE=no NO_SHARED=yes
->>>>>>> origin/freebsd/13-stable/main
 
 PROG=	rescue
 BINDIR?=/rescue
