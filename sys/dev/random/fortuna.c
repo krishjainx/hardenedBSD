@@ -39,14 +39,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/limits.h>
 
 #ifdef _KERNEL
-<<<<<<< HEAD
 
 #include "opt_pax.h"
 
-#include <sys/param.h>
-=======
 #include <sys/fail.h>
->>>>>>> origin/freebsd/12-stable/main
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
