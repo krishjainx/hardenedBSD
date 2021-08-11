@@ -725,6 +725,7 @@ BSARGS= 	DESTDIR= \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${BOOTSTRAPPING_OSRELDATE} \
 		BWPHASE=${.TARGET:C,^_,,} \
+<<<<<<< HEAD
 		SSP_CFLAGS= \
 		MK_HTML=no NO_LINT=yes MK_MAN=no MK_MAN_UTILS=yes \
 		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
@@ -733,6 +734,26 @@ BSARGS= 	DESTDIR= \
 		MK_LLDB=no MK_TESTS=no \
 		MK_INCLUDES=yes MK_CFI=no MK_RETPOLINE=no \
 		MK_CLANG_FORMAT=no
+=======
+		-DNO_CPU_CFLAGS \
+		-DNO_LINT \
+		-DNO_PIC \
+		-DNO_SHARED \
+		MK_CTF=no \
+		MK_CLANG_EXTRAS=no \
+		MK_CLANG_FORMAT=no \
+		MK_CLANG_FULL=no \
+		MK_HTML=no \
+		MK_LLDB=no \
+		MK_MAN=no \
+		MK_PROFILE=no \
+		MK_RETPOLINE=no \
+		MK_SSP=no \
+		MK_TESTS=no \
+		MK_WERROR=no \
+		MK_INCLUDES=yes \
+		MK_MAN_UTILS=yes
+>>>>>>> origin/freebsd/13-stable/main
 
 BMAKE=		\
 		${BMAKEENV} ${MAKE} ${WORLD_FLAGS} -f Makefile.inc1 \
@@ -748,12 +769,24 @@ TMAKE=		\
 		DESTDIR= \
 		BOOTSTRAPPING=${BOOTSTRAPPING_OSRELDATE} \
 		BWPHASE=${.TARGET:C,^_,,} \
-		SSP_CFLAGS= \
+		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
+<<<<<<< HEAD
 		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no \
 		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
 		MK_LLDB=no MK_TESTS=no MK_CFI=no MK_RETPOLINE=no \
 		MK_CLANG_FORMAT=no
+=======
+		MK_CTF=no \
+		MK_CLANG_EXTRAS=no \
+		MK_CLANG_FORMAT=no \
+		MK_CLANG_FULL=no \
+		MK_LLDB=no \
+		MK_RETPOLINE=no \
+		MK_SSP=no \
+		MK_TESTS=no \
+		MK_WERROR=no
+>>>>>>> origin/freebsd/13-stable/main
 
 # cross-tools stage
 # TOOLS_PREFIX set in BMAKE
@@ -776,11 +809,25 @@ KTMAKE=		\
 		OBJROOT='$${OBJTOP}/' \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${BOOTSTRAPPING_OSRELDATE} \
+<<<<<<< HEAD
 		SSP_CFLAGS= \
 		MK_HTML=no -DNO_LINT MK_MAN=no \
 		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
 		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no MK_CFI=no \
 		MK_RETPOLINE=no
+=======
+		-DNO_CPU_CFLAGS \
+		-DNO_LINT \
+		-DNO_PIC \
+		-DNO_SHARED \
+		MK_CTF=no \
+		MK_HTML=no \
+		MK_MAN=no \
+		MK_PROFILE=no \
+		MK_SSP=no \
+		MK_RETPOLINE=no \
+		MK_WERROR=no
+>>>>>>> origin/freebsd/13-stable/main
 
 # world stage
 WMAKEENV=	${CROSSENV} \
@@ -2753,7 +2800,6 @@ NXBMAKEARGS+= \
 	-DNO_SHARED \
 	-DNO_CPU_CFLAGS \
 	-DNO_PIC \
-	SSP_CFLAGS= \
 	MK_CASPER=no \
 	MK_CLANG_EXTRAS=yes \
 	MK_CLANG_FORMAT=no \
@@ -2770,6 +2816,7 @@ NXBMAKEARGS+= \
 	MK_RETPOLINE=no \
 	MK_SENDMAIL=no \
 	MK_SVNLITE=no \
+	MK_SSP=no \
 	MK_TESTS=no \
 	MK_WERROR=no \
 	MK_ZFS=no
