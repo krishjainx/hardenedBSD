@@ -655,20 +655,13 @@ BSARGS= 	DESTDIR= \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${OSRELDATE} \
 		BWPHASE=${.TARGET:C,^_,,} \
-<<<<<<< HEAD
-		SSP_CFLAGS= \
-		MK_HTML=no NO_LINT=yes MK_MAN=no \
-		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
-		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no \
-		MK_CLANG_EXTRAS=yes MK_CLANG_FORMAT=no MK_CLANG_FULL=no \
-		MK_LLDB=no MK_RETPOLINE=no MK_TESTS=no MK_CFI=no \
-=======
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
 		-DNO_PIC \
 		-DNO_SHARED \
+		MK_CFI=no \
 		MK_CTF=no \
-		MK_CLANG_EXTRAS=no \
+		MK_CLANG_EXTRAS=yes \
 		MK_CLANG_FORMAT=no \
 		MK_CLANG_FULL=no \
 		MK_HTML=no \
@@ -679,7 +672,6 @@ BSARGS= 	DESTDIR= \
 		MK_SSP=no \
 		MK_TESTS=no \
 		MK_WARNS=no \
->>>>>>> origin/freebsd/12-stable/main
 		MK_INCLUDES=yes
 
 BMAKE=		\
@@ -698,13 +690,9 @@ TMAKE=		\
 		BWPHASE=${.TARGET:C,^_,,} \
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
-<<<<<<< HEAD
-		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no \
-		MK_CLANG_EXTRAS=yes MK_CLANG_FORMAT=no MK_CLANG_FULL=no \
-		MK_LLDB=no MK_RETPOLINE=no MK_TESTS=no MK_CFI=no
-=======
+		MK_CFI=no \
 		MK_CTF=no \
-		MK_CLANG_EXTRAS=no \
+		MK_CLANG_EXTRAS=yes \
 		MK_CLANG_FORMAT=no \
 		MK_CLANG_FULL=no \
 		MK_LLDB=no \
@@ -712,7 +700,6 @@ TMAKE=		\
 		MK_SSP=no \
 		MK_TESTS=no \
 		MK_WARNS=no
->>>>>>> origin/freebsd/12-stable/main
 
 # cross-tools stage
 # TOOLS_PREFIX set in BMAKE
@@ -733,17 +720,11 @@ KTMAKE=		\
 		OBJROOT='$${OBJTOP}/' \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${OSRELDATE} \
-<<<<<<< HEAD
-		SSP_CFLAGS= \
-		MK_HTML=no -DNO_LINT MK_MAN=no \
-		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
-		-DNO_CPU_CFLAGS MK_WARNS=no MK_CTF=no MK_CFI=no \
-		MK_RETPOLINE=no
-=======
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
 		-DNO_PIC \
 		-DNO_SHARED \
+		MK_CFI=no \
 		MK_CTF=no \
 		MK_HTML=no \
 		MK_MAN=no \
@@ -751,7 +732,6 @@ KTMAKE=		\
 		MK_SSP=no \
 		MK_RETPOLINE=no \
 		MK_WARNS=no
->>>>>>> origin/freebsd/12-stable/main
 
 # world stage
 WMAKEENV=	${CROSSENV} \
@@ -2522,12 +2502,8 @@ NXBMAKEARGS+= \
 	-DNO_SHARED \
 	-DNO_CPU_CFLAGS \
 	-DNO_PIC \
-<<<<<<< HEAD
-	SSP_CFLAGS= \
+	MK_CFI=no \
 	MK_CLANG_EXTRAS=yes \
-=======
-	MK_CLANG_EXTRAS=no \
->>>>>>> origin/freebsd/12-stable/main
 	MK_CLANG_FORMAT=no \
 	MK_CLANG_FULL=no \
 	MK_CTF=no \
