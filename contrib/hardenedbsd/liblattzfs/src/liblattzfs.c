@@ -22,6 +22,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define __STDC_WANT_LIB_EXT1__ 1
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,7 +102,7 @@ lattzfs_ctx_free(lattzfs_ctx_t **ctx)
 	}
 
 	free(ctxp->lc_pool_name);
-	memset(ctxp, 0, sizeof(*ctxp));
+	memset_s(ctxp, sizeof(*ctxp), 0, sizeof(*ctxp));
 	free(ctxp);
 	*ctx = NULL;
 }
