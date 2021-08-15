@@ -132,6 +132,7 @@ _LIBRARIES=	\
 		krb5 \
 		kvm \
 		l \
+		lattzfs \
 		lzma \
 		m \
 		magic \
@@ -392,6 +393,8 @@ _DP_netmap=
 _DP_ifconfig=	m
 _DP_pfctl=	nv
 
+_DP_lattzfs=	zfs spl nvpair
+
 # OFED support
 .if ${MK_OFED} != "no"
 _DP_cxgb4=	ibverbs pthread
@@ -560,6 +563,9 @@ LIBAMUDIR=	${_LIB_OBJTOP}/usr.sbin/amd/libamu
 LIBAMU?=	${LIBAMUDIR}/libamu.a
 
 LIBBE?=		${LIBBEDIR}/libbe.a
+
+LIBLATTZFSDIR=	${_LIB_OBJTOP}/lib/liblattzfs
+LIBLATTZFS?=	${LIBLATTZFSDIR}/liblattzfs.a
 
 LIBPMCSTATDIR=	${_LIB_OBJTOP}/lib/libpmcstat
 LIBPMCSTAT?=	${LIBPMCSTATDIR}/libpmcstat.a
