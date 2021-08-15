@@ -63,6 +63,11 @@ lattzfs_ctx_new(const char *pool, uint64_t flags)
 	}
 
 	ctx->lc_zfs_handle = libzfs_init();
+	if (ctx->lc_zfs_handle == NULL) {
+		free(ctx);
+		free(ctx->lc_pool_name);
+		return (NULL);
+	}
 
 	if (!(flags & LATTZFS_FLAG_LAZY_OPEN)) {
 		if (!_lattzfs_pool_open(ctx)) {
