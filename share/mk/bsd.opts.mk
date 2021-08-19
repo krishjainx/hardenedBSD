@@ -72,6 +72,12 @@ __DEFAULT_NO_OPTIONS = \
     CCACHE_BUILD \
     CTF \
     INSTALL_AS_USER \
+<<<<<<< HEAD
+=======
+    PIE \
+    MANSPLITPKG \
+    RETPOLINE \
+>>>>>>> origin/freebsd/13-stable/main
     STALE_STAGED
 
 __DEFAULT_DEPENDENT_OPTIONS = \

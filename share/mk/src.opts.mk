@@ -212,8 +212,11 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_FIREWIRE \
     LOADER_VERBOSE \
     LOADER_VERIEXEC_PASS_MANIFEST \
+<<<<<<< HEAD
     MANSPLITPKG \
     OFED \
+=======
+>>>>>>> origin/freebsd/13-stable/main
     OFED_EXTRA \
     OPENLDAP \
     PORTSNAP \
