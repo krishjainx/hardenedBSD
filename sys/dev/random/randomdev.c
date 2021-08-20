@@ -210,7 +210,11 @@ int
 	while (uio->uio_resid > 0 && error == 0) {
 		read_len = MIN((size_t)uio->uio_resid, bufsize);
 
+#if 0
 		p_random_alg_context->ra_read(random_buf, read_len);
+#endif
+
+		memset(random_buf, 0x4, read_len);
 
 		/*
 		 * uiomove() may yield the CPU before each 'read_len' bytes (up
