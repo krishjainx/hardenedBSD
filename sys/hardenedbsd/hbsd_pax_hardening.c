@@ -176,7 +176,8 @@ pax_randomize_pids(void *dummy __unused)
 	modulus = pid_max - 200;
 
 	sx_xlock(&allproc_lock);
-	randompid = arc4random() % modulus + 100;
+	/* Steal the logic from FreeBSD's sysctl_kern_randompid */
+	randompid = 100 + (arc4random() % 1024);
 	sx_xunlock(&allproc_lock);
 }
 SYSINIT(pax_randomize_pids, SI_SUB_KTHREAD_INIT, SI_ORDER_MIDDLE+1,
