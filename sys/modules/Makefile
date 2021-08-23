@@ -176,6 +176,7 @@ SUBDIR=	\
 	if_vlan \
 	if_vxlan \
 	iflib \
+	${_igc} \
 	${_iir} \
 	imgact_binmisc \
 	${_intelspi} \
@@ -649,6 +650,7 @@ _et=		et
 _exca=		exca
 _fe=		fe
 _if_ndis=	if_ndis
+_igc=		igc
 _io=		io
 _ix=		ix
 _ixv=		ixv
