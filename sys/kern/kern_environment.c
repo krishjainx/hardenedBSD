@@ -197,36 +197,6 @@ sys_kenv(struct thread *td, struct kenv_args *uap)
 		if (error)
 			return (error);
 #endif
-<<<<<<< HEAD
-		done = needed = 0;
-		buflen = uap->len;
-		if (buflen > KENV_SIZE * (KENV_MNAMELEN + kenv_mvallen + 2))
-			buflen = KENV_SIZE * (KENV_MNAMELEN +
-			    kenv_mvallen + 2);
-		if (uap->len > 0 && uap->value != NULL)
-			buffer = malloc(buflen, M_TEMP, M_WAITOK|M_ZERO);
-		mtx_lock(&kenv_lock);
-		for (i = 0; kenvp[i] != NULL; i++) {
-			len = strlen(kenvp[i]) + 1;
-			needed += len;
-			len = min(len, buflen - done);
-			/*
-			 * If called with a NULL or insufficiently large
-			 * buffer, just keep computing the required size.
-			 */
-			if (uap->value != NULL && buffer != NULL && len > 0) {
-				bcopy(kenvp[i], buffer + done, len);
-				done += len;
-			}
-		}
-		mtx_unlock(&kenv_lock);
-		if (buffer != NULL) {
-			error = copyout(buffer, uap->value, done);
-			free(buffer, M_TEMP);
-		}
-		td->td_retval[0] = ((done == needed) ? 0 : needed);
-		return (error);
-=======
 		return (kenv_dump(td, kenvp, uap->what, uap->value, uap->len));
 	case KENV_DUMP_LOADER:
 	case KENV_DUMP_STATIC:
@@ -253,7 +223,6 @@ sys_kenv(struct thread *td, struct kenv_args *uap)
 		if (error)
 			return (error);
 		break;
->>>>>>> origin/freebsd/12-stable/main
 	}
 
 	name = malloc(KENV_MNAMELEN + 1, M_TEMP, M_WAITOK);
