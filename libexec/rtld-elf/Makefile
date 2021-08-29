@@ -8,9 +8,15 @@ RTLD_ELF_DIR:=	${.PARSEDIR}
 
 .include <src.opts.mk>
 PACKAGE=	clibs
+# Not compatible with sanitizer instrumentation or SSP.
 MK_SSP=		no
 MK_CFI=		no
+<<<<<<< HEAD
 MK_CROSS_DSO_CFI=	no
+=======
+MK_ASAN=	no
+MK_UBSAN=	no
+>>>>>>> origin/hardened/current/master
 
 CONFS=		libmap.conf
 PROG?=		ld-elf.so.1

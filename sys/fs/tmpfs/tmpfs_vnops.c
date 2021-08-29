@@ -295,9 +295,9 @@ tmpfs_mknod(struct vop_mknod_args *v)
 
 	if (vap->va_type != VBLK && vap->va_type != VCHR &&
 	    vap->va_type != VFIFO)
-		return EINVAL;
+		return (EINVAL);
 
-	return tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL);
+	return (tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL));
 }
 
 struct fileops tmpfs_fnops;
@@ -535,7 +535,7 @@ tmpfs_getattr(struct vop_getattr_args *v)
 		vap->va_bytes = node->tn_size;
 	vap->va_filerev = 0;
 
-	return 0;
+	return (0);
 }
 
 int
@@ -593,7 +593,7 @@ tmpfs_setattr(struct vop_setattr_args *v)
 
 	MPASS(VOP_ISLOCKED(vp));
 
-	return error;
+	return (error);
 }
 
 static int
@@ -714,6 +714,12 @@ out:
 }
 
 static int
+tmpfs_deallocate(struct vop_deallocate_args *v)
+{
+	return (tmpfs_reg_punch_hole(v->a_vp, v->a_offset, v->a_len));
+}
+
+static int
 tmpfs_fsync(struct vop_fsync_args *v)
 {
 	struct vnode *vp = v->a_vp;
@@ -723,7 +729,7 @@ tmpfs_fsync(struct vop_fsync_args *v)
 	tmpfs_check_mtime(vp);
 	tmpfs_update(vp);
 
-	return 0;
+	return (0);
 }
 
 static int
@@ -826,7 +832,7 @@ tmpfs_link(struct vop_link_args *v)
 	error = 0;
 
 out:
-	return error;
+	return (error);
 }
 
 /*
@@ -1282,7 +1288,7 @@ tmpfs_mkdir(struct vop_mkdir_args *v)
 
 	MPASS(vap->va_type == VDIR);
 
-	return tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL);
+	return (tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL));
 }
 
 static int
@@ -1373,7 +1379,7 @@ tmpfs_rmdir(struct vop_rmdir_args *v)
 	error = 0;
 
 out:
-	return error;
+	return (error);
 }
 
 static int
@@ -1391,7 +1397,7 @@ tmpfs_symlink(struct vop_symlink_args *v)
 	vap->va_type = VLNK;
 #endif
 
-	return tmpfs_alloc_file(dvp, vpp, vap, cnp, target);
+	return (tmpfs_alloc_file(dvp, vpp, vap, cnp, target));
 }
 
 static int
@@ -1414,7 +1420,7 @@ tmpfs_readdir(struct vop_readdir_args *va)
 
 	/* This operation only makes sense on directory nodes. */
 	if (vp->v_type != VDIR)
-		return ENOTDIR;
+		return (ENOTDIR);
 
 	maxcookies = 0;
 	node = VP_TO_TMPFS_DIR(vp);
@@ -1451,7 +1457,7 @@ tmpfs_readdir(struct vop_readdir_args *va)
 		*eofflag =
 		    (error == 0 && uio->uio_offset == TMPFS_DIRCOOKIE_EOF);
 
-	return error;
+	return (error);
 }
 
 static int
@@ -1598,7 +1604,7 @@ tmpfs_print(struct vop_print_args *v)
 
 	printf("\n");
 
-	return 0;
+	return (0);
 }
 
 int
@@ -1652,7 +1658,7 @@ tmpfs_pathconf(struct vop_pathconf_args *v)
 		error = vop_stdpathconf(v);
 	}
 
-	return error;
+	return (error);
 }
 
 static int
@@ -2120,6 +2126,7 @@ struct vop_vector tmpfs_vnodeop_entries = {
 	.vop_read =			tmpfs_read,
 	.vop_read_pgcache =		tmpfs_read_pgcache,
 	.vop_write =			tmpfs_write,
+	.vop_deallocate =		tmpfs_deallocate,
 	.vop_fsync =			tmpfs_fsync,
 	.vop_remove =			tmpfs_remove,
 	.vop_link =			tmpfs_link,

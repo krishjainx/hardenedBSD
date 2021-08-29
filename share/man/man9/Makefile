@@ -161,6 +161,7 @@ MAN=	accept_filter.9 \
 	g_provider_by_name.9 \
 	groupmember.9 \
 	g_wither_geom.9 \
+	gone_in.9 \
 	hardclock.9 \
 	hash.9 \
 	hashinit.9 \
@@ -196,6 +197,7 @@ MAN=	accept_filter.9 \
 	kernacc.9 \
 	kernel_mount.9 \
 	khelp.9 \
+	kmsan.9 \
 	kobj.9 \
 	kproc.9 \
 	kqueue.9 \
@@ -404,11 +406,13 @@ MAN=	accept_filter.9 \
 	vm_page_wire.9 \
 	vm_set_page_size.9 \
 	vmem.9 \
+	vn_deallocate.9 \
 	vn_fullpath.9 \
 	vn_isdisk.9 \
 	vnet.9 \
 	vnode.9 \
 	vnode_pager_setsize.9 \
+	vnode_pager_purge_range.9 \
 	VOP_ACCESS.9 \
 	VOP_ACLCHECK.9 \
 	VOP_ADVISE.9 \
@@ -419,6 +423,7 @@ MAN=	accept_filter.9 \
 	VOP_BWRITE.9 \
 	VOP_COPY_FILE_RANGE.9 \
 	VOP_CREATE.9 \
+	VOP_DEALLOCATE.9 \
 	VOP_FSYNC.9 \
 	VOP_GETACL.9 \
 	VOP_GETEXTATTR.9 \
@@ -1007,6 +1012,7 @@ MLINKS+=dnv.9 dnvlist.9 \
 	dnv.9 dnvlist_take_string.9
 MLINKS+=domain.9 DOMAIN_SET.9 \
 	domain.9 domain_add.9 \
+	domain.9 domain_init.9 \
 	domain.9 pfctlinput.9 \
 	domain.9 pffinddomain.9 \
 	domain.9 pffindproto.9 \
@@ -1114,6 +1120,7 @@ MLINKS+=g_geom.9 g_destroy_geom.9 \
 MLINKS+=g_provider.9 g_destroy_provider.9 \
 	g_provider.9 g_error_provider.9 \
 	g_provider.9 g_new_providerf.9
+MLINKS+=gone_in.9 gone_in_dev.9
 MLINKS+=hash.9 hash32.9 \
 	hash.9 hash32_buf.9 \
 	hash.9 hash32_str.9 \
@@ -1317,6 +1324,13 @@ MLINKS+=khelp.9 khelp_add_hhook.9 \
 	khelp.9 khelp_get_osd.9 \
 	khelp.9 khelp_init_osd.9 \
 	khelp.9 khelp_remove_hhook.9
+MLINKS+=kmsan.9 KMSAN.9 \
+	kmsan.9 kmsan_check.9 \
+	kmsan.9 kmsan_check_bio.9 \
+	kmsan.9 kmsan_check_ccb.9 \
+	kmsan.9 kmsan_check_mbuf.9 \
+	kmsan.9 kmsan_mark.9 \
+	kmsan.9 kmsan_oirg.9
 MLINKS+=kobj.9 DEFINE_CLASS.9 \
 	kobj.9 kobj_class_compile.9 \
 	kobj.9 kobj_class_compile_static.9 \
@@ -1672,9 +1686,12 @@ MLINKS+=osd.9 osd_call.9 \
 	osd.9 osd_del.9 \
 	osd.9 osd_deregister.9 \
 	osd.9 osd_exit.9 \
+	osd.9 osd_free_reserved.9 \
 	osd.9 osd_get.9 \
 	osd.9 osd_register.9 \
-	osd.9 osd_set.9
+	osd.9 osd_reserve.9 \
+	osd.9 osd_set.9 \
+	osd.9 osd_set_reserved.9
 MLINKS+=panic.9 vpanic.9
 MLINKS+=PCBGROUP.9 in_pcbgroup_byhash.9 \
 	PCBGROUP.9 in_pcbgroup_byinpcb.9 \
@@ -2392,7 +2409,8 @@ MLINKS+=zone.9 uma.9 \
 	zone.9 uma_zone_set_warning.9 \
 	zone.9 uma_zsecond_create.9
 
-.if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "i386"
+# This makes more sense for amd64 and i386 but
+# we decide to install all manpages in all architectures
 _superio.9=	superio.9
 MLINKS+=superio.9 superio_devid.9 \
 	superio.9 superio_dev_disable.9 \
@@ -2409,6 +2427,5 @@ MLINKS+=superio.9 superio_devid.9 \
 	superio.9 superio_revid.9 \
 	superio.9 superio_vendor.9 \
 	superio.9 superio_write.9
-.endif
 
 .include <bsd.prog.mk>

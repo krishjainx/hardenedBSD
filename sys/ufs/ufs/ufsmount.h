@@ -67,13 +67,10 @@ struct inodedep;
 TAILQ_HEAD(inodedeplst, inodedep);
 LIST_HEAD(bmsafemaphd, bmsafemap);
 LIST_HEAD(trimlist_hashhead, ffs_blkfree_trim_params);
-struct fsfail_task {
-	struct task task;
-	fsid_t fsid;
-};
 
 #include <sys/_lock.h>
 #include <sys/_mutex.h>
+#include <sys/_sx.h>
 
 /*
  * This structure describes the UFS specific mount structure data.
@@ -103,6 +100,8 @@ struct ufsmount {
 	uint64_t um_maxsymlinklen;		/* (c) max size of short
 						       symlink */
 	struct	mtx um_lock;			/* (c) Protects ufsmount & fs */
+	struct	sx um_checkpath_lock;		/* (c) Protects ufs_checkpath()
+						       result */
 	pid_t	um_fsckpid;			/* (u) PID can do fsck sysctl */
 	struct	mount_softdeps *um_softdep;	/* (c) softdep mgmt structure */
 	struct	vnode *um_quotas[MAXQUOTAS];	/* (q) pointer to quota files */
@@ -123,7 +122,6 @@ struct ufsmount {
 	struct	taskqueue *um_trim_tq;		/* (c) trim request queue */
 	struct	trimlist_hashhead *um_trimhash;	/* (i) trimlist hash table */
 	u_long	um_trimlisthashsize;		/* (i) trim hash table size-1 */
-	struct	fsfail_task *um_fsfail_task;	/* (i) task for fsfail cleanup*/
 						/* (c) - below function ptrs */
 	int	(*um_balloc)(struct vnode *, off_t, int, struct ucred *,
 		    int, struct buf **);

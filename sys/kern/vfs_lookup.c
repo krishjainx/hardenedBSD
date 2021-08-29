@@ -97,9 +97,9 @@ static int
 crossmp_vop_lock1(struct vop_lock1_args *ap)
 {
 	struct vnode *vp;
-	struct lock *lk __unused;
-	const char *file __unused;
-	int flags, line __unused;
+	struct lock *lk __diagused;
+	const char *file __diagused;
+	int flags, line __diagused;
 
 	vp = ap->a_vp;
 	lk = vp->v_vnlock;
@@ -123,7 +123,7 @@ static int
 crossmp_vop_unlock(struct vop_unlock_args *ap)
 {
 	struct vnode *vp;
-	struct lock *lk __unused;
+	struct lock *lk __diagused;
 
 	vp = ap->a_vp;
 	lk = vp->v_vnlock;
@@ -178,11 +178,9 @@ static void
 nameicap_tracker_add(struct nameidata *ndp, struct vnode *dp)
 {
 	struct nameicap_tracker *nt;
-	struct componentname *cnp;
 
 	if ((ndp->ni_lcf & NI_LCF_CAP_DOTDOT) == 0 || dp->v_type != VDIR)
 		return;
-	cnp = &ndp->ni_cnd;
 	nt = TAILQ_LAST(&ndp->ni_cap_tracker, nameicap_tracker_head);
 	if (nt != NULL && nt->dp == dp)
 		return;
@@ -489,6 +487,7 @@ namei_emptypath(struct nameidata *ndp)
 	MPASS((cnp->cn_flags & EMPTYPATH) != 0);
 	MPASS((cnp->cn_flags & (LOCKPARENT | WANTPARENT)) == 0);
 
+	ndp->ni_resflags |= NIRES_EMPTYPATH;
 	error = namei_setup(ndp, &dp, &pwd);
 	if (error != 0) {
 		namei_cleanup_cnp(cnp);
@@ -501,7 +500,6 @@ namei_emptypath(struct nameidata *ndp)
 	ndp->ni_vp = dp;
 	namei_cleanup_cnp(cnp);
 	pwd_drop(pwd);
-	ndp->ni_resflags |= NIRES_EMPTYPATH;
 	NDVALIDATE(ndp);
 	if ((cnp->cn_flags & LOCKLEAF) != 0) {
 		VOP_LOCK(dp, (cnp->cn_flags & LOCKSHARED) != 0 ?

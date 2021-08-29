@@ -104,11 +104,6 @@ __FBSDID("$FreeBSD$");
  * On exit:
  *   r0 - dest address
  */
-/* LINTSTUB: Func: void bzero(void *, size_t) */
-ENTRY(bzero)
-	mov	r3, #0x00
-	b	do_memset
-END(bzero)
 /* LINTSTUB: Func: void *memset(void *, int, size_t) */
 ENTRY(memset)
 	and	r3, r1, #0xff		/* We deal with bytes */
@@ -213,10 +208,9 @@ do_memset:
 	strbge	r3, [ip], #0x01		/* Set another byte */
 	strbgt	r3, [ip]		/* and a third */
 	RET			/* Exit */
-EEND(memset)
-END(bzero)
+END(memset)
 
-ENTRY(bcmp)
+ENTRY(memcmp)
 	mov	ip, r0
 	cmp	r2, #0x06
 	beq	.Lmemcmp_6bytes
@@ -324,14 +318,9 @@ ENTRY(bcmp)
 	RETne			/* Return if mismatch on #4 */
 	sub	r0, r3, r2		/* r0 = b1#5 - b2#5 */
 	RET
-END(bcmp)
+END(memcmp)
 
-ENTRY(bcopy)
-	/* switch the source and destination registers */
-	eor     r0, r1, r0
-	eor     r1, r0, r1
-	eor     r0, r1, r0
-EENTRY(memmove)
+ENTRY(memmove)
 	/* Do the buffers overlap? */
 	cmp	r0, r1
 	RETeq		/* Bail now if src/dst are the same */
@@ -736,8 +725,7 @@ EENTRY(memmove)
 .Lmemmove_bsrcul1l4:
 	add	r1, r1, #1
 	b	.Lmemmove_bl4
-EEND(memmove)
-END(bcopy)
+END(memmove)
 
 /* LINTSTUB: Func: void *memcpy(void *dst, const void *src, size_t len) */
 ENTRY(memcpy)

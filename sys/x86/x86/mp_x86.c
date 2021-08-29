@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/asan.h>
 #include <sys/bus.h>
 #include <sys/cons.h>	/* cngetc() */
 #include <sys/cpuset.h>
@@ -172,13 +173,9 @@ struct cache_info {
 	int	present;
 } static caches[MAX_CACHE_LEVELS];
 
-unsigned int boot_address;
-
 static bool stop_mwait = false;
 SYSCTL_BOOL(_machdep, OID_AUTO, stop_mwait, CTLFLAG_RWTUN, &stop_mwait, 0,
     "Use MONITOR/MWAIT when stopping CPU, if available");
-
-#define MiB(v)	(v ## ULL << 20)
 
 void
 mem_range_AP_init(void)
@@ -833,6 +830,12 @@ x86topo_add_sched_group(struct topo_node *root, struct cpu_group *cg_root)
 		node = topo_next_nonchild_node(root, node);
 	}
 
+	/*
+	 * We are not interested in nodes including only one CPU each.
+	 */
+	if (nchildren == root->cpu_count)
+		return;
+
 	cg_root->cg_child = smp_topo_alloc(nchildren);
 	cg_root->cg_children = nchildren;
 
@@ -937,56 +940,6 @@ cpu_mp_probe(void)
 	return (mp_ncpus > 1);
 }
 
-/* Allocate memory for the AP trampoline. */
-void
-alloc_ap_trampoline(vm_paddr_t *physmap, unsigned int *physmap_idx)
-{
-	unsigned int i;
-	bool allocated;
-
-	allocated = false;
-	for (i = *physmap_idx; i <= *physmap_idx; i -= 2) {
-		/*
-		 * Find a memory region big enough and below the 1MB boundary
-		 * for the trampoline code.
-		 * NB: needs to be page aligned.
-		 */
-		if (physmap[i] >= MiB(1) ||
-		    (trunc_page(physmap[i + 1]) - round_page(physmap[i])) <
-		    round_page(bootMP_size))
-			continue;
-
-		allocated = true;
-		/*
-		 * Try to steal from the end of the region to mimic previous
-		 * behaviour, else fallback to steal from the start.
-		 */
-		if (physmap[i + 1] < MiB(1)) {
-			boot_address = trunc_page(physmap[i + 1]);
-			if ((physmap[i + 1] - boot_address) < bootMP_size)
-				boot_address -= round_page(bootMP_size);
-			physmap[i + 1] = boot_address;
-		} else {
-			boot_address = round_page(physmap[i]);
-			physmap[i] = boot_address + round_page(bootMP_size);
-		}
-		if (physmap[i] == physmap[i + 1] && *physmap_idx != 0) {
-			memmove(&physmap[i], &physmap[i + 2],
-			    sizeof(*physmap) * (*physmap_idx - i + 2));
-			*physmap_idx -= 2;
-		}
-		break;
-	}
-
-	if (!allocated) {
-		boot_address = basemem * 1024 - bootMP_size;
-		if (bootverbose)
-			printf(
-"Cannot find enough space for the boot trampoline, placing it at %#x",
-			    boot_address);
-	}
-}
-
 /*
  * AP CPU's call this to initialize themselves.
  */
@@ -1069,11 +1022,6 @@ init_secondary_tail(void)
 	}
 
 #ifdef __amd64__
-	/*
-	 * Enable global pages TLB extension
-	 * This also implicitly flushes the TLB 
-	 */
-	load_cr4(rcr4() | CR4_PGE);
 	if (pmap_pcid_enabled)
 		load_cr4(rcr4() | CR4_PCIDE);
 	load_ds(_udatasel);
@@ -1283,6 +1231,8 @@ ipi_bitmap_handler(struct trapframe frame)
 	struct thread *td;
 	int cpu = PCPU_GET(cpuid);
 	u_int ipi_bitmap;
+
+	kasan_mark(&frame, sizeof(frame), sizeof(frame), 0);
 
 	td = curthread;
 	ipi_bitmap = atomic_readandclear_int(&cpuid_to_pcpu[cpu]->

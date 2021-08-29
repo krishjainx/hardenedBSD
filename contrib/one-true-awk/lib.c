@@ -176,6 +176,7 @@ int getrec(char **pbuf, int *pbufsize, bool isrecord)	/* get next input record *
 				infile = stdin;
 			else if ((infile = fopen(file, "r")) == NULL)
 				FATAL("can't open file %s", file);
+			innew = true;
 			setfval(fnrloc, 0.0);
 		}
 		c = readrec(&buf, &bufsize, infile, innew);
@@ -241,6 +242,7 @@ int readrec(char **pbuf, int *pbufsize, FILE *inf, bool newflag)	/* read one rec
 		}
 		if (found)
 			setptr(patbeg, '\0');
+		isrec = (found == 0 && *buf == '\0') ? false : true;
 	} else {
 		if ((sep = *rs) == 0) {
 			sep = '\n';
@@ -270,10 +272,10 @@ int readrec(char **pbuf, int *pbufsize, FILE *inf, bool newflag)	/* read one rec
 		if (!adjbuf(&buf, &bufsize, 1+rr-buf, recsize, &rr, "readrec 3"))
 			FATAL("input record `%.30s...' too long", buf);
 		*rr = 0;
+		isrec = (c == EOF && rr == buf) ? false : true;
 	}
 	*pbuf = buf;
 	*pbufsize = bufsize;
-	isrec = *buf || !feof(inf);
 	DPRINTF("readrec saw <%s>, returns %d\n", buf, isrec);
 	return isrec;
 }
@@ -793,9 +795,18 @@ bool is_valid_number(const char *s, bool trailing_stuff_ok,
 	while (isspace(*s))
 		s++;
 
+/*
+ * This test, while allowed by newer POSIX standards, represents a regression
+ * where hex strings were treated as numbers in nawk the whole time it has been
+ * in FreeBSD (since 2001). The POSIX 2001 through 2004 standards mandated this
+ * behavior and the current standard allows it. Deviate from upstream by restoring
+ * the prior FreeBSD behavior.
+ */
+#if 0
 	// no hex floating point, sorry
 	if (s[0] == '0' && tolower(s[1]) == 'x')
 		return false;
+#endif
 
 	// allow +nan, -nan, +inf, -inf, any other letter, no
 	if (s[0] == '+' || s[0] == '-') {

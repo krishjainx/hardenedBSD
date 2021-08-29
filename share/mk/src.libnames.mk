@@ -148,6 +148,7 @@ _LIBRARIES=	\
 		krb5 \
 		kvm \
 		l \
+		lattzfs \
 		lzma \
 		m \
 		magic \
@@ -404,6 +405,8 @@ _DP_netmap=
 _DP_ifconfig=	m
 _DP_pfctl=	nv
 
+_DP_lattzfs=	zfs spl nvpair
+
 # OFED support
 .if ${MK_OFED} != "no"
 _DP_cxgb4=	ibverbs pthread
@@ -503,10 +506,10 @@ LIBELFTCDIR=	${_LIB_OBJTOP}/lib/libelftc
 LIBELFTC?=	${LIBELFTCDIR}/libelftc.a
 
 LIBLUADIR=	${_LIB_OBJTOP}/lib/liblua
-LIBLUA?=	${LIBLUADIR}/liblua${PIE_SUFFIX}.a
+LIBLUA?=	${LIBLUADIR}/liblua.a
 
 LIBLUTOKDIR=	${_LIB_OBJTOP}/lib/liblutok
-LIBLUTOK?=	${LIBLUTOKDIR}/liblutok${PIE_SUFFIX}.a
+LIBLUTOK?=	${LIBLUTOKDIR}/liblutok.a
 
 LIBPEDIR=	${_LIB_OBJTOP}/lib/libpe
 LIBPE?=		${LIBPEDIR}/libpe.a
@@ -557,7 +560,7 @@ LIBPARSEDIR=	${_LIB_OBJTOP}/usr.sbin/ntp/libparse
 LIBPARSE?=	${LIBPARSEDIR}/libparse.a
 
 LIBPFCTL=	${_LIB_OBJTOP}/lib/libpfctl
-LIBPFCTL?=	${LIBPFCTLDIR}/libpfctl${PIE_SUFFIX}.a
+LIBPFCTL?=	${LIBPFCTLDIR}/libpfctl.a
 
 LIBLPRDIR=	${_LIB_OBJTOP}/usr.sbin/lpr/common_source
 LIBLPR?=	${LIBLPRDIR}/liblpr.a
@@ -570,53 +573,56 @@ LIBBSNMPTOOLS?=	${LIBBSNMPTOOLSDIR}/libbsnmptools.a
 
 LIBBE?=		${LIBBEDIR}/libbe.a
 
+LIBLATTZFSDIR=	${_LIB_OBJTOP}/lib/liblattzfs
+LIBLATTZFS?=	${LIBLATTZFSDIR}/liblattzfs.a
+
 LIBPMCSTATDIR=	${_LIB_OBJTOP}/lib/libpmcstat
 LIBPMCSTAT?=	${LIBPMCSTATDIR}/libpmcstat.a
 
 LIBWPAAPDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/ap
-LIBWPAAP?=	${LIBWPAAPDIR}/libwpaap${PIE_SUFFIX}.a
+LIBWPAAP?=	${LIBWPAAPDIR}/libwpaap.a
 
 LIBWPACOMMONDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/common
-LIBWPACOMMON?=	${LIBWPACOMMONDIR}/libwpacommon${PIE_SUFFIX}.a
+LIBWPACOMMON?=	${LIBWPACOMMONDIR}/libwpacommon.a
 
 LIBWPACRYPTODIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/crypto
-LIBWPACRYPTO?=	${LIBWPACRYPTODIR}/libwpacrypto${PIE_SUFFIX}.a
+LIBWPACRYPTO?=	${LIBWPACRYPTODIR}/libwpacrypto.a
 
 LIBWPADRIVERSDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/drivers
-LIBWPADRIVERS?=	${LIBWPADRIVERSDIR}/libwpadrivers${PIE_SUFFIX}.a
+LIBWPADRIVERS?=	${LIBWPADRIVERSDIR}/libwpadrivers.a
 
 LIBWPAEAP_COMMONDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/eap_common
-LIBWPAEAP_COMMON?=	${LIBWPAEAP_COMMONDIR}/libwpaeap_common${PIE_SUFFIX}.a
+LIBWPAEAP_COMMON?=	${LIBWPAEAP_COMMONDIR}/libwpaeap_common.a
 
 LIBWPAEAP_PEERDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/eap_peer
-LIBWPAEAP_PEER?=	${LIBWPAEAP_PEERDIR}/libwpaeap_peer${PIE_SUFFIX}.a
+LIBWPAEAP_PEER?=	${LIBWPAEAP_PEERDIR}/libwpaeap_peer.a
 
 LIBWPAEAP_SERVERDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/eap_server
-LIBWPAEAP_SERVER?=	${LIBWPAEAP_SERVERDIR}/libwpaeap_server${PIE_SUFFIX}.a
+LIBWPAEAP_SERVER?=	${LIBWPAEAP_SERVERDIR}/libwpaeap_server.a
 
 LIBWPAEAPOL_AUTHDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/eapol_auth
-LIBWPAEAPOL_AUTH?=	${LIBWPAEAPOL_AUTHDIR}/libwpaeapol_auth${PIE_SUFFIX}.a
+LIBWPAEAPOL_AUTH?=	${LIBWPAEAPOL_AUTHDIR}/libwpaeapol_auth.a
 
 LIBWPAEAPOL_SUPPDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/eapol_supp
-LIBWPAEAPOL_SUPP?=	${LIBWPAEAPOL_SUPPDIR}/libwpaeapol_supp${PIE_SUFFIX}.a
+LIBWPAEAPOL_SUPP?=	${LIBWPAEAPOL_SUPPDIR}/libwpaeapol_supp.a
 
 LIBWPAL2_PACKETDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/l2_packet
-LIBWPAL2_PACKET?=	${LIBWPAL2_PACKETDIR}/libwpal2_packet${PIE_SUFFIX}.a
+LIBWPAL2_PACKET?=	${LIBWPAL2_PACKETDIR}/libwpal2_packet.a
 
 LIBWPARADIUSDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/radius
-LIBWPARADIUS?=	${LIBWPARADIUSDIR}/libwparadius${PIE_SUFFIX}.a
+LIBWPARADIUS?=	${LIBWPARADIUSDIR}/libwparadius.a
 
 LIBWPARSN_SUPPDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/rsn_supp
-LIBWPARSN_SUPP?=	${LIBWPARSN_SUPPDIR}/libwparsn_supp${PIE_SUFFIX}.a
+LIBWPARSN_SUPP?=	${LIBWPARSN_SUPPDIR}/libwparsn_supp.a
 
 LIBWPATLSDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/tls
-LIBWPATLS?=	${LIBWPATLSDIR}/libwpatls${PIE_SUFFIX}.a
+LIBWPATLS?=	${LIBWPATLSDIR}/libwpatls.a
 
 LIBWPAUTILSDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/utils
-LIBWPAUTILS?=	${LIBWPAUTILSDIR}/libwpautils${PIE_SUFFIX}.a
+LIBWPAUTILS?=	${LIBWPAUTILSDIR}/libwpautils.a
 
 LIBWPAWPSDIR=	${_LIB_OBJTOP}/usr.sbin/wpa/src/wps
-LIBWPAWPS?=	${LIBWPAWPSDIR}/libwpawps${PIE_SUFFIX}.a
+LIBWPAWPS?=	${LIBWPAWPSDIR}/libwpawps.a
 
 LIBC_NOSSP_PICDIR=	${_LIB_OBJTOP}/lib/libc
 LIBC_NOSSP_PIC?=	${LIBC_NOSSP_PICDIR}/libc_nossp_pic.a

@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
+#include <sys/msan.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/bitstring.h>
@@ -57,7 +58,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/taskqueue.h>
 #include <sys/ktr.h>
 #include <sys/rwlock.h>
-#include <sys/umtx.h>
+#include <sys/umtxvar.h>
 #include <sys/vmmeter.h>
 #include <sys/cpuset.h>
 #ifdef	HWPMC_HOOKS
@@ -93,11 +94,11 @@ __FBSDID("$FreeBSD$");
  * structures.
  */
 #ifdef __amd64__
-_Static_assert(offsetof(struct thread, td_flags) == 0xfc,
+_Static_assert(offsetof(struct thread, td_flags) == 0x108,
     "struct thread KBI td_flags");
-_Static_assert(offsetof(struct thread, td_pflags) == 0x104,
+_Static_assert(offsetof(struct thread, td_pflags) == 0x110,
     "struct thread KBI td_pflags");
-_Static_assert(offsetof(struct thread, td_frame) == 0x4a0,
+_Static_assert(offsetof(struct thread, td_frame) == 0x4a8,
     "struct thread KBI td_frame");
 _Static_assert(offsetof(struct thread, td_emuldata) == 0x6b0,
     "struct thread KBI td_emuldata");
@@ -113,13 +114,13 @@ _Static_assert(offsetof(struct proc, p_emuldata) == 0x4b8,
     "struct proc KBI p_emuldata");
 #endif
 #ifdef __i386__
-_Static_assert(offsetof(struct thread, td_flags) == 0x98,
+_Static_assert(offsetof(struct thread, td_flags) == 0x9c,
     "struct thread KBI td_flags");
-_Static_assert(offsetof(struct thread, td_pflags) == 0xa0,
+_Static_assert(offsetof(struct thread, td_pflags) == 0xa4,
     "struct thread KBI td_pflags");
-_Static_assert(offsetof(struct thread, td_frame) == 0x300,
+_Static_assert(offsetof(struct thread, td_frame) == 0x308,
     "struct thread KBI td_frame");
-_Static_assert(offsetof(struct thread, td_emuldata) == 0x344,
+_Static_assert(offsetof(struct thread, td_emuldata) == 0x34c,
     "struct thread KBI td_emuldata");
 _Static_assert(offsetof(struct proc, p_flag) == 0x6c,
     "struct proc KBI p_flag");
@@ -771,6 +772,7 @@ thread_alloc(int pages)
 		return (NULL);
 	}
 	td->td_tid = tid;
+	kmsan_thread_alloc(td);
 	cpu_thread_alloc(td);
 	EVENTHANDLER_DIRECT_INVOKE(thread_ctor, td);
 	return (td);
@@ -807,6 +809,7 @@ thread_free_batched(struct thread *td)
 	 * Freeing handled by the caller.
 	 */
 	td->td_tid = -1;
+	kmsan_thread_free(td);
 	uma_zfree(thread_zone, td);
 }
 

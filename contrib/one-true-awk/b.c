@@ -24,9 +24,6 @@ THIS SOFTWARE.
 
 /* lasciate ogne speranza, voi ch'intrate. */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #define	DEBUG
 
 #include <ctype.h>
@@ -361,20 +358,9 @@ int quoted(const uschar **pp)	/* pick up next thing after a \\ */
 	return c;
 }
 
-static int collate_range_cmp(int a, int b)
-{
-	static char s[2][2];
-
-	if ((uschar)a == (uschar)b)
-		return 0;
-	s[0][0] = a;
-	s[1][0] = b;
-	return (strcoll(s[0], s[1]));
-}
-
 char *cclenter(const char *argp)	/* add a character class */
 {
-	int i, c, c2, j;
+	int i, c, c2;
 	const uschar *op, *p = (const uschar *) argp;
 	uschar *bp;
 	static uschar *buf = NULL;
@@ -393,18 +379,15 @@ char *cclenter(const char *argp)	/* add a character class */
 				c2 = *p++;
 				if (c2 == '\\')
 					c2 = quoted(&p);
-				if (collate_range_cmp(c, c2) > 0) {
+				if (c > c2) {	/* empty; ignore */
 					bp--;
 					i--;
 					continue;
 				}
-				for (j = 0; j < NCHARS; j++) {
-					if ((collate_range_cmp(c, j) > 0) ||
-					    collate_range_cmp(j, c2) > 0)
-						continue;
+				while (c < c2) {
 					if (!adjbuf((char **) &buf, &bufsz, bp-buf+2, 100, (char **) &bp, "cclenter1"))
 						FATAL("out of space for character class [%.10s...] 2", p);
-					*bp++ = j;
+					*bp++ = ++c;
 					i++;
 				}
 				continue;
@@ -614,22 +597,7 @@ int pmatch(fa *f, const char *p0)	/* longest match, for sub */
 		}
 	nextin:
 		s = 2;
-#if 0 /* XXX */
-		if (f->reset) {
-			for (i = 2; i <= f->curstat; i++)
-n				xfree(f->posns[i]);
-			k = *f->posns[0];			
-			if ((f->posns[2] = (int *) calloc(k+1, sizeof(int))) == NULL)
-				overflo("out of space in pmatch");
-			for (i = 0; i <= k; i++)
-				(f->posns[2])[i] = (f->posns[0])[i];
-			f->initstat = f->curstat = 2;
-			f->out[2] = f->out[0];
-			for (i = 0; i < NCHARS; i++)
-				f->gototab[2][i] = 0;
-		}
-#endif
-	} while (*p++ != 0);
+	} while (*p++);
 	return (0);
 }
 
@@ -670,21 +638,6 @@ int nematch(fa *f, const char *p0)	/* non-empty match, for sub */
 		}
 	nnextin:
 		s = 2;
-#if 0 /* XXX */
-		if (f->reset) {
-			for (i = 2; i <= f->curstat; i++)
-				xfree(f->posns[i]);
-			k = *f->posns[0];			
-			if ((f->posns[2] = (int *) calloc(k+1, sizeof(int))) == NULL)
-				overflo("out of state space");
-			for (i = 0; i <= k; i++)
-				(f->posns[2])[i] = (f->posns[0])[i];
-			f->initstat = f->curstat = 2;
-			f->out[2] = f->out[0];
-			for (i = 0; i < NCHARS; i++)
-				f->gototab[2][i] = 0;
-		}
-#endif
 		p++;
 	}
 	return (0);
@@ -982,7 +935,7 @@ replace_repeat(const uschar *reptok, int reptoklen, const uschar *atom,
 	if (special_case == REPEAT_PLUS_APPENDED) {
 		size++;		/* for the final + */
 	} else if (special_case == REPEAT_WITH_Q) {
-		size += init_q + (atomlen+1)* n_q_reps;
+		size += init_q + (atomlen+1)* (n_q_reps-init_q);
 	} else if (special_case == REPEAT_ZERO) {
 		size += 2;	/* just a null ERE: () */
 	}
@@ -1011,11 +964,8 @@ replace_repeat(const uschar *reptok, int reptoklen, const uschar *atom,
 		}
 	}
 	memcpy(&buf[j], reptok+reptoklen, suffix_length);
-	if (special_case == REPEAT_ZERO) {
-		buf[j+suffix_length] = '\0';
-	} else {
-		buf[size] = '\0';
-	}
+	j += suffix_length;
+	buf[j] = '\0';
 	/* free old basestr */
 	if (firstbasestr != basestr) {
 		if (basestr)

@@ -233,6 +233,7 @@ static pci_vendor_info_t igb_vendor_info_array[] =
 	PVID(0x8086, E1000_DEV_ID_I210_COPPER_OEM1, "Intel(R) I210 (OEM)"),
 	PVID(0x8086, E1000_DEV_ID_I210_COPPER_FLASHLESS, "Intel(R) I210 Flashless (Copper)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SERDES_FLASHLESS, "Intel(R) I210 Flashless (SERDES)"),
+	PVID(0x8086, E1000_DEV_ID_I210_SGMII_FLASHLESS, "Intel(R) I210 Flashless (SGMII)"),
 	PVID(0x8086, E1000_DEV_ID_I210_FIBER, "Intel(R) I210 (Fiber)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SERDES, "Intel(R) I210 (SERDES)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SGMII, "Intel(R) I210 (SGMII)"),
@@ -1075,20 +1076,14 @@ em_if_attach_pre(if_ctx_t ctx)
 
 	if (!em_is_valid_ether_addr(hw->mac.addr)) {
 		if (adapter->vf_ifp) {
-			u8 addr[ETHER_ADDR_LEN];
-			arc4rand(&addr, sizeof(addr), 0);
-			addr[0] &= 0xFE;
-			addr[0] |= 0x02;
-			bcopy(addr, hw->mac.addr, sizeof(addr));
+			ether_gen_addr(iflib_get_ifp(ctx),
+			    (struct ether_addr *)hw->mac.addr);
 		} else {
 			device_printf(dev, "Invalid MAC address\n");
 			error = EIO;
 			goto err_late;
 		}
 	}
-
-	/* Disable ULP support */
-	e1000_disable_ulp_lpt_lp(hw, TRUE);
 
 	/*
 	 * Get Wake-on-Lan and Management info for later use
@@ -2838,7 +2833,7 @@ igb_initialize_rss_mapping(struct adapter *adapter)
 	 * MRQC: Multiple Receive Queues Command
 	 * Set queuing to RSS control, number depends on the device.
 	 */
-	mrqc = E1000_MRQC_ENABLE_RSS_8Q;
+	mrqc = E1000_MRQC_ENABLE_RSS_MQ;
 
 #ifdef RSS
 	/* XXX ew typecasting */
@@ -3170,6 +3165,7 @@ em_initialize_transmit_unit(if_ctx_t ctx)
  *  Enable receive unit.
  *
  **********************************************************************/
+#define BSIZEPKT_ROUNDUP ((1<<E1000_SRRCTL_BSIZEPKT_SHIFT)-1)
 
 static void
 em_initialize_receive_unit(if_ctx_t ctx)
@@ -3180,7 +3176,7 @@ em_initialize_receive_unit(if_ctx_t ctx)
 	struct e1000_hw	*hw = &adapter->hw;
 	struct em_rx_queue *que;
 	int i;
-	u32 rctl, rxcsum, rfctl;
+	uint32_t rctl, rxcsum;
 
 	INIT_DEBUGOUT("em_initialize_receive_units: begin");
 
@@ -3224,53 +3220,53 @@ em_initialize_receive_unit(if_ctx_t ctx)
 	}
 	E1000_WRITE_REG(hw, E1000_RDTR, adapter->rx_int_delay.value);
 
-	/* Use extended rx descriptor formats */
-	rfctl = E1000_READ_REG(hw, E1000_RFCTL);
-	rfctl |= E1000_RFCTL_EXTEN;
-	/*
-	 * When using MSI-X interrupts we need to throttle
-	 * using the EITR register (82574 only)
-	 */
-	if (hw->mac.type == e1000_82574) {
-		for (int i = 0; i < 4; i++)
-			E1000_WRITE_REG(hw, E1000_EITR_82574(i),
-			    DEFAULT_ITR);
-		/* Disable accelerated acknowledge */
-		rfctl |= E1000_RFCTL_ACK_DIS;
-	}
-	E1000_WRITE_REG(hw, E1000_RFCTL, rfctl);
+	if (hw->mac.type >= em_mac_min) {
+		uint32_t rfctl;
+		/* Use extended rx descriptor formats */
+		rfctl = E1000_READ_REG(hw, E1000_RFCTL);
+		rfctl |= E1000_RFCTL_EXTEN;
 
-	rxcsum = E1000_READ_REG(hw, E1000_RXCSUM);
-	if (if_getcapenable(ifp) & IFCAP_RXCSUM &&
-	    hw->mac.type >= e1000_82543) {
-		if (adapter->tx_num_queues > 1) {
-			if (hw->mac.type >= igb_mac_min) {
-				rxcsum |= E1000_RXCSUM_PCSD;
-				if (hw->mac.type != e1000_82575)
-					rxcsum |= E1000_RXCSUM_CRCOFL;
-			} else
-				rxcsum |= E1000_RXCSUM_TUOFL |
-					E1000_RXCSUM_IPOFL |
-					E1000_RXCSUM_PCSD;
-		} else {
-			if (hw->mac.type >= igb_mac_min)
-				rxcsum |= E1000_RXCSUM_IPPCSE;
-			else
-				rxcsum |= E1000_RXCSUM_TUOFL | E1000_RXCSUM_IPOFL;
-			if (hw->mac.type > e1000_82575)
-				rxcsum |= E1000_RXCSUM_CRCOFL;
+		/*
+		 * When using MSI-X interrupts we need to throttle
+		 * using the EITR register (82574 only)
+		 */
+		if (hw->mac.type == e1000_82574) {
+			for (int i = 0; i < 4; i++)
+				E1000_WRITE_REG(hw, E1000_EITR_82574(i),
+				    DEFAULT_ITR);
+			/* Disable accelerated acknowledge */
+			rfctl |= E1000_RFCTL_ACK_DIS;
 		}
-	} else
-		rxcsum &= ~E1000_RXCSUM_TUOFL;
+		E1000_WRITE_REG(hw, E1000_RFCTL, rfctl);
+	}
 
-	E1000_WRITE_REG(hw, E1000_RXCSUM, rxcsum);
+	/* Set up L3 and L4 csum Rx descriptor offloads */
+	rxcsum = E1000_READ_REG(hw, E1000_RXCSUM);
+	if (scctx->isc_capenable & IFCAP_RXCSUM) {
+		rxcsum |= E1000_RXCSUM_TUOFL | E1000_RXCSUM_IPOFL;
+		if (hw->mac.type > e1000_82575)
+			rxcsum |= E1000_RXCSUM_CRCOFL;
+		else if (hw->mac.type < em_mac_min &&
+		    scctx->isc_capenable & IFCAP_HWCSUM_IPV6)
+			rxcsum |= E1000_RXCSUM_IPV6OFL;
+	} else {
+		rxcsum &= ~(E1000_RXCSUM_IPOFL | E1000_RXCSUM_TUOFL);
+		if (hw->mac.type > e1000_82575)
+			rxcsum &= ~E1000_RXCSUM_CRCOFL;
+		else if (hw->mac.type < em_mac_min)
+			rxcsum &= ~E1000_RXCSUM_IPV6OFL;
+	}
 
 	if (adapter->rx_num_queues > 1) {
+		/* RSS hash needed in the Rx descriptor */
+		rxcsum |= E1000_RXCSUM_PCSD;
+
 		if (hw->mac.type >= igb_mac_min)
 			igb_initialize_rss_mapping(adapter);
 		else
 			em_initialize_rss_mapping(adapter);
 	}
+	E1000_WRITE_REG(hw, E1000_RXCSUM, rxcsum);
 
 	/*
 	 * XXX TEMPORARY WORKAROUND: on some systems with 82573
@@ -3323,23 +3319,16 @@ em_initialize_receive_unit(if_ctx_t ctx)
 		u32 psize, srrctl = 0;
 
 		if (if_getmtu(ifp) > ETHERMTU) {
-			/* Set maximum packet len */
-			if (adapter->rx_mbuf_sz <= 4096) {
-				srrctl |= 4096 >> E1000_SRRCTL_BSIZEPKT_SHIFT;
-				rctl |= E1000_RCTL_SZ_4096 | E1000_RCTL_BSEX;
-			} else if (adapter->rx_mbuf_sz > 4096) {
-				srrctl |= 8192 >> E1000_SRRCTL_BSIZEPKT_SHIFT;
-				rctl |= E1000_RCTL_SZ_8192 | E1000_RCTL_BSEX;
-			}
 			psize = scctx->isc_max_frame_size;
 			/* are we on a vlan? */
 			if (ifp->if_vlantrunk != NULL)
 				psize += VLAN_TAG_SIZE;
 			E1000_WRITE_REG(hw, E1000_RLPML, psize);
-		} else {
-			srrctl |= 2048 >> E1000_SRRCTL_BSIZEPKT_SHIFT;
-			rctl |= E1000_RCTL_SZ_2048;
 		}
+
+		/* Set maximum packet buffer len */
+		srrctl |= (adapter->rx_mbuf_sz + BSIZEPKT_ROUNDUP) >>
+		    E1000_SRRCTL_BSIZEPKT_SHIFT;
 
 		/*
 		 * If TX flow control is disabled and there's >1 queue defined,
@@ -3391,17 +3380,29 @@ em_initialize_receive_unit(if_ctx_t ctx)
 	/* Make sure VLAN Filters are off */
 	rctl &= ~E1000_RCTL_VFE;
 
+	/* Set up packet buffer size, overridden by per queue srrctl on igb */
 	if (hw->mac.type < igb_mac_min) {
-		if (adapter->rx_mbuf_sz == MCLBYTES)
-			rctl |= E1000_RCTL_SZ_2048;
-		else if (adapter->rx_mbuf_sz == MJUMPAGESIZE)
+		if (adapter->rx_mbuf_sz > 2048 && adapter->rx_mbuf_sz <= 4096)
 			rctl |= E1000_RCTL_SZ_4096 | E1000_RCTL_BSEX;
-		else if (adapter->rx_mbuf_sz > MJUMPAGESIZE)
+		else if (adapter->rx_mbuf_sz > 4096 && adapter->rx_mbuf_sz <= 8192)
 			rctl |= E1000_RCTL_SZ_8192 | E1000_RCTL_BSEX;
+		else if (adapter->rx_mbuf_sz > 8192)
+			rctl |= E1000_RCTL_SZ_16384 | E1000_RCTL_BSEX;
+		else {
+			rctl |= E1000_RCTL_SZ_2048;
+			rctl &= ~E1000_RCTL_BSEX;
+		}
+	} else
+		rctl |= E1000_RCTL_SZ_2048;
 
-		/* ensure we clear use DTYPE of 00 here */
-		rctl &= ~0x00000C00;
-	}
+	/*
+	 * rctl bits 11:10 are as follows
+	 * lem: reserved
+	 * em: DTYPE
+	 * igb: reserved
+	 * and should be 00 on all of the above
+	 */
+	rctl &= ~0x00000C00;
 
 	/* Write out the settings */
 	E1000_WRITE_REG(hw, E1000_RCTL, rctl);
@@ -3794,8 +3795,12 @@ em_enable_wakeup(if_ctx_t ctx)
 		E1000_WRITE_REG(&adapter->hw, E1000_RCTL, rctl);
 	}
 
-	if (!(adapter->wol & (E1000_WUFC_EX | E1000_WUFC_MAG | E1000_WUFC_MC)))
+	if (!(adapter->wol & (E1000_WUFC_EX | E1000_WUFC_MAG | E1000_WUFC_MC))) {
+		if (adapter->hw.mac.type >= e1000_pch_lpt) {
+			e1000_enable_ulp_lpt_lp(&adapter->hw, TRUE);
+		}
 		goto pme;
+	}
 
 	/* Advertise the wakeup capability */
 	ctrl = E1000_READ_REG(&adapter->hw, E1000_CTRL);

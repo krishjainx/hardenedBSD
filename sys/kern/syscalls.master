@@ -2270,7 +2270,19 @@
 		    int sig
 		);
 	}
-434-435	AUE_NULL	RESERVED
+
+434	AUE_NULL	COMPAT10 {
+		int _umtx_lock(
+		    _Inout_ struct umtx *umtx
+		);
+	}
+
+435	AUE_NULL	COMPAT10 {
+		int _umtx_unlock(
+		    _Inout_ struct umtx *umtx
+		);
+	}
+
 436	AUE_JAIL_ATTACH	STD {
 		int jail_attach(
 		    int jid
@@ -3236,6 +3248,15 @@
 579	AUE_AIO_READV	STD {
 		int aio_readv(
 		    _Inout_ struct aiocb *aiocbp
+		);
+	}
+580	AUE_FSPACECTL	STD {
+		int fspacectl(
+		    int fd,
+		    int cmd,
+		    _In_ const struct spacectl_range *rqsr,
+		    int flags,
+		    _Out_opt_ struct spacectl_range *rmsr,
 		);
 	}
 

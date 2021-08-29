@@ -6631,7 +6631,7 @@ sctp_sendall_iterator(struct sctp_inpcb *inp, struct sctp_tcb *stcb, void *ptr,
 		 * us.
 		 */
 		atomic_add_int(&stcb->asoc.refcnt, 1);
-		sctp_abort_an_association(inp, stcb, m, SCTP_SO_NOT_LOCKED);
+		sctp_abort_an_association(inp, stcb, m, false, SCTP_SO_NOT_LOCKED);
 		/*
 		 * sctp_abort_an_association calls sctp_free_asoc() free
 		 * association will NOT free it since we incremented the
@@ -6715,7 +6715,7 @@ sctp_sendall_iterator(struct sctp_inpcb *inp, struct sctp_tcb *stcb, void *ptr,
 						    msg);
 						atomic_add_int(&stcb->asoc.refcnt, 1);
 						sctp_abort_an_association(stcb->sctp_ep, stcb,
-						    op_err, SCTP_SO_NOT_LOCKED);
+						    op_err, false, SCTP_SO_NOT_LOCKED);
 						atomic_add_int(&stcb->asoc.refcnt, -1);
 						goto no_chunk_output;
 					}
@@ -9555,7 +9555,7 @@ sctp_chunk_retransmission(struct sctp_inpcb *inp,
 			    msg);
 			atomic_add_int(&stcb->asoc.refcnt, 1);
 			sctp_abort_an_association(stcb->sctp_ep, stcb, op_err,
-			    so_locked);
+			    false, so_locked);
 			SCTP_TCB_LOCK(stcb);
 			atomic_subtract_int(&stcb->asoc.refcnt, 1);
 			return (SCTP_RETRAN_EXIT);
@@ -12434,9 +12434,13 @@ sctp_sosend(struct socket *so,
 	}
 	addr_to_use = addr;
 #if defined(INET) && defined(INET6)
-	if ((addr) && (addr->sa_family == AF_INET6)) {
+	if ((addr != NULL) && (addr->sa_family == AF_INET6)) {
 		struct sockaddr_in6 *sin6;
 
+		if (addr->sa_len != sizeof(struct sockaddr_in6)) {
+			SCTP_LTRACE_ERR_RET(NULL, NULL, NULL, SCTP_FROM_SCTP_OUTPUT, EINVAL);
+			return (EINVAL);
+		}
 		sin6 = (struct sockaddr_in6 *)addr;
 		if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
 			in6_sin6_2_sin(&sin, sin6);
@@ -12467,7 +12471,7 @@ sctp_lower_sosend(struct socket *so,
 {
 	struct epoch_tracker et;
 	ssize_t sndlen = 0, max_len, local_add_more;
-	int error, len;
+	int error;
 	struct mbuf *top = NULL;
 	int queue_only = 0, queue_only_for_init = 0;
 	int free_cnt_applied = 0;
@@ -12967,7 +12971,7 @@ sctp_lower_sosend(struct socket *so,
 		free_cnt_applied = 0;
 		/* release this lock, otherwise we hang on ourselves */
 		NET_EPOCH_ENTER(et);
-		sctp_abort_an_association(stcb->sctp_ep, stcb, mm, SCTP_SO_LOCKED);
+		sctp_abort_an_association(stcb->sctp_ep, stcb, mm, false, SCTP_SO_LOCKED);
 		NET_EPOCH_EXIT(et);
 		/* now relock the stcb so everything is sane */
 		hold_tcblock = 0;
@@ -13027,7 +13031,6 @@ sctp_lower_sosend(struct socket *so,
 		 */
 		local_add_more = sndlen;
 	}
-	len = 0;
 	if (non_blocking) {
 		goto skip_preblock;
 	}
@@ -13228,7 +13231,6 @@ skip_preblock:
 				}
 				sctp_snd_sb_alloc(stcb, sndout);
 				atomic_add_int(&sp->length, sndout);
-				len += sndout;
 				if (sinfo_flags & SCTP_SACK_IMMEDIATELY) {
 					sp->sinfo_flags |= SCTP_SACK_IMMEDIATELY;
 				}
@@ -13544,7 +13546,7 @@ dataless_eof:
 					    msg);
 					NET_EPOCH_ENTER(et);
 					sctp_abort_an_association(stcb->sctp_ep, stcb,
-					    op_err, SCTP_SO_LOCKED);
+					    op_err, false, SCTP_SO_LOCKED);
 					NET_EPOCH_EXIT(et);
 					/*
 					 * now relock the stcb so everything

@@ -93,6 +93,7 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 #endif
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_set_fork_retval = x86_set_fork_retval,
 };
 
 struct sysentvec elf64_freebsd_sysvec_la57 = {
@@ -136,6 +137,7 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 #endif
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_set_fork_retval=  x86_set_fork_retval,
 };
 
 static void

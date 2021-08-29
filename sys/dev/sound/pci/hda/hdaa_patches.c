@@ -157,7 +157,7 @@ match_pin_patches(int vendor_id, int vendor_subid)
 			continue;
 		for (struct model_pin_patch_t *pp =  p->patches; pp->models; pp++) {
 			for (struct pin_machine_model_t *model = pp->models; model->id != 0; model++) {
-				if (vendor_subid == model->id)
+				if (HDA_DEV_MATCH(model->id, vendor_subid))
 					return (pp->pin_patches);
 			}
 		}
@@ -326,6 +326,7 @@ hdac_pin_patch(struct hdaa_widget *w)
 					switch (patch->type) {
 					case PIN_PATCH_TYPE_STRING:
 						patch_str = patch->patch.string;
+						break;
 					case PIN_PATCH_TYPE_MASK:
 						config &= ~patch->patch.mask[0];
 						config |= patch->patch.mask[1];

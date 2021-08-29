@@ -377,7 +377,10 @@ set_dbregs(struct thread *td, struct dbreg *regs)
 		addr = regs->db_breakregs[i].dbr_addr;
 		ctrl = regs->db_breakregs[i].dbr_ctrl;
 
-		/* Don't let the user set a breakpoint on a kernel address. */
+		/*
+		 * Don't let the user set a breakpoint on a kernel or
+		 * non-canonical user address.
+		 */
 		if (addr >= VM_MAXUSER_ADDRESS)
 			return (EINVAL);
 
@@ -412,7 +415,10 @@ set_dbregs(struct thread *td, struct dbreg *regs)
 		addr = regs->db_watchregs[i].dbw_addr;
 		ctrl = regs->db_watchregs[i].dbw_ctrl;
 
-		/* Don't let the user set a watchpoint on a kernel address. */
+		/*
+		 * Don't let the user set a watchpoint on a kernel or
+		 * non-canonical user address.
+		 */
 		if (addr >= VM_MAXUSER_ADDRESS)
 			return (EINVAL);
 
@@ -925,6 +931,12 @@ init_proc0(vm_offset_t kstack)
 	thread0.td_pcb->pcb_vfpcpu = UINT_MAX;
 	thread0.td_frame = &proc0_tf;
 	pcpup->pc_curpcb = thread0.td_pcb;
+
+	/*
+	 * Unmask SError exceptions. They are used to signal a RAS failure,
+	 * or other hardware error.
+	 */
+	serror_enable();
 }
 
 typedef struct {

@@ -669,7 +669,7 @@ amd_release_pmc(int cpu, int ri, struct pmc *pmc)
 #ifdef	HWPMC_DEBUG
 	const struct amd_descr *pd;
 #endif
-	struct pmc_hw *phw;
+	struct pmc_hw *phw __diagused;
 
 	(void) pmc;
 
@@ -771,7 +771,7 @@ amd_stop_pmc(int cpu, int ri)
 	/*
 	 * Due to NMI latency on newer AMD processors
 	 * NMI interrupts are ignored, which leads to
-	 * panic or messages based on kernel configuraiton
+	 * panic or messages based on kernel configuration
 	 */
 
 	/* Wait for the count to be reset */

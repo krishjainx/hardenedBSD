@@ -734,6 +734,8 @@ aio_md_setup(void)
 	mdio.md_options = MD_AUTOUNIT | MD_COMPRESS;
 	mdio.md_mediasize = GLOBAL_MAX;
 	mdio.md_sectorsize = 512;
+	strlcpy(buf, __func__, sizeof(buf));
+	mdio.md_label = buf;
 
 	if (ioctl(mdctl_fd, MDIOCATTACH, &mdio) < 0) {
 		error = errno;
@@ -758,23 +760,26 @@ static void
 aio_md_cleanup(void)
 {
 	struct md_ioctl mdio;
-	int mdctl_fd, error, n, unit;
+	int mdctl_fd, n, unit;
 	char buf[80];
 
 	mdctl_fd = open("/dev/" MDCTL_NAME, O_RDWR, 0);
-	ATF_REQUIRE(mdctl_fd >= 0);
-	n = readlink(MDUNIT_LINK, buf, sizeof(buf));
+	if (mdctl_fd < 0) {
+		fprintf(stderr, "opening /dev/%s failed: %s\n", MDCTL_NAME,
+		    strerror(errno));
+		return;
+	}
+	n = readlink(MDUNIT_LINK, buf, sizeof(buf) - 1);
 	if (n > 0) {
+		buf[n] = '\0';
 		if (sscanf(buf, "%d", &unit) == 1 && unit >= 0) {
 			bzero(&mdio, sizeof(mdio));
 			mdio.md_version = MDIOVERSION;
 			mdio.md_unit = unit;
 			if (ioctl(mdctl_fd, MDIOCDETACH, &mdio) == -1) {
-				error = errno;
-				close(mdctl_fd);
-				errno = error;
-				atf_tc_fail("ioctl MDIOCDETACH failed: %s",
-				    strerror(errno));
+				fprintf(stderr,
+				    "ioctl MDIOCDETACH unit %d failed: %s\n",
+				    unit, strerror(errno));
 			}
 		}
 	}
@@ -919,13 +924,6 @@ aio_zvol_setup(void)
 		ZVOL_SIZE " %s", zvol_name);
 	ATF_REQUIRE_EQ_MSG(0, system(cmd),
 	    "zfs create failed: %s", strerror(errno));
-	/*
-	 * XXX Due to bug 251828, we need an extra "zfs set" here
-	 * https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=251828
-	 */
-	snprintf(cmd, sizeof(cmd), "zfs set volmode=dev %s", zvol_name);
-	ATF_REQUIRE_EQ_MSG(0, system(cmd),
-	    "zfs set failed: %s", strerror(errno));
 
 	snprintf(devname, sizeof(devname), "/dev/zvol/%s", zvol_name);
 	do {
@@ -1629,6 +1627,12 @@ ATF_TC_BODY(vectored_file_poll, tc)
 	aio_file_test(poll, NULL, true);
 }
 
+ATF_TC_WITHOUT_HEAD(vectored_thread);
+ATF_TC_BODY(vectored_thread, tc)
+{
+	aio_file_test(poll_signaled, setup_thread(), true);
+}
+
 ATF_TC_WITH_CLEANUP(vectored_md_poll);
 ATF_TC_HEAD(vectored_md_poll, tc)
 {
@@ -1816,6 +1820,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, vectored_zvol_poll);
 	ATF_TP_ADD_TC(tp, vectored_unaligned);
 	ATF_TP_ADD_TC(tp, vectored_socket_poll);
+	ATF_TP_ADD_TC(tp, vectored_thread);
 
 	return (atf_no_error());
 }

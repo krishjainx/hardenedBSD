@@ -132,6 +132,8 @@ static int nfsrpc_readrpc(vnode_t , struct uio *, struct ucred *,
 static int nfsrpc_writerpc(vnode_t , struct uio *, int *, int *,
     struct ucred *, nfsv4stateid_t *, NFSPROC_T *, struct nfsvattr *, int *,
     void *);
+static int nfsrpc_deallocaterpc(vnode_t, off_t, off_t, nfsv4stateid_t *,
+    struct nfsvattr *, int *, struct ucred *, NFSPROC_T *, void *);
 static int nfsrpc_createv23(vnode_t , char *, int, struct vattr *,
     nfsquad_t, int, struct ucred *, NFSPROC_T *, struct nfsvattr *,
     struct nfsvattr *, struct nfsfh **, int *, int *, void *);
@@ -457,8 +459,14 @@ else printf(" fhl=0\n");
 	     * If error is non-zero, don't increment it, since the Open
 	     * hasn't succeeded yet.
 	     */
-	    if (!error)
+	    if (!error) {
 		op->nfso_opencnt++;
+		if (NFSHASNFSV4N(nmp) && NFSHASONEOPENOWN(nmp)) {
+		    NFSLOCKNODE(np);
+		    np->n_openstateid = op;
+		    NFSUNLOCKNODE(np);
+		}
+	    }
 	    nfscl_openrelease(nmp, op, error, newone);
 	    if (error == NFSERR_GRACE || error == NFSERR_STALECLIENTID ||
 		error == NFSERR_STALEDONTRECOVER || error == NFSERR_DELAY ||
@@ -1376,15 +1384,20 @@ nfsrpc_setattrrpc(vnode_t vp, struct vattr *vap,
 int
 nfsrpc_lookup(vnode_t dvp, char *name, int len, struct ucred *cred,
     NFSPROC_T *p, struct nfsvattr *dnap, struct nfsvattr *nap,
-    struct nfsfh **nfhpp, int *attrflagp, int *dattrflagp, void *stuff)
+    struct nfsfh **nfhpp, int *attrflagp, int *dattrflagp, void *stuff,
+    uint32_t openmode)
 {
-	u_int32_t *tl;
+	uint32_t deleg, rflags, *tl;
 	struct nfsrv_descript nfsd, *nd = &nfsd;
 	struct nfsmount *nmp;
 	struct nfsnode *np;
 	struct nfsfh *nfhp;
 	nfsattrbit_t attrbits;
-	int error = 0, lookupp = 0;
+	int error = 0, lookupp = 0, newone, ret, retop;
+	uint8_t own[NFSV4CL_LOCKNAMELEN];
+	struct nfsclopen *op;
+	struct nfscldeleg *ndp;
+	nfsv4stateid_t stateid;
 
 	*attrflagp = 0;
 	*dattrflagp = 0;
@@ -1409,7 +1422,11 @@ nfsrpc_lookup(vnode_t dvp, char *name, int len, struct ucred *cred,
 	if (NFSHASNFSV4(nmp) && len == 2 &&
 		name[0] == '.' && name[1] == '.') {
 		lookupp = 1;
+		openmode = 0;
 		NFSCL_REQSTART(nd, NFSPROC_LOOKUPP, dvp);
+	} else if (openmode != 0) {
+		NFSCL_REQSTART(nd, NFSPROC_LOOKUPOPEN, dvp);
+		nfsm_strtom(nd, name, len);
 	} else {
 		NFSCL_REQSTART(nd, NFSPROC_LOOKUP, dvp);
 		(void) nfsm_strtom(nd, name, len);
@@ -1420,10 +1437,36 @@ nfsrpc_lookup(vnode_t dvp, char *name, int len, struct ucred *cred,
 		*tl++ = txdr_unsigned(NFSV4OP_GETFH);
 		*tl = txdr_unsigned(NFSV4OP_GETATTR);
 		(void) nfsrv_putattrbit(nd, &attrbits);
+		if (openmode != 0) {
+			/* Test for a VREG file. */
+			NFSZERO_ATTRBIT(&attrbits);
+			NFSSETBIT_ATTRBIT(&attrbits, NFSATTRBIT_TYPE);
+			NFSM_BUILD(tl, uint32_t *, NFSX_UNSIGNED);
+			*tl = txdr_unsigned(NFSV4OP_VERIFY);
+			nfsrv_putattrbit(nd, &attrbits);
+			NFSM_BUILD(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			*tl++ = txdr_unsigned(NFSX_UNSIGNED);
+			*tl = vtonfsv34_type(VREG);
+
+			/* Attempt the Open for VREG. */
+			nfscl_filllockowner(NULL, own, F_POSIX);
+			NFSM_BUILD(tl, uint32_t *, 6 * NFSX_UNSIGNED);
+			*tl++ = txdr_unsigned(NFSV4OP_OPEN);
+			*tl++ = 0;		/* seqid, ignored. */
+			*tl++ = txdr_unsigned(openmode);
+			*tl++ = txdr_unsigned(NFSV4OPEN_DENYNONE);
+			*tl++ = 0;		/* ClientID, ignored. */
+			*tl = 0;
+			nfsm_strtom(nd, own, NFSV4CL_LOCKNAMELEN);
+			NFSM_BUILD(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			*tl++ = txdr_unsigned(NFSV4OPEN_NOCREATE);
+			*tl = txdr_unsigned(NFSV4OPEN_CLAIMFH);
+		}
 	}
 	error = nfscl_request(nd, dvp, p, cred, stuff);
 	if (error)
 		return (error);
+	ndp = NULL;
 	if (nd->nd_repstat) {
 		/*
 		 * When an NFSv4 Lookupp returns ENOENT, it means that
@@ -1447,6 +1490,33 @@ nfsrpc_lookup(vnode_t dvp, char *name, int len, struct ucred *cred,
 			error = nfsm_loadattr(nd, dnap);
 			if (error == 0)
 				*dattrflagp = 1;
+			else
+				goto nfsmout;
+		}
+		/* Check Lookup operation reply status. */
+		if (openmode != 0 && (nd->nd_flag & ND_NOMOREDATA) == 0) {
+			NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			if (*++tl != 0)
+				goto nfsmout;
+		}
+		/* Look for GetFH reply. */
+		if (openmode != 0 && (nd->nd_flag & ND_NOMOREDATA) == 0) {
+			NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			if (*++tl != 0)
+				goto nfsmout;
+			error = nfsm_getfh(nd, nfhpp);
+			if (error)
+				goto nfsmout;
+		}
+		/* Look for Getattr reply. */
+		if (openmode != 0 && (nd->nd_flag & ND_NOMOREDATA) == 0) {
+			NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			if (*++tl != 0)
+				goto nfsmout;
+			error = nfscl_postop_attr(nd, nap, attrflagp, stuff);
+			if (error == 0)
+				/* Successfully got Lookup done. */
+				nd->nd_repstat = 0;
 		}
 		goto nfsmout;
 	}
@@ -1464,12 +1534,84 @@ nfsrpc_lookup(vnode_t dvp, char *name, int len, struct ucred *cred,
 		goto nfsmout;
 
 	error = nfscl_postop_attr(nd, nap, attrflagp, stuff);
+	if (openmode != 0 && error == 0) {
+		NFSM_DISSECT(tl, uint32_t *, NFSX_STATEID +
+		    10 * NFSX_UNSIGNED);
+		tl += 4;	/* Skip over Verify+Open status. */
+		stateid.seqid = *tl++;
+		stateid.other[0] = *tl++;
+		stateid.other[1] = *tl++;
+		stateid.other[2] = *tl;
+		rflags = fxdr_unsigned(uint32_t, *(tl + 6));
+		error = nfsrv_getattrbits(nd, &attrbits, NULL, NULL);
+		if (error != 0)
+			goto nfsmout;
+		NFSM_DISSECT(tl, uint32_t *, NFSX_UNSIGNED);
+		deleg = fxdr_unsigned(uint32_t, *tl);
+		if (deleg == NFSV4OPEN_DELEGATEREAD ||
+		    deleg == NFSV4OPEN_DELEGATEWRITE) {
+			/*
+			 * Just need to fill in the fields used by
+			 * nfscl_trydelegreturn().
+			 * Mark the mount point as acquiring
+			 * delegations, so NFSPROC_LOOKUPOPEN will
+			 * no longer be done.
+			 */
+			NFSLOCKMNT(nmp);
+			nmp->nm_privflag |= NFSMNTP_DELEGISSUED;
+			NFSUNLOCKMNT(nmp);
+			ndp = malloc(sizeof(struct nfscldeleg) +
+			    (*nfhpp)->nfh_len, M_NFSCLDELEG, M_WAITOK);
+			ndp->nfsdl_fhlen = (*nfhpp)->nfh_len;
+			NFSBCOPY((*nfhpp)->nfh_fh, ndp->nfsdl_fh,
+			    ndp->nfsdl_fhlen);
+			newnfs_copyincred(cred, &ndp->nfsdl_cred);
+			NFSM_DISSECT(tl, uint32_t *, NFSX_STATEID);
+			ndp->nfsdl_stateid.seqid = *tl++;
+			ndp->nfsdl_stateid.other[0] = *tl++;
+			ndp->nfsdl_stateid.other[1] = *tl++;
+			ndp->nfsdl_stateid.other[2] = *tl++;
+		} else if (deleg != NFSV4OPEN_DELEGATENONE) {
+			error = NFSERR_BADXDR;
+			goto nfsmout;
+		}
+		ret = nfscl_open(dvp, (*nfhpp)->nfh_fh, (*nfhpp)->nfh_len,
+		    openmode, 0, cred, p, NULL, &op, &newone, &retop, 1);
+		if (ret != 0)
+			goto nfsmout;
+		if (newone != 0) {
+			op->nfso_stateid.seqid = stateid.seqid;
+			op->nfso_stateid.other[0] = stateid.other[0];
+			op->nfso_stateid.other[1] = stateid.other[1];
+			op->nfso_stateid.other[2] = stateid.other[2];
+			op->nfso_mode = openmode;
+		} else {
+			op->nfso_stateid.seqid = stateid.seqid;
+			if (retop == NFSCLOPEN_DOOPEN)
+				op->nfso_mode |= openmode;
+		}
+		if ((rflags & NFSV4OPEN_LOCKTYPEPOSIX) != 0 ||
+		    nfscl_assumeposixlocks)
+			op->nfso_posixlock = 1;
+		else
+			op->nfso_posixlock = 0;
+		nfscl_openrelease(nmp, op, 0, 0);
+		if (ndp != NULL) {
+			/*
+			 * Since we do not have the vnode, we
+			 * cannot invalidate cached attributes.
+			 * Just return the delegation.
+			 */
+			nfscl_trydelegreturn(ndp, cred, nmp, p);
+		}
+	}
 	if ((nd->nd_flag & ND_NFSV3) && !error)
 		error = nfscl_postop_attr(nd, dnap, dattrflagp, stuff);
 nfsmout:
 	m_freem(nd->nd_mrep);
 	if (!error && nd->nd_repstat)
 		error = nd->nd_repstat;
+	free(ndp, M_NFSCLDELEG);
 	return (error);
 }
 
@@ -1945,6 +2087,116 @@ nfsmout:
 		m_freem(nd->nd_mrep);
 	*iomode = committed;
 	if (nd->nd_repstat && !error)
+		error = nd->nd_repstat;
+	return (error);
+}
+
+/*
+ * Do an nfs deallocate operation.
+ */
+int
+nfsrpc_deallocate(vnode_t vp, off_t offs, off_t len, struct nfsvattr *nap,
+    int *attrflagp, struct ucred *cred, NFSPROC_T *p, void *stuff)
+{
+	int error, expireret = 0, openerr, retrycnt;
+	uint32_t clidrev = 0;
+	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
+	struct nfsfh *nfhp;
+	nfsv4stateid_t stateid;
+	void *lckp;
+
+	if (nmp->nm_clp != NULL)
+		clidrev = nmp->nm_clp->nfsc_clientidrev;
+	retrycnt = 0;
+	do {
+		lckp = NULL;
+		openerr = 1;
+		nfhp = VTONFS(vp)->n_fhp;
+		error = nfscl_getstateid(vp, nfhp->nfh_fh, nfhp->nfh_len,
+		    NFSV4OPEN_ACCESSWRITE, 0, cred, p, &stateid, &lckp);
+		if (error != 0) {
+			/*
+			 * No Open stateid, so try and open the file
+			 * now.
+			 */
+			openerr = nfsrpc_open(vp, FWRITE, cred, p);
+			if (openerr == 0)
+				nfscl_getstateid(vp, nfhp->nfh_fh,
+				    nfhp->nfh_len, NFSV4OPEN_ACCESSWRITE, 0,
+				    cred, p, &stateid, &lckp);
+		}
+		error = nfsrpc_deallocaterpc(vp, offs, len, &stateid, nap,
+		    attrflagp, cred, p, stuff);
+		if (error == NFSERR_STALESTATEID)
+			nfscl_initiate_recovery(nmp->nm_clp);
+		if (lckp != NULL)
+			nfscl_lockderef(lckp);
+		if (openerr == 0)
+			nfsrpc_close(vp, 0, p);
+		if (error == NFSERR_GRACE || error == NFSERR_STALESTATEID ||
+		    error == NFSERR_STALEDONTRECOVER || error == NFSERR_DELAY ||
+		    error == NFSERR_OLDSTATEID || error == NFSERR_BADSESSION) {
+			(void) nfs_catnap(PZERO, error, "nfs_deallocate");
+		} else if ((error == NFSERR_EXPIRED ||
+		    error == NFSERR_BADSTATEID) && clidrev != 0) {
+			expireret = nfscl_hasexpired(nmp->nm_clp, clidrev, p);
+		}
+		retrycnt++;
+	} while (error == NFSERR_GRACE || error == NFSERR_STALESTATEID ||
+	    error == NFSERR_STALEDONTRECOVER || error == NFSERR_DELAY ||
+	    error == NFSERR_BADSESSION ||
+	    (error == NFSERR_OLDSTATEID && retrycnt < 20) ||
+	    ((error == NFSERR_EXPIRED || error == NFSERR_BADSTATEID) &&
+	     expireret == 0 && clidrev != 0 && retrycnt < 4));
+	if (error && retrycnt >= 4)
+		error = EIO;
+	return (error);
+}
+
+/*
+ * The actual deallocate RPC.
+ */
+static int
+nfsrpc_deallocaterpc(vnode_t vp, off_t offs, off_t len,
+    nfsv4stateid_t *stateidp, struct nfsvattr *nap, int *attrflagp,
+    struct ucred *cred, NFSPROC_T *p, void *stuff)
+{
+	uint32_t *tl;
+	struct nfsnode *np = VTONFS(vp);
+	int error, wccflag;
+	struct nfsrv_descript nfsd;
+	struct nfsrv_descript *nd = &nfsd;
+	nfsattrbit_t attrbits;
+
+	*attrflagp = 0;
+	NFSCL_REQSTART(nd, NFSPROC_DEALLOCATE, vp);
+	nfsm_stateidtom(nd, stateidp, NFSSTATEID_PUTSTATEID);
+	NFSM_BUILD(tl, uint32_t *, 2 * NFSX_HYPER);
+	txdr_hyper(offs, tl);
+	tl += 2;
+	txdr_hyper(len, tl);
+	NFSWRITEGETATTR_ATTRBIT(&attrbits);
+	NFSM_BUILD(tl, uint32_t *, NFSX_UNSIGNED);
+	*tl = txdr_unsigned(NFSV4OP_GETATTR);
+	nfsrv_putattrbit(nd, &attrbits);
+	error = nfscl_request(nd, vp, p, cred, stuff);
+	if (error != 0)
+		return (error);
+	wccflag = 0;
+	error = nfscl_wcc_data(nd, vp, nap, attrflagp, &wccflag, stuff);
+	if (error != 0)
+		goto nfsmout;
+	if (nd->nd_repstat == 0) {
+		NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+		error = nfsm_loadattr(nd, nap);
+		if (error != 0)
+			goto nfsmout;
+		*attrflagp = NFS_LATTR_NOSHRINK;
+	}
+	NFSWRITERPC_SETTIME(wccflag, np, nap, 1);
+nfsmout:
+	m_freem(nd->nd_mrep);
+	if (nd->nd_repstat != 0 && error == 0)
 		error = nd->nd_repstat;
 	return (error);
 }
@@ -3762,11 +4014,11 @@ nfsrpc_readdirplus(vnode_t vp, struct uio *uiop, nfsuint64 *cookiep,
 					ndp->ni_dvp != ndp->ni_vp &&
 					(newvp->v_type != VDIR ||
 					 dctime.tv_sec != 0)) {
-					cache_enter_time(ndp->ni_dvp,
+					cache_enter_time_flags(ndp->ni_dvp,
 					    ndp->ni_vp, cnp,
 					    &nfsva.na_ctime,
 					    newvp->v_type != VDIR ? NULL :
-					    &dctime);
+					    &dctime, VFS_CACHE_DROPOLD);
 				    }
 				    if (unlocknewvp)
 					vput(newvp);
@@ -5610,7 +5862,7 @@ nfsrpc_fillsa(struct nfsmount *nmp, struct sockaddr_in *sin,
 	 * unmount, but I did it anyhow.
 	 */
 	nrp->nr_cred = crhold(nmp->nm_sockreq.nr_cred);
-	error = newnfs_connect(nmp, nrp, NULL, p, 0, false);
+	error = newnfs_connect(nmp, nrp, NULL, p, 0, false, &nrp->nr_client);
 	NFSCL_DEBUG(3, "DS connect=%d\n", error);
 
 	dsp = NULL;
@@ -5628,7 +5880,7 @@ nfsrpc_fillsa(struct nfsmount *nmp, struct sockaddr_in *sin,
 			} while (error == NFSERR_MINORVERMISMATCH &&
 			    firsttry++ == 0);
 			if (error != 0)
-				newnfs_disconnect(nrp);
+				newnfs_disconnect(NULL, nrp);
 		} else {
 			dsp = malloc(sizeof(struct nfsclds), M_NFSCLDS,
 			    M_WAITOK | M_ZERO);
@@ -5656,7 +5908,7 @@ nfsrpc_fillsa(struct nfsmount *nmp, struct sockaddr_in *sin,
 				 * If there is already a session for this
 				 * server, use it.
 				 */
-				(void)newnfs_disconnect(nrp);
+				newnfs_disconnect(NULL, nrp);
 				nfscl_freenfsclds(dsp);
 				*dspp = tdsp;
 				return (0);
@@ -5688,7 +5940,7 @@ nfsrpc_fillsa(struct nfsmount *nmp, struct sockaddr_in *sin,
 		NFSUNLOCKMNT(nmp);
 		*dspp = dsp;
 	} else if (dsp != NULL) {
-		newnfs_disconnect(nrp);
+		newnfs_disconnect(NULL, nrp);
 		nfscl_freenfsclds(dsp);
 	}
 	return (error);

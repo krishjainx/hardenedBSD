@@ -97,6 +97,17 @@ DNSSEC validation is enabled by default.
 .It Fl f
 Download the update, but do not install it.
 This option is mutually exclusive with the -D option.
+.It Fl F
+Only download the update.
+The update is still cryptographically verified before
+exiting.
+Besides cryptographic verification, no additional action
+is performed.
+By default, the download is placed in a random temporary
+directory.
+To specify a custom download location, please use the
+.Fl t
+option.
 .It Fl h
 Show the help menu.
 .It Fl I

@@ -87,7 +87,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/timex.h>
 #include <sys/unistd.h>
 #include <sys/ucontext.h>
-#include <sys/umtx.h>
 #include <sys/vnode.h>
 #include <sys/wait.h>
 #include <sys/ipc.h>
@@ -405,7 +404,7 @@ freebsd32_exec_copyin_args(struct image_args *args, const char *fname,
 		if (error != 0)
 			goto err_exit;
 	}
-			
+
 	/*
 	 * extract environment strings
 	 */
@@ -3849,6 +3848,40 @@ freebsd32_ntp_adjtime(struct thread *td, struct freebsd32_ntp_adjtime_args *uap)
 			if (error == 0)
 				td->td_retval[0] = retval;
 		}
+	}
+	return (error);
+}
+
+int
+freebsd32_fspacectl(struct thread *td, struct freebsd32_fspacectl_args *uap)
+{
+	struct spacectl_range rqsr, rmsr;
+	struct spacectl_range32 rqsr32, rmsr32;
+	int error, cerror;
+
+	error = copyin(uap->rqsr, &rqsr32, sizeof(rqsr32));
+	if (error != 0)
+		return (error);
+	rqsr.r_offset = PAIR32TO64(off_t, rqsr32.r_offset);
+	rqsr.r_len = PAIR32TO64(off_t, rqsr32.r_len);
+
+	error = kern_fspacectl(td, uap->fd, uap->cmd, &rqsr, uap->flags,
+	    &rmsr);
+	if (uap->rmsr != NULL) {
+#if BYTE_ORDER == LITTLE_ENDIAN
+		rmsr32.r_offset1 = rmsr.r_offset;
+		rmsr32.r_offset2 = rmsr.r_offset >> 32;
+		rmsr32.r_len1 = rmsr.r_len;
+		rmsr32.r_len2 = rmsr.r_len >> 32;
+#else
+		rmsr32.r_offset1 = rmsr.r_offset >> 32;
+		rmsr32.r_offset2 = rmsr.r_offset;
+		rmsr32.r_len1 = rmsr.r_len >> 32;
+		rmsr32.r_len2 = rmsr.r_len;
+#endif
+		cerror = copyout(&rmsr32, uap->rmsr, sizeof(rmsr32));
+		if (error == 0)
+			error = cerror;
 	}
 	return (error);
 }

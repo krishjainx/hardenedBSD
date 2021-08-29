@@ -65,6 +65,7 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	libjail \
 	libkiconv \
 	libkvm \
+	liblattzfs \
 	liblua \
 	liblzma \
 	libmemstat \
@@ -181,6 +182,8 @@ SUBDIR.${MK_STATS}+=	libstats
     ${MACHINE_CPUARCH} == "arm" || ${MACHINE_CPUARCH} == "i386" || \
     ${MACHINE_CPUARCH} == "powerpc")
 _libclang_rt=	libclang_rt
+.elif ${MK_ASAN} != "no" || ${MK_UBSAN} != "no"
+.error "Requested build with sanitizers but cannot build runtime libraries!"
 .endif
 
 .if ${MK_CXX} != "no"

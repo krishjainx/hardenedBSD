@@ -13,10 +13,25 @@ MK_PROFILE=	no
 MK_SPECTREV1_FIX=	no
 MK_UNINIT_AUTOINIT=	no
 MK_LTOLIB=		no
+MK_PIE=		no
 MAN=
 .if !defined(PIC)
 NO_PIC=
 INTERNALLIB=
+.endif
+# Should be NO_CPU_FLAGS, but bsd.cpu.mk is included too early in bsd.init.mk
+# via the early include of bsd.opts.mk. Moving Makefile.inc include earlier in
+# that file causes weirdness, so this is the next best thing. We need to do this
+# because the loader needs very specific flags to work right, and things like
+# CPUTYPE?=native prevent that, and introduce an endless game of whack-a-mole
+# to disable more and more features. Boot loader performance is never improved
+# enough to make that hassle worth chasing.
+_CPUCFLAGS=
+
+.if ${LDFLAGS:M-nostdlib}
+# Sanitizers won't work unless we link against libc (e.g. in userboot/test).
+MK_ASAN:=	no
+MK_UBSAN:=	no
 .endif
 
 .include <src.opts.mk>
@@ -127,8 +142,6 @@ CFLAGS+=	-m32
 LD_FLAGS+=	-m elf_i386_fbsd
 AFLAGS+=	--32
 .endif
-
-SSP_CFLAGS=
 
 # Add in the no float / no SIMD stuff and announce we're freestanding
 # aarch64 and riscv don't have -msoft-float, but all others do.

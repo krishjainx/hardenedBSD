@@ -58,7 +58,6 @@ struct cxgbei_cmp {
 
 	uint32_t tt;		/* Transfer tag. */
 
-	uint32_t next_datasn;
 	uint32_t next_buffer_offset;
 	uint32_t last_datasn;
 };
@@ -125,14 +124,16 @@ ip_to_icp(struct icl_pdu *ip)
 }
 
 struct cxgbei_data {
-	u_int max_tx_pdu_len;
-	u_int max_rx_pdu_len;
+	u_int max_tx_data_len;
+	u_int max_rx_data_len;
 
 	u_int ddp_threshold;
 	struct ppod_region pr;
 
 	struct sysctl_ctx_list ctx;	/* from uld_activate to deactivate */
 };
+
+#define CXGBEI_MAX_ISO_PAYLOAD	65535
 
 /* cxgbei.c */
 u_int cxgbei_select_worker_thread(struct icl_cxgbei_conn *);

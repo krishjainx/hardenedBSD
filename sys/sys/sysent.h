@@ -153,11 +153,13 @@ struct sysentvec {
 	const char	*(*sv_machine_arch)(struct proc *);
 	vm_offset_t	sv_fxrng_gen_base;
 	void		(*sv_onexec_old)(struct thread *td);
-	void		(*sv_onexec)(struct proc *, struct image_params *);
+	int		(*sv_onexec)(struct proc *, struct image_params *);
 	void		(*sv_onexit)(struct proc *);
 	void		(*sv_ontdexit)(struct thread *td);
 	int		(*sv_setid_allowed)(struct thread *td,
 			    struct image_params *imgp);
+	void		(*sv_set_fork_retval)(struct thread *);
+					/* Only used on x86 */
 };
 
 #define	SV_ILP32	0x000100	/* 32-bit executable. */

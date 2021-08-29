@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/pmap.h>
 
 #include <machine/frame.h>
+#include <machine/md_var.h>
 #include <machine/pcb.h>
 #include <machine/vmparam.h>
 
@@ -101,6 +102,7 @@ cloudabi64_fetch_syscall_args(struct thread *td)
 
 	/* Obtain system call number. */
 	sa->code = frame->tf_rax;
+	sa->original_code = sa->code;
 	if (sa->code >= CLOUDABI64_SYS_MAXSYSCALL)
 		return (ENOSYS);
 	sa->callp = &cloudabi64_sysent[sa->code];
@@ -215,6 +217,7 @@ static struct sysentvec cloudabi64_elf_sysvec = {
 	.sv_syscallnames	= cloudabi64_syscallnames,
 	.sv_schedtail		= cloudabi64_schedtail,
 	.sv_pax_aslr_init	= pax_aslr_init_vmspace,
+	.sv_set_fork_retval	= x86_set_fork_retval,
 };
 
 INIT_SYSENTVEC(elf_sysvec, &cloudabi64_elf_sysvec);

@@ -624,7 +624,7 @@ rtsx_handle_card_present(struct rtsx_softc *sc)
 }
 
 /*
- * This funtion is called at startup.
+ * This function is called at startup.
  */
 static void
 rtsx_card_task(void *arg, int pending __unused)
@@ -3532,8 +3532,8 @@ rtsx_mmcbr_release_host(device_t bus, device_t child __unused)
 	sc = device_get_softc(bus);
 	RTSX_LOCK(sc);
 	sc->rtsx_bus_busy--;
-	RTSX_UNLOCK(sc);
 	wakeup(&sc->rtsx_bus_busy);
+	RTSX_UNLOCK(sc);
 
 	return (0);
 }

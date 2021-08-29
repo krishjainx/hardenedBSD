@@ -39,6 +39,7 @@ BSARGS= 	DESTDIR= \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${OSRELDATE} \
 		BWPHASE=${.TARGET} \
+<<<<<<< HEAD
 		SSP_CFLAGS= \
 		MK_HTML=no NO_LINT=yes MK_MAN=no \
 		-DNO_PIC MK_PROFILE=no \
@@ -49,9 +50,27 @@ BSARGS= 	DESTDIR= \
 		MK_INCLUDES=yes MK_RETPOLINE=no MK_SAFESTACK=no \
 		MK_CFI=no MK_CROSS_DSO_CFI=no MK_LTLLIB=no \
 		MK_INCLUDES=yes
+=======
+		-DNO_CPU_CFLAGS \
+		-DNO_LINT \
+		-DNO_PIC \
+		-DNO_SHARED \
+		MK_CTF=no \
+		MK_CLANG_EXTRAS=yes \
+		MK_CLANG_FORMAT=no \
+		MK_CLANG_FULL=no \
+		MK_HTML=no \
+		MK_MAN=no \
+		MK_PROFILE=no \
+		MK_SSP=no \
+		MK_TESTS=no \
+		MK_WERROR=no \
+		MK_INCLUDES=yes \
+		MK_MAN_UTILS=yes
+>>>>>>> origin/hardened/current/master
 
 # We will handle building the toolchain and cross-compiler.
-BSARGS+= MK_CROSS_COMPILER=no MK_CLANG=no
+BSARGS+= MK_CROSS_COMPILER=no MK_CLANG=no MK_LLDB=no
 
 DISTRIB_ENV=	INSTALL="sh ${SRCTOP}/tools/install.sh" NO_FSCHG=1 MK_TESTS=no
 legacy: .MAKE ${META_DEPS}

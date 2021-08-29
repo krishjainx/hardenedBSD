@@ -162,8 +162,6 @@ static int nfscl_recalldeleg(struct nfsclclient *, struct nfsmount *,
     vnode_t *);
 static void nfscl_freeopenowner(struct nfsclowner *, int);
 static void nfscl_cleandeleg(struct nfscldeleg *);
-static int nfscl_trydelegreturn(struct nfscldeleg *, struct ucred *,
-    struct nfsmount *, NFSPROC_T *);
 static void nfscl_emptylockowner(struct nfscllockowner *,
     struct nfscllockownerfhhead *);
 static void nfscl_mergeflayouts(struct nfsclflayouthead *,
@@ -528,7 +526,7 @@ nfscl_getstateid(vnode_t vp, u_int8_t *nfhp, int fhlen, u_int32_t mode,
 	struct nfscldeleg *dp;
 	struct nfsnode *np;
 	struct nfsmount *nmp;
-	u_int8_t own[NFSV4CL_LOCKNAMELEN];
+	u_int8_t own[NFSV4CL_LOCKNAMELEN], lockown[NFSV4CL_LOCKNAMELEN];
 	int error;
 	bool done;
 
@@ -547,6 +545,34 @@ nfscl_getstateid(vnode_t vp, u_int8_t *nfhp, int fhlen, u_int32_t mode,
 		return (EISDIR);
 	np = VTONFS(vp);
 	nmp = VFSTONFS(vp->v_mount);
+
+	/*
+	 * For "oneopenown" mounts, first check for a cached open in the
+	 * NFS vnode, that can be used as a stateid.  This can only be
+	 * done if no delegations have been issued to the mount and no
+	 * byte range file locking has been done for the file.
+	 */
+	if (NFSHASNFSV4N(nmp) && NFSHASONEOPENOWN(nmp) && fords == 0) {
+		NFSLOCKMNT(nmp);
+		NFSLOCKNODE(np);
+		if ((nmp->nm_privflag & NFSMNTP_DELEGISSUED) == 0 &&
+		    (np->n_flag & NMIGHTBELOCKED) == 0 &&
+		    np->n_openstateid != NULL) {
+			stateidp->seqid = 0;
+			stateidp->other[0] =
+			    np->n_openstateid->nfso_stateid.other[0];
+			stateidp->other[1] =
+			    np->n_openstateid->nfso_stateid.other[1];
+			stateidp->other[2] =
+			    np->n_openstateid->nfso_stateid.other[2];
+			NFSUNLOCKNODE(np);
+			NFSUNLOCKMNT(nmp);
+			return (0);
+		}
+		NFSUNLOCKNODE(np);
+		NFSUNLOCKMNT(nmp);
+	}
+
 	NFSLOCKCLSTATE();
 	clp = nfscl_findcl(nmp);
 	if (clp == NULL) {
@@ -569,7 +595,11 @@ nfscl_getstateid(vnode_t vp, u_int8_t *nfhp, int fhlen, u_int32_t mode,
 		    !NFSBCMP(nfhp, dp->nfsdl_fh, fhlen)) {
 			if (!(mode & NFSV4OPEN_ACCESSWRITE) ||
 			    (dp->nfsdl_flags & NFSCLDL_WRITE)) {
-				stateidp->seqid = dp->nfsdl_stateid.seqid;
+				if (NFSHASNFSV4N(nmp))
+					stateidp->seqid = 0;
+				else
+					stateidp->seqid =
+					    dp->nfsdl_stateid.seqid;
 				stateidp->other[0] = dp->nfsdl_stateid.other[0];
 				stateidp->other[1] = dp->nfsdl_stateid.other[1];
 				stateidp->other[2] = dp->nfsdl_stateid.other[2];
@@ -599,13 +629,16 @@ nfscl_getstateid(vnode_t vp, u_int8_t *nfhp, int fhlen, u_int32_t mode,
 			nfscl_filllockowner(NULL, own, F_POSIX);
 		else
 			nfscl_filllockowner(p->td_proc, own, F_POSIX);
+		nfscl_filllockowner(p->td_proc, lockown, F_POSIX);
 		lp = NULL;
 		error = nfscl_getopen(NULL, clp->nfsc_openhash, nfhp, fhlen,
-		    own, own, mode, &lp, &op);
+		    own, lockown, mode, &lp, &op);
 		if (error == 0 && lp != NULL && fords == 0) {
 			/* Don't return a lock stateid for a DS. */
-			stateidp->seqid =
-			    lp->nfsl_stateid.seqid;
+			if (NFSHASNFSV4N(nmp))
+				stateidp->seqid = 0;
+			else
+				stateidp->seqid = lp->nfsl_stateid.seqid;
 			stateidp->other[0] =
 			    lp->nfsl_stateid.other[0];
 			stateidp->other[1] =
@@ -656,7 +689,10 @@ nfscl_getstateid(vnode_t vp, u_int8_t *nfhp, int fhlen, u_int32_t mode,
 	/*
 	 * No lock stateid, so return the open stateid.
 	 */
-	stateidp->seqid = op->nfso_stateid.seqid;
+	if (NFSHASNFSV4N(nmp))
+		stateidp->seqid = 0;
+	else
+		stateidp->seqid = op->nfso_stateid.seqid;
 	stateidp->other[0] = op->nfso_stateid.other[0];
 	stateidp->other[1] = op->nfso_stateid.other[1];
 	stateidp->other[2] = op->nfso_stateid.other[2];
@@ -4292,8 +4328,16 @@ nfscl_relock(vnode_t vp, struct nfsclclient *clp, struct nfsmount *nmp,
 {
 	struct nfscllockowner *nlp;
 	struct nfsfh *nfhp;
+	struct nfsnode *np;
 	u_int64_t off, len;
 	int error, newone, donelocally;
+
+	if (NFSHASNFSV4N(nmp) && NFSHASONEOPENOWN(nmp)) {
+		np = VTONFS(vp);
+		NFSLOCKNODE(np);
+		np->n_flag |= NMIGHTBELOCKED;
+		NFSUNLOCKNODE(np);
+	}
 
 	off = lop->nfslo_first;
 	len = lop->nfslo_end - lop->nfslo_first;
@@ -4417,7 +4461,7 @@ nfscl_trylock(struct nfsmount *nmp, vnode_t vp, u_int8_t *fhp,
  * retrying while NFSERR_DELAY. Also, try system credentials, if the passed in
  * credentials fail.
  */
-static int
+int
 nfscl_trydelegreturn(struct nfscldeleg *dp, struct ucred *cred,
     struct nfsmount *nmp, NFSPROC_T *p)
 {

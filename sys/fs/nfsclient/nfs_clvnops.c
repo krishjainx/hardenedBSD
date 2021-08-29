@@ -146,6 +146,7 @@ static vop_getacl_t nfs_getacl;
 static vop_setacl_t nfs_setacl;
 static vop_advise_t nfs_advise;
 static vop_allocate_t nfs_allocate;
+static vop_deallocate_t nfs_deallocate;
 static vop_copy_file_range_t nfs_copy_file_range;
 static vop_ioctl_t nfs_ioctl;
 static vop_getextattr_t nfs_getextattr;
@@ -193,6 +194,7 @@ static struct vop_vector newnfs_vnodeops_nosig = {
 	.vop_setacl =		nfs_setacl,
 	.vop_advise =		nfs_advise,
 	.vop_allocate =		nfs_allocate,
+	.vop_deallocate =	nfs_deallocate,
 	.vop_copy_file_range =	nfs_copy_file_range,
 	.vop_ioctl =		nfs_ioctl,
 	.vop_getextattr =	nfs_getextattr,
@@ -1164,6 +1166,7 @@ nfs_lookup(struct vop_lookup_args *ap)
 	struct nfsvattr dnfsva, nfsva;
 	struct vattr vattr;
 	struct timespec nctime;
+	uint32_t openmode;
 
 	*vpp = NULLVP;
 	if ((flags & ISLASTCN) && (mp->mnt_flag & MNT_RDONLY) &&
@@ -1265,11 +1268,30 @@ nfs_lookup(struct vop_lookup_args *ap)
 		cache_purge_negative(dvp);
 	}
 
+	/*
+	 * If this an NFSv4.1/4.2 mount using the "oneopenown" mount
+	 * option, it is possible to do the Open operation in the same
+	 * compound as Lookup, so long as delegations are not being
+	 * issued.  This saves doing a separate RPC for Open.
+	 */
+	openmode = 0;
+	NFSLOCKMNT(nmp);
+	if (NFSHASNFSV4N(nmp) && NFSHASONEOPENOWN(nmp) &&
+	    (nmp->nm_privflag & NFSMNTP_DELEGISSUED) == 0 &&
+	    (!NFSMNT_RDONLY(mp) || (flags & OPENWRITE) == 0) &&
+	    (flags & (ISLASTCN | ISOPEN)) == (ISLASTCN | ISOPEN)) {
+		if ((flags & OPENREAD) != 0)
+			openmode |= NFSV4OPEN_ACCESSREAD;
+		if ((flags & OPENWRITE) != 0)
+			openmode |= NFSV4OPEN_ACCESSWRITE;
+	}
+	NFSUNLOCKMNT(nmp);
+
 	newvp = NULLVP;
 	NFSINCRGLOBAL(nfsstatsv1.lookupcache_misses);
 	error = nfsrpc_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
 	    cnp->cn_cred, td, &dnfsva, &nfsva, &nfhp, &attrflag, &dattrflag,
-	    NULL);
+	    NULL, openmode);
 	if (dattrflag)
 		(void) nfscl_loadattrcache(&dvp, &dnfsva, NULL, NULL, 0, 1);
 	if (error) {
@@ -1577,7 +1599,7 @@ nfs_mknodrpc(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 			(void) nfsrpc_lookup(dvp, cnp->cn_nameptr,
 			    cnp->cn_namelen, cnp->cn_cred, cnp->cn_thread,
 			    &dnfsva, &nfsva, &nfhp, &attrflag, &dattrflag,
-			    NULL);
+			    NULL, 0);
 		if (nfhp)
 			error = nfscl_nget(dvp->v_mount, dvp, nfhp, cnp,
 			    cnp->cn_thread, &np, NULL, LK_EXCLUSIVE);
@@ -1693,7 +1715,7 @@ again:
 			(void) nfsrpc_lookup(dvp, cnp->cn_nameptr,
 			    cnp->cn_namelen, cnp->cn_cred, cnp->cn_thread,
 			    &dnfsva, &nfsva, &nfhp, &attrflag, &dattrflag,
-			    NULL);
+			    NULL, 0);
 		if (nfhp != NULL)
 			error = nfscl_nget(dvp->v_mount, dvp, nfhp, cnp,
 			    cnp->cn_thread, &np, NULL, LK_EXCLUSIVE);
@@ -2611,7 +2633,7 @@ nfs_lookitup(struct vnode *dvp, char *name, int len, struct ucred *cred,
 	u_int hash;
 
 	error = nfsrpc_lookup(dvp, name, len, cred, td, &dnfsva, &nfsva,
-	    &nfhp, &attrflag, &dattrflag, NULL);
+	    &nfhp, &attrflag, &dattrflag, NULL, 0);
 	if (dattrflag)
 		(void) nfscl_loadattrcache(&dvp, &dnfsva, NULL, NULL, 0, 1);
 	if (npp && !error) {
@@ -3166,6 +3188,7 @@ nfs_advlock(struct vop_advlock_args *ap)
 	struct vattr va;
 	int ret, error;
 	u_quad_t size;
+	struct nfsmount *nmp;
 
 	error = NFSVOPLOCK(vp, LK_SHARED);
 	if (error != 0)
@@ -3194,6 +3217,22 @@ nfs_advlock(struct vop_advlock_args *ap)
 		    nfscl_checkwritelocked(vp, ap->a_fl, cred, td, ap->a_id,
 		    ap->a_flags))
 			(void) ncl_flush(vp, MNT_WAIT, td, 1, 0);
+
+		/*
+		 * Mark NFS node as might have acquired a lock.
+		 * This is separate from NHASBEENLOCKED, because it must
+		 * be done before the nfsrpc_advlock() call, which might
+		 * add a nfscllock structure to the client state.
+		 * It is used to check for the case where a nfscllock
+		 * state structure cannot exist for the file.
+		 * Only done for "oneopenown" NFSv4.1/4.2 mounts.
+		 */
+		nmp = VFSTONFS(vp->v_mount);
+		if (NFSHASNFSV4N(nmp) && NFSHASONEOPENOWN(nmp)) {
+			NFSLOCKNODE(np);
+			np->n_flag |= NMIGHTBELOCKED;
+			NFSUNLOCKNODE(np);
+		}
 
 		/*
 		 * Loop around doing the lock op, while a blocking lock
@@ -3634,6 +3673,83 @@ nfs_allocate(struct vop_allocate_args *ap)
 	 */
 	if (error != 0)
 		error = vop_stdallocate(ap);
+	if (attrflag != 0) {
+		ret = nfscl_loadattrcache(&vp, &nfsva, NULL, NULL, 0, 1);
+		if (error == 0 && ret != 0)
+			error = ret;
+	}
+	if (error != 0)
+		error = nfscl_maperr(td, error, (uid_t)0, (gid_t)0);
+	return (error);
+}
+
+/*
+ * nfs deallocate call
+ */
+static int
+nfs_deallocate(struct vop_deallocate_args *ap)
+{
+	struct vnode *vp = ap->a_vp;
+	struct thread *td = curthread;
+	struct nfsvattr nfsva;
+	struct nfsmount *nmp;
+	off_t tlen;
+	int attrflag, error, ret;
+
+	error = 0;
+	attrflag = 0;
+	nmp = VFSTONFS(vp->v_mount);
+	mtx_lock(&nmp->nm_mtx);
+	if (NFSHASNFSV4(nmp) && nmp->nm_minorvers >= NFSV42_MINORVERSION &&
+	    (nmp->nm_privflag & NFSMNTP_NODEALLOCATE) == 0) {
+		mtx_unlock(&nmp->nm_mtx);
+		tlen = omin(OFF_MAX - *ap->a_offset, *ap->a_len);
+		NFSCL_DEBUG(4, "dealloc: off=%jd len=%jd maxfilesize=%ju\n",
+		    (intmax_t)*ap->a_offset, (intmax_t)tlen,
+		    (uintmax_t)nmp->nm_maxfilesize);
+		if ((uint64_t)*ap->a_offset >= nmp->nm_maxfilesize) {
+			/* Avoid EFBIG error return from the NFSv4.2 server. */
+			*ap->a_len = 0;
+			return (0);
+		}
+		if ((uint64_t)*ap->a_offset + tlen > nmp->nm_maxfilesize)
+			tlen = nmp->nm_maxfilesize - *ap->a_offset;
+		if (error == 0)
+			error = ncl_vinvalbuf(vp, V_SAVE, td, 1);
+		if (error == 0) {
+			vnode_pager_purge_range(vp, *ap->a_offset,
+			    *ap->a_offset + tlen);
+			error = nfsrpc_deallocate(vp, *ap->a_offset, tlen,
+			    &nfsva, &attrflag, ap->a_cred, td, NULL);
+			NFSCL_DEBUG(4, "dealloc: rpc=%d\n", error);
+		}
+		if (error == 0) {
+			NFSCL_DEBUG(4, "dealloc: attrflag=%d na_size=%ju\n",
+			    attrflag, (uintmax_t)nfsva.na_size);
+			if (attrflag != 0) {
+				if ((uint64_t)*ap->a_offset < nfsva.na_size)
+					*ap->a_offset += omin((off_t)
+					    nfsva.na_size - *ap->a_offset,
+					    tlen);
+			}
+			*ap->a_len = 0;
+		} else if (error == NFSERR_NOTSUPP) {
+			mtx_lock(&nmp->nm_mtx);
+			nmp->nm_privflag |= NFSMNTP_NODEALLOCATE;
+			mtx_unlock(&nmp->nm_mtx);
+		}
+	} else {
+		mtx_unlock(&nmp->nm_mtx);
+		error = EIO;
+	}
+	/*
+	 * If the NFS server cannot perform the Deallocate operation, just call
+	 * vop_stddeallocate() to perform it.
+	 */
+	if (error != 0 && error != NFSERR_FBIG && error != NFSERR_INVAL) {
+		error = vop_stddeallocate(ap);
+		NFSCL_DEBUG(4, "dealloc: stddeallocate=%d\n", error);
+	}
 	if (attrflag != 0) {
 		ret = nfscl_loadattrcache(&vp, &nfsva, NULL, NULL, 0, 1);
 		if (error == 0 && ret != 0)
