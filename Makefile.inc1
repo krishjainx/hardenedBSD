@@ -716,23 +716,13 @@ BSARGS= 	DESTDIR= \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${BOOTSTRAPPING_OSRELDATE} \
 		BWPHASE=${.TARGET:C,^_,,} \
-<<<<<<< HEAD
-		SSP_CFLAGS= \
-		MK_HTML=no NO_LINT=yes MK_MAN=no MK_MAN_UTILS=yes \
-		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
-		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no \
-		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
-		MK_LLDB=no MK_TESTS=no \
-		MK_INCLUDES=yes MK_CFI=no MK_RETPOLINE=no \
-		MK_LTOLIB=no MK_CROSS_DSO_CFI=no \
-		MK_CLANG_FORMAT=no
-=======
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
 		-DNO_PIC \
 		-DNO_SHARED \
 		MK_ASAN=no \
 		MK_CFI=no \
+		MK_CROSS_DSO_CFI=no \
 		MK_CTF=no \
 		MK_CLANG_EXTRAS=yes \
 		MK_CLANG_FORMAT=no \
@@ -742,13 +732,13 @@ BSARGS= 	DESTDIR= \
 		MK_MAN=no \
 		MK_PROFILE=no \
 		MK_RETPOLINE=no \
+		MK_SAFESTACK=no \
 		MK_SSP=no \
 		MK_TESTS=no \
 		MK_UBSAN=no \
 		MK_WERROR=no \
 		MK_INCLUDES=yes \
 		MK_MAN_UTILS=yes
->>>>>>> origin/hardened/current/master
 
 BMAKE=		\
 		${TIME_ENV} ${BMAKEENV} ${MAKE} ${WORLD_FLAGS} -f Makefile.inc1 \
@@ -766,15 +756,9 @@ TMAKE=		\
 		BWPHASE=${.TARGET:C,^_,,} \
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
-<<<<<<< HEAD
-		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no \
-		MK_CLANG_EXTRAS=yes MK_CLANG_FULL=no \
-		MK_LLDB=no MK_TESTS=no MK_CFI=no MK_RETPOLINE=no \
-		MK_LTOLIB=no MK_CROSS_DSO_CFI=no \
-		MK_CLANG_FORMAT=no
-=======
 		MK_ASAN=no \
 		MK_CFI=no \
+		MK_CROSS_DSO_CFI=no \
 		MK_CTF=no \
 		MK_CLANG_EXTRAS=yes \
 		MK_CLANG_FORMAT=no \
@@ -786,7 +770,6 @@ TMAKE=		\
 		MK_TESTS=no \
 		MK_UBSAN=no \
 		MK_WERROR=no
->>>>>>> origin/hardened/current/master
 
 # cross-tools stage
 # TOOLS_PREFIX set in BMAKE
@@ -810,17 +793,11 @@ KTMAKE=		${TIME_ENV} \
 		OBJROOT='$${OBJTOP}/' \
 		MAKEOBJDIRPREFIX= \
 		BOOTSTRAPPING=${BOOTSTRAPPING_OSRELDATE} \
-<<<<<<< HEAD
-		SSP_CFLAGS= \
-		MK_HTML=no -DNO_LINT MK_MAN=no \
-		-DNO_PIC MK_PROFILE=no -DNO_SHARED \
-		-DNO_CPU_CFLAGS MK_WERROR=no MK_CTF=no MK_CFI=no \
-		MK_RETPOLINE=no MK_CROSS_DSO_CFI=no MK_LTOLIB=no
-=======
 		-DNO_CPU_CFLAGS \
 		-DNO_LINT \
 		-DNO_PIC \
 		-DNO_SHARED \
+		MK_CROSS_DSO_CFI=no \
 		MK_CTF=no \
 		MK_HTML=no \
 		MK_LTOLIB=no \
@@ -829,7 +806,6 @@ KTMAKE=		${TIME_ENV} \
 		MK_SSP=no \
 		MK_RETPOLINE=no \
 		MK_WERROR=no
->>>>>>> origin/hardened/current/master
 
 # world stage
 WMAKEENV=	${CROSSENV} \
@@ -2794,11 +2770,7 @@ SUBDIR=	${SUBDIR_OVERRIDE}
 NXBMAKEARGS+= \
 	OBJTOP=${NXBOBJTOP:Q} \
 	OBJROOT=${NXBOBJROOT:Q} \
-<<<<<<< HEAD
-	MAKEOBJDIRPREFIX= \
-=======
 	-DNO_SHARED \
->>>>>>> origin/hardened/current/master
 	-DNO_CPU_CFLAGS \
 	-DNO_PIC \
 	MK_CASPER=no \
