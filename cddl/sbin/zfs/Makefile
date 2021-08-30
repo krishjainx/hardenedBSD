@@ -1,5 +1,7 @@
 # $FreeBSD$
 
+.include <bsd.init.mk>
+
 ZFSTOP=	${SRCTOP}/sys/contrib/openzfs
 
 .PATH: ${ZFSTOP}/cmd/zfs
@@ -73,6 +75,8 @@ CFLAGS+= \
 	-DHAVE_ISSETUGID \
 	-include ${SRCTOP}/sys/modules/zfs/zfs_config.h \
 	-I${SRCTOP}/sys/modules/zfs
+
+MK_CROSS_DSO_CFI=	no
 
 LIBADD=	jail avl nvpair geom  uutil zfs_core spl tpool zutil zfs m crypto
 LDADD+=	-pthread

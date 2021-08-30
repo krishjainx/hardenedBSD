@@ -46,6 +46,8 @@ MAN=
 INCS=
 MLINKS=
 MK_TESTS=	no
+MK_CFI=		no
+MK_CROSS_DSO_CFI=	no
 
 #
 # Static modules

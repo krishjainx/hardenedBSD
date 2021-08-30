@@ -113,9 +113,9 @@ CXXFLAGS+=	-fsanitize=cfi -fvisibility=hidden -flto ${CFI_OVERRIDE}
 LDFLAGS+=	-fsanitize=cfi -fvisibility=hidden -flto ${CFI_OVERRIDE}
 
 .if !defined(NOPIE) && ${MK_CROSS_DSO_CFI} != "no"
-CFLAGS+=	-fsanitize-cfi-cross-dso
-CXXFLAGS+=	-fsanitize-cfi-cross-dso
-LDFLAGS+=	-fsanitize-cfi-cross-dso
+CFLAGS+=	-fsanitize-cfi-cross-dso -fsanitize=cfi-cast-strict
+CXXFLAGS+=	-fsanitize-cfi-cross-dso -fsanitize=cfi-cast-strict
+LDFLAGS+=	-fsanitize-cfi-cross-dso -fsanitize=cfi-cast-strict
 .endif
 .endif
 .endif

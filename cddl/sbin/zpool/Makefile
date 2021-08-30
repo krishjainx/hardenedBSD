@@ -1,5 +1,7 @@
 # $FreeBSD$
 
+.include <bsd.init.mk>
+
 ZFSTOP=	${SRCTOP}/sys/contrib/openzfs
 
 .PATH: ${ZFSTOP}/man/man4
@@ -74,6 +76,8 @@ CFLAGS+= \
 	-include ${SRCTOP}/sys/modules/zfs/zfs_config.h \
 	-DSYSCONFDIR=\"/etc\" \
 	-DPKGDATADIR=\"/usr/share/zfs\"
+
+MK_CROSS_DSO_CFI=	no
 
 LIBADD=	geom jail nvpair uutil zfs zutil avl spl tpool zfs_core m
 LDADD+= 	-pthread
