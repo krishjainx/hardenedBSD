@@ -6200,8 +6200,8 @@ pmap_remove_all(vm_page_t m)
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy :
 	    pa_to_pvh(VM_PAGE_TO_PHYS(m));
-retry:
 	rw_wlock(lock);
+retry:
 	while ((pv = TAILQ_FIRST(&pvh->pv_list)) != NULL) {
 		pmap = PV_PMAP(pv);
 		if (!PMAP_TRYLOCK(pmap)) {
@@ -6210,7 +6210,6 @@ retry:
 			PMAP_LOCK(pmap);
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
-				rw_wunlock(lock);
 				PMAP_UNLOCK(pmap);
 				goto retry;
 			}
@@ -6229,7 +6228,6 @@ retry:
 			PMAP_LOCK(pmap);
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
-				rw_wunlock(lock);
 				PMAP_UNLOCK(pmap);
 				goto retry;
 			}
@@ -6521,7 +6519,6 @@ pmap_promote_pde(pmap_t pmap, pd_entry_t *pde, vm_offset_t va,
 	 * within a 2MB page. 
 	 */
 	firstpte = (pt_entry_t *)PHYS_TO_DMAP(*pde & PG_FRAME);
-setpde:
 	newpde = *firstpte;
 	if ((newpde & ((PG_FRAME & PDRMASK) | PG_A | PG_V)) != (PG_A | PG_V) ||
 	    !pmap_allow_2m_x_page(pmap, pmap_pde_ept_executable(pmap,
@@ -6531,12 +6528,13 @@ setpde:
 		    " in pmap %p", va, pmap);
 		return;
 	}
+setpde:
 	if ((newpde & (PG_M | PG_RW)) == PG_RW) {
 		/*
 		 * When PG_M is already clear, PG_RW can be cleared without
 		 * a TLB invalidation.
 		 */
-		if (!atomic_cmpset_long(firstpte, newpde, newpde & ~PG_RW))
+		if (!atomic_fcmpset_long(firstpte, &newpde, newpde & ~PG_RW))
 			goto setpde;
 		newpde &= ~PG_RW;
 	}
@@ -6548,7 +6546,6 @@ setpde:
 	 */
 	pa = (newpde & (PG_PS_FRAME | PG_A | PG_V)) + NBPDR - PAGE_SIZE;
 	for (pte = firstpte + NPTEPG - 1; pte > firstpte; pte--) {
-setpte:
 		oldpte = *pte;
 		if ((oldpte & (PG_FRAME | PG_A | PG_V)) != pa) {
 			atomic_add_long(&pmap_pde_p_failures, 1);
@@ -6556,12 +6553,13 @@ setpte:
 			    " in pmap %p", va, pmap);
 			return;
 		}
+setpte:
 		if ((oldpte & (PG_M | PG_RW)) == PG_RW) {
 			/*
 			 * When PG_M is already clear, PG_RW can be cleared
 			 * without a TLB invalidation.
 			 */
-			if (!atomic_cmpset_long(pte, oldpte, oldpte & ~PG_RW))
+			if (!atomic_fcmpset_long(pte, &oldpte, oldpte & ~PG_RW))
 				goto setpte;
 			oldpte &= ~PG_RW;
 			CTR2(KTR_PMAP, "pmap_promote_pde: protect for va %#lx"
@@ -7232,7 +7230,6 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 		va = start + ptoa(diff);
 		if ((va & PDRMASK) == 0 && va + NBPDR <= end &&
 		    m->psind == 1 && pmap_ps_enabled(pmap) &&
-		    pmap_allow_2m_x_page(pmap, (prot & VM_PROT_EXECUTE) != 0) &&
 		    pmap_enter_2mpage(pmap, va, m, prot, &lock))
 			m = &m[NBPDR / PAGE_SIZE - 1];
 		else
@@ -8356,8 +8353,8 @@ pmap_remove_write(vm_page_t m)
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy :
 	    pa_to_pvh(VM_PAGE_TO_PHYS(m));
-retry_pv_loop:
 	rw_wlock(lock);
+retry:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
 		if (!PMAP_TRYLOCK(pmap)) {
@@ -8367,8 +8364,7 @@ retry_pv_loop:
 			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
-				rw_wunlock(lock);
-				goto retry_pv_loop;
+				goto retry;
 			}
 		}
 		PG_RW = pmap_rw_bit(pmap);
@@ -8392,8 +8388,7 @@ retry_pv_loop:
 			if (pvh_gen != pvh->pv_gen ||
 			    md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
-				rw_wunlock(lock);
-				goto retry_pv_loop;
+				goto retry;
 			}
 		}
 		PG_M = pmap_modified_bit(pmap);
@@ -8403,12 +8398,11 @@ retry_pv_loop:
 		    ("pmap_remove_write: found a 2mpage in page %p's pv list",
 		    m));
 		pte = pmap_pde_to_pte(pde, pv->pv_va);
-retry:
 		oldpte = *pte;
 		if (oldpte & PG_RW) {
-			if (!atomic_cmpset_long(pte, oldpte, oldpte &
+			while (!atomic_fcmpset_long(pte, &oldpte, oldpte &
 			    ~(PG_RW | PG_M)))
-				goto retry;
+				cpu_spinwait();
 			if ((oldpte & PG_M) != 0)
 				vm_page_dirty(m);
 			pmap_invalidate_page(pmap, pv->pv_va);
