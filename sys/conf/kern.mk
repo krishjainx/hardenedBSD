@@ -25,31 +25,23 @@ NO_WUNNEEDED_INTERNAL_DECL=	-Wno-error=unneeded-internal-declaration
 NO_WSOMETIMES_UNINITIALIZED=	-Wno-error=sometimes-uninitialized
 NO_WCAST_QUAL=			-Wno-error=cast-qual
 NO_WTAUTOLOGICAL_POINTER_COMPARE= -Wno-tautological-pointer-compare
+.if ${COMPILER_VERSION} >= 100000
+NO_WMISLEADING_INDENTATION=	-Wno-misleading-indentation
+.endif
 # Several other warnings which might be useful in some cases, but not severe
 # enough to error out the whole kernel build.  Display them anyway, so there is
 # some incentive to fix them eventually.
 CWARNEXTRA?=	-Wno-error=tautological-compare -Wno-error=empty-body \
 		-Wno-error=parentheses-equality -Wno-error=unused-function \
 		-Wno-error=pointer-sign
-.if ${COMPILER_VERSION} >= 30700
 CWARNEXTRA+=	-Wno-error=shift-negative-value
-.endif
-.if ${COMPILER_VERSION} >= 40000
 CWARNEXTRA+=	-Wno-address-of-packed-member
+.if ${COMPILER_VERSION} >= 130000
+CWARNFLAGS+=	-Wno-error=unused-but-set-variable
 .endif
-.if ${COMPILER_VERSION} >= 100000
-NO_WMISLEADING_INDENTATION=	-Wno-misleading-indentation
-.endif
-
-CLANG_NO_IAS= -no-integrated-as
-.if ${COMPILER_VERSION} < 30500
-# XXX: clang < 3.5 integrated-as doesn't grok .codeNN directives
-CLANG_NO_IAS34= -no-integrated-as
-.endif
-.endif
+.endif	# clang
 
 .if ${COMPILER_TYPE} == "gcc"
-.if ${COMPILER_VERSION} >= 40800
 # Catch-all for all the things that are in our tree, but for which we're
 # not yet ready for this compiler.
 NO_WUNUSED_BUT_SET_VARIABLE = -Wno-unused-but-set-variable
@@ -61,14 +53,15 @@ CWARNEXTRA?=	-Wno-error=address				\
 		-Wno-error=enum-compare				\
 		-Wno-error=inline				\
 		-Wno-error=maybe-uninitialized			\
+		-Wno-error=misleading-indentation		\
+		-Wno-error=nonnull-compare			\
 		-Wno-error=overflow				\
 		-Wno-error=sequence-point			\
-		-Wno-error=unused-but-set-variable
-.if ${COMPILER_VERSION} >= 60100
-CWARNEXTRA+=	-Wno-error=misleading-indentation		\
-		-Wno-error=nonnull-compare			\
 		-Wno-error=shift-overflow			\
-		-Wno-error=tautological-compare
+		-Wno-error=tautological-compare			\
+		-Wno-unused-but-set-variable
+.if ${COMPILER_VERSION} >= 70100
+CWARNEXTRA+=	-Wno-error=stringop-overflow
 .endif
 .if ${COMPILER_VERSION} >= 70200
 CWARNEXTRA+=	-Wno-error=memset-elt-size
@@ -76,14 +69,10 @@ CWARNEXTRA+=	-Wno-error=memset-elt-size
 .if ${COMPILER_VERSION} >= 80000
 CWARNEXTRA+=	-Wno-error=packed-not-aligned
 .endif
-.else
-# For gcc 4.2, eliminate the too-often-wrong warnings about uninitialized vars.
-CWARNEXTRA?=	-Wno-uninitialized
-# GCC 4.2 doesn't have -Wno-error=cast-qual, so just disable the warning for
-# the few files that are already known to generate cast-qual warnings.
-NO_WCAST_QUAL= -Wno-cast-qual
+.if ${COMPILER_VERSION} >= 90100
+CWARNEXTRA+=	-Wno-address-of-packed-member
 .endif
-.endif
+.endif	# gcc
 
 # This warning is utter nonsense
 CWARNFLAGS+=	-Wno-format-zero-length
@@ -92,7 +81,7 @@ CWARNFLAGS+=	-Wno-format-zero-length
 # to be disabled.  WARNING: format checking is disabled in this case.
 .if ${MK_FORMAT_EXTENSIONS} == "no"
 FORMAT_EXTENSIONS=	-Wno-format
-.elif ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 30600
+.elif ${COMPILER_TYPE} == "clang"
 FORMAT_EXTENSIONS=	-D__printf__=__freebsd_kprintf__
 .else
 FORMAT_EXTENSIONS=	-fformat-extensions
@@ -207,12 +196,7 @@ CFLAGS.gcc+=	-mno-spe
 # DDB happy. ELFv2, if available, has some other efficiency benefits.
 #
 .if ${MACHINE_ARCH} == "powerpc64"
-.if ${COMPILER_VERSION} >= 40900
-CFLAGS.gcc+=	-mabi=elfv2
-.else
-CFLAGS.gcc+=	-mcall-aixdesc
-.endif
-CFLAGS.clang+=	-mabi=elfv2
+CFLAGS+=	-mabi=elfv2
 .endif
 
 #

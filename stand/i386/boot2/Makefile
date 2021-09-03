@@ -37,9 +37,6 @@ CFLAGS+=-fomit-frame-pointer \
 CFLAGS.gcc+=	-Os \
 		-fno-asynchronous-unwind-tables \
 		--param max-inline-insns-single=100
-.if ${COMPILER_TYPE} == "gcc" && ${COMPILER_VERSION} <= 40201
-CFLAGS.gcc+=   -mno-align-long-strings
-.endif
 
 CFLAGS.clang+=	-Oz ${CLANG_OPT_SMALL}
 
@@ -96,6 +93,3 @@ boot2.h: boot1.out
 	    REL1=`printf "%d" ${REL1}` > ${.TARGET}
 
 .include <bsd.prog.mk>
-
-# XXX: clang integrated-as doesn't grok .codeNN directives yet
-CFLAGS.boot1.S=		${CLANG_NO_IAS}
