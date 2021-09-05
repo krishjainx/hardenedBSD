@@ -104,10 +104,5 @@ NEED_FIPS186_2_PRF=y
 CFLAGS+=-DEAP_GPSK_SHA256
 NEED_AES_OMAC1=y
 .endif
-<<<<<<< HEAD
 
 MK_CFI=no
-
-.include <bsd.own.mk>
-=======
->>>>>>> origin/freebsd/13-stable/main
