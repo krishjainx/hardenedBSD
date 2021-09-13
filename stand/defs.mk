@@ -10,8 +10,12 @@ __BOOT_DEFS_MK__=${MFILE}
 MK_CTF=		no
 MK_SSP=		no
 MK_PROFILE=	no
+<<<<<<< HEAD
 MK_SPECTREV1_FIX=	no
 MK_UNINIT_AUTOINIT=	no
+=======
+MK_PIE=		no
+>>>>>>> origin/freebsd/13-stable/main
 MAN=
 .if !defined(PIC)
 NO_PIC=
