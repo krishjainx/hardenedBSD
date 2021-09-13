@@ -11,12 +11,9 @@ MK_CFI=		no
 MK_CTF=		no
 MK_SSP=		no
 MK_PROFILE=	no
-<<<<<<< HEAD
 MK_SAFESTACK=	no
 MK_SPECTREV1_FIX=	no
-=======
 MK_PIE=		no
->>>>>>> origin/freebsd/12-stable/main
 MAN=
 .if !defined(PIC)
 NO_PIC=
