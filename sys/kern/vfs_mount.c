@@ -2577,7 +2577,7 @@ mount_devctl_event(const char *type, struct mount *mp, bool donew)
 	 * devd processes them.
 	 */
 
-	if (sbuf_error(&sb) == 0)
+	if (sbuf_error(&sb) == 0) {
 		devctl_notify("VFS", "FS", type, sbuf_data(&sb));
 	}
 err:
