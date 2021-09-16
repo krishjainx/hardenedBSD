@@ -54,13 +54,11 @@ __FBSDID("$FreeBSD$");
  * PURPOSE.
  */
 
-#define	CRYPTO_TIMING				/* enable timing support */
-
 #include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/eventhandler.h>
+#include <sys/counter.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/linker.h>
@@ -151,6 +149,9 @@ static	struct mtx crypto_q_mtx;
 #define	CRYPTO_Q_LOCK()		mtx_lock(&crypto_q_mtx)
 #define	CRYPTO_Q_UNLOCK()	mtx_unlock(&crypto_q_mtx)
 
+SYSCTL_NODE(_kern, OID_AUTO, crypto, CTLFLAG_RW, 0,
+    "In-kernel cryptography");
+
 /*
  * Taskqueue used to dispatch the crypto requests
  * that have the CRYPTO_F_ASYNC flag
@@ -216,15 +217,31 @@ static	void crypto_remove(struct cryptocap *cap);
 static	void crypto_task_invoke(void *ctx, int pending);
 static void crypto_batch_enqueue(struct cryptop *crp);
 
-static	struct cryptostats cryptostats;
-SYSCTL_STRUCT(_kern, OID_AUTO, crypto_stats, CTLFLAG_RW, &cryptostats,
-	    cryptostats, "Crypto system statistics");
+static counter_u64_t cryptostats[sizeof(struct cryptostats) / sizeof(uint64_t)];
+SYSCTL_COUNTER_U64_ARRAY(_kern_crypto, OID_AUTO, stats, CTLFLAG_RW,
+    cryptostats, nitems(cryptostats),
+    "Crypto system statistics");
 
-#ifdef CRYPTO_TIMING
-static	int crypto_timing = 0;
-SYSCTL_INT(_debug, OID_AUTO, crypto_timing, CTLFLAG_RW,
-	   &crypto_timing, 0, "Enable/disable crypto timing support");
-#endif
+#define	CRYPTOSTAT_INC(stat) do {					\
+	counter_u64_add(						\
+	    cryptostats[offsetof(struct cryptostats, stat) / sizeof(uint64_t)],\
+	    1);								\
+} while (0)
+
+static void
+cryptostats_init(void *arg __unused)
+{
+	COUNTER_ARRAY_ALLOC(cryptostats, nitems(cryptostats), M_WAITOK);
+}
+SYSINIT(cryptostats_init, SI_SUB_COUNTER, SI_ORDER_ANY, cryptostats_init, NULL);
+
+static void
+cryptostats_fini(void *arg __unused)
+{
+	COUNTER_ARRAY_FREE(cryptostats, nitems(cryptostats));
+}
+SYSUNINIT(cryptostats_fini, SI_SUB_COUNTER, SI_ORDER_ANY, cryptostats_fini,
+    NULL);
 
 /* Try to avoid directly exposing the key buffer as a symbol */
 static struct keybuf *keybuf;
@@ -1009,12 +1026,7 @@ crypto_dispatch(struct cryptop *crp)
 	u_int32_t hid;
 	int result;
 
-	cryptostats.cs_ops++;
-
-#ifdef CRYPTO_TIMING
-	if (crypto_timing)
-		binuptime(&crp->crp_tstamp);
-#endif
+	CRYPTOSTAT_INC(cs_ops);
 
 	crp->crp_retw_id = ((uintptr_t)crp->crp_session) % crypto_workers_num;
 
@@ -1079,7 +1091,7 @@ crypto_kdispatch(struct cryptkop *krp)
 {
 	int error;
 
-	cryptostats.cs_kops++;
+	CRYPTOSTAT_INC(cs_kops);
 
 	error = crypto_kinvoke(krp, krp->krp_crid);
 	if (error == ERESTART) {
@@ -1221,32 +1233,6 @@ crypto_kinvoke(struct cryptkop *krp, int crid)
 	return 0;
 }
 
-#ifdef CRYPTO_TIMING
-static void
-crypto_tstat(struct cryptotstat *ts, struct bintime *bt)
-{
-	struct bintime now, delta;
-	struct timespec t;
-	uint64_t u;
-
-	binuptime(&now);
-	u = now.frac;
-	delta.frac = now.frac - bt->frac;
-	delta.sec = now.sec - bt->sec;
-	if (u < delta.frac)
-		delta.sec--;
-	bintime2timespec(&delta, &t);
-	timespecadd(&ts->acc, &t, &ts->acc);
-	if (timespeccmp(&t, &ts->min, <))
-		ts->min = t;
-	if (timespeccmp(&t, &ts->max, >))
-		ts->max = t;
-	ts->count++;
-
-	*bt = now;
-}
-#endif
-
 static void
 crypto_task_invoke(void *ctx, int pending)
 {
@@ -1276,10 +1262,6 @@ crypto_invoke(struct cryptocap *cap, struct cryptop *crp, int hint)
 	    ("%s: crp->crp_callback == NULL", __func__));
 	KASSERT(crp->crp_desc != NULL, ("%s: crp->crp_desc == NULL", __func__));
 
-#ifdef CRYPTO_TIMING
-	if (crypto_timing)
-		crypto_tstat(&cryptostats.cs_invoke, &crp->crp_tstamp);
-#endif
 	if (cap->cc_flags & CRYPTOCAP_F_CLEANUP) {
 		struct cryptodesc *crd;
 		crypto_session_t nses;
@@ -1390,11 +1372,8 @@ crypto_done(struct cryptop *crp)
 		("crypto_done: op already done, flags 0x%x", crp->crp_flags));
 	crp->crp_flags |= CRYPTO_F_DONE;
 	if (crp->crp_etype != 0)
-		cryptostats.cs_errs++;
-#ifdef CRYPTO_TIMING
-	if (crypto_timing)
-		crypto_tstat(&cryptostats.cs_done, &crp->crp_tstamp);
-#endif
+		CRYPTOSTAT_INC(cs_errs);
+
 	/*
 	 * CBIMM means unconditionally do the callback immediately;
 	 * CBIFSYNC means do the callback immediately only if the
@@ -1411,20 +1390,7 @@ crypto_done(struct cryptop *crp)
 		 * callback routine does very little (e.g. the
 		 * /dev/crypto callback method just does a wakeup).
 		 */
-#ifdef CRYPTO_TIMING
-		if (crypto_timing) {
-			/*
-			 * NB: We must copy the timestamp before
-			 * doing the callback as the cryptop is
-			 * likely to be reclaimed.
-			 */
-			struct bintime t = crp->crp_tstamp;
-			crypto_tstat(&cryptostats.cs_cb, &t);
-			crp->crp_callback(crp);
-			crypto_tstat(&cryptostats.cs_finis, &t);
-		} else
-#endif
-			crp->crp_callback(crp);
+		crp->crp_callback(crp);
 	} else {
 		struct crypto_ret_worker *ret_worker;
 		bool wake;
@@ -1478,7 +1444,7 @@ crypto_kdone(struct cryptkop *krp)
 	struct cryptocap *cap;
 
 	if (krp->krp_status != 0)
-		cryptostats.cs_kerrs++;
+		CRYPTOSTAT_INC(cs_kerrs);
 	CRYPTO_DRIVER_LOCK();
 	/* XXX: What if driver is loaded in the meantime? */
 	if (krp->krp_hid < crypto_drivers_num) {
@@ -1620,7 +1586,7 @@ crypto_proc(void)
 				/* XXX validate sid again? */
 				crypto_drivers[crypto_ses2hid(submit->crp_session)].cc_qblocked = 1;
 				TAILQ_INSERT_HEAD(&crp_q, submit, crp_next);
-				cryptostats.cs_blocks++;
+				CRYPTOSTAT_INC(cs_blocks);
 			}
 		}
 
@@ -1660,7 +1626,7 @@ crypto_proc(void)
 				/* XXX validate sid again? */
 				crypto_drivers[krp->krp_hid].cc_kqblocked = 1;
 				TAILQ_INSERT_HEAD(&crp_kq, krp, krp_next);
-				cryptostats.cs_kblocks++;
+				CRYPTOSTAT_INC(cs_kblocks);
 			}
 		}
 
@@ -1682,7 +1648,7 @@ crypto_proc(void)
 			crp_sleep = 0;
 			if (cryptoproc == NULL)
 				break;
-			cryptostats.cs_intrs++;
+			CRYPTOSTAT_INC(cs_intrs);
 		}
 	}
 	CRYPTO_Q_UNLOCK();
@@ -1729,22 +1695,8 @@ crypto_ret_proc(struct crypto_ret_worker *ret_worker)
 			/*
 			 * Run callbacks unlocked.
 			 */
-			if (crpt != NULL) {
-#ifdef CRYPTO_TIMING
-				if (crypto_timing) {
-					/*
-					 * NB: We must copy the timestamp before
-					 * doing the callback as the cryptop is
-					 * likely to be reclaimed.
-					 */
-					struct bintime t = crpt->crp_tstamp;
-					crypto_tstat(&cryptostats.cs_cb, &t);
-					crpt->crp_callback(crpt);
-					crypto_tstat(&cryptostats.cs_finis, &t);
-				} else
-#endif
-					crpt->crp_callback(crpt);
-			}
+			if (crpt != NULL)
+				crpt->crp_callback(crpt);
 			if (krpt != NULL)
 				krpt->krp_callback(krpt);
 			CRYPTO_RETW_LOCK(ret_worker);
@@ -1757,7 +1709,7 @@ crypto_ret_proc(struct crypto_ret_worker *ret_worker)
 				"crypto_ret_wait", 0);
 			if (ret_worker->cryptoretproc == NULL)
 				break;
-			cryptostats.cs_rets++;
+			CRYPTOSTAT_INC(cs_rets);
 		}
 	}
 	CRYPTO_RETW_UNLOCK(ret_worker);
