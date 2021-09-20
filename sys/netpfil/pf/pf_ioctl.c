@@ -112,8 +112,8 @@ static int		 pf_rollback_altq(u_int32_t);
 static int		 pf_commit_altq(u_int32_t);
 static int		 pf_enable_altq(struct pf_altq *);
 static int		 pf_disable_altq(struct pf_altq *);
-static u_int32_t	 pf_qname2qid(const char *);
-static void		 pf_qid_unref(u_int32_t);
+static uint16_t		 pf_qname2qid(const char *);
+static void		 pf_qid_unref(uint16_t);
 #endif /* ALTQ */
 static int		 pf_begin_rules(u_int32_t *, int, const char *);
 static int		 pf_rollback_rules(u_int32_t, int, char *);
@@ -273,8 +273,6 @@ pfsync_detach_ifnet_t *pfsync_detach_ifnet_ptr;
 /* pflog */
 pflog_packet_t			*pflog_packet_ptr = NULL;
 
-extern u_long	pf_ioctl_maxcount;
-
 /*
  * Copy a user-provided string, returning an error if truncation would occur.
  * Avoid scanning past "sz" bytes in the source string since there's no
@@ -368,7 +366,7 @@ pfattach_vnet(void)
 
 	for (int i = 0; i < PFRES_MAX; i++)
 		V_pf_status.counters[i] = counter_u64_alloc(M_WAITOK);
-	for (int i = 0; i < LCNT_MAX; i++)
+	for (int i = 0; i < KLCNT_MAX; i++)
 		V_pf_status.lcounters[i] = counter_u64_alloc(M_WAITOK);
 	for (int i = 0; i < FCNT_MAX; i++)
 		pf_counter_u64_init(&V_pf_status.fcounters[i], M_WAITOK);
@@ -653,23 +651,23 @@ tag_unref(struct pf_tagset *ts, u_int16_t tag)
 		}
 }
 
-static u_int16_t
+static uint16_t
 pf_tagname2tag(const char *tagname)
 {
 	return (tagname2tag(&V_pf_tags, tagname));
 }
 
 #ifdef ALTQ
-static u_int32_t
+static uint16_t
 pf_qname2qid(const char *qname)
 {
-	return ((u_int32_t)tagname2tag(&V_pf_qids, qname));
+	return (tagname2tag(&V_pf_qids, qname));
 }
 
 static void
-pf_qid_unref(u_int32_t qid)
+pf_qid_unref(uint16_t qid)
 {
-	tag_unref(&V_pf_qids, (u_int16_t)qid);
+	tag_unref(&V_pf_qids, qid);
 }
 
 static int
@@ -3125,7 +3123,7 @@ DIOCGETSTATESV2_full:
 			pf_counter_u64_zero(&V_pf_status.fcounters[i]);
 		for (int i = 0; i < SCNT_MAX; i++)
 			counter_u64_zero(V_pf_status.scounters[i]);
-		for (int i = 0; i < LCNT_MAX; i++)
+		for (int i = 0; i < KLCNT_MAX; i++)
 			counter_u64_zero(V_pf_status.lcounters[i]);
 		V_pf_status.since = time_second;
 		if (*V_pf_status.ifname)
@@ -4927,7 +4925,7 @@ pf_getstatus(struct pfioc_nv *nv)
 	int              error;
 	struct pf_status s;
 	char *pf_reasons[PFRES_MAX+1] = PFRES_NAMES;
-	char *pf_lcounter[LCNT_MAX+1] = LCNT_NAMES;
+	char *pf_lcounter[KLCNT_MAX+1] = KLCNT_NAMES;
 	char *pf_fcounter[FCNT_MAX+1] = FCNT_NAMES;
 	PF_RULES_RLOCK_TRACKER;
 
@@ -4954,7 +4952,7 @@ pf_getstatus(struct pfioc_nv *nv)
 
 	/* lcounters */
 	error = pf_add_status_counters(nvl, "lcounters", V_pf_status.lcounters,
-	    LCNT_MAX, pf_lcounter);
+	    KLCNT_MAX, pf_lcounter);
 	if (error != 0)
 		ERROUT(error);
 
@@ -5805,7 +5803,7 @@ pf_unload_vnet(void)
 
 	for (int i = 0; i < PFRES_MAX; i++)
 		counter_u64_free(V_pf_status.counters[i]);
-	for (int i = 0; i < LCNT_MAX; i++)
+	for (int i = 0; i < KLCNT_MAX; i++)
 		counter_u64_free(V_pf_status.lcounters[i]);
 	for (int i = 0; i < FCNT_MAX; i++)
 		pf_counter_u64_deinit(&V_pf_status.fcounters[i]);

@@ -45,6 +45,7 @@
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
 #include <sys/jail.h>
+#include <sys/reg.h>
 #include <sys/smp.h>
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
@@ -59,7 +60,6 @@
 #include <machine/cpu.h>
 #include <machine/fpu.h>
 #include <machine/elf.h>
-#include <machine/reg.h>
 #include <machine/md_var.h>
 
 #include <powerpc/powerpc/elf_common.c>

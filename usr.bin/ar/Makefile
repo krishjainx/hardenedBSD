@@ -16,7 +16,7 @@ CFLAGS+=-I. -I${.CURDIR}
 NO_SHARED?=	yes
 .endif
 
-.if ${MK_LLVM_AR_IS_AR} == "no"
+.if ${MK_LLVM_BINUTILS} == "no"
 SYMLINKS=	${BINDIR}/elftc-ar ${BINDIR}/ranlib \
     ${BINDIR}/elftc-ar ${BINDIR}/ar
 .else

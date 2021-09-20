@@ -14,9 +14,9 @@ SRCS+=		llvm-objdump.cpp
 
 LIBADD+=	z
 
-.if ${MK_LLVM_OBJDUMP_IS_OBJDUMP} != "no"
-SYMLINKS=	${BINDIR}/llvm-objdump \
-    ${BINDIR}/objdump
+.if ${MK_LLVM_BINUTILS} != "no"
+LINKS=		${BINDIR}/llvm-objdump ${BINDIR}/objdump
+MLINKS=		llvm-objdump.1 objdump.1
 .endif
 
 .include "../llvm.prog.mk"

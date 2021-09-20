@@ -399,13 +399,13 @@ vn_open_vnode(struct vnode *vp, int fmode, struct ucred *cred,
 		if ((fmode & O_PATH) == 0 || (fmode & FEXEC) != 0)
 			return (EMLINK);
 	}
-	if (vp->v_type == VSOCK)
-		return (EOPNOTSUPP);
 	if (vp->v_type != VDIR && fmode & O_DIRECTORY)
 		return (ENOTDIR);
 
 	accmode = 0;
 	if ((fmode & O_PATH) == 0) {
+		if (vp->v_type == VSOCK)
+			return (EOPNOTSUPP);
 		if ((fmode & (FWRITE | O_TRUNC)) != 0) {
 			if (vp->v_type == VDIR)
 				return (EISDIR);
@@ -437,11 +437,8 @@ vn_open_vnode(struct vnode *vp, int fmode, struct ucred *cred,
 			return (error);
 	}
 	if ((fmode & O_PATH) != 0) {
-		if (vp->v_type == VFIFO)
-			error = EPIPE;
-		else
-			error = VOP_ACCESS(vp, VREAD, cred, td);
-		if (error == 0)
+		if (vp->v_type != VFIFO && vp->v_type != VSOCK &&
+		    VOP_ACCESS(vp, VREAD, cred, td) == 0)
 			fp->f_flag |= FKQALLOWED;
 		return (0);
 	}
@@ -3162,6 +3159,7 @@ vn_generic_copy_file_range(struct vnode *invp, off_t *inoffp,
 	size_t copylen, len, rem, savlen;
 	char *dat;
 	long holein, holeout;
+	struct timespec curts, endts;
 
 	holein = holeout = 0;
 	savlen = len = *lenp;
@@ -3258,7 +3256,15 @@ vn_generic_copy_file_range(struct vnode *invp, off_t *inoffp,
 	 * in the inner loop where the data copying is done.
 	 * Note that some file systems such as NFSv3, NFSv4.0 and NFSv4.1 may
 	 * support holes on the server, but do not support FIOSEEKHOLE.
+	 * The kernel flag COPY_FILE_RANGE_TIMEO1SEC is used to indicate
+	 * that this function should return after 1second with a partial
+	 * completion.
 	 */
+	if ((flags & COPY_FILE_RANGE_TIMEO1SEC) != 0) {
+		getnanouptime(&endts);
+		endts.tv_sec++;
+	} else
+		timespecclear(&endts);
 	holetoeof = eof = false;
 	while (len > 0 && error == 0 && !eof && interrupted == 0) {
 		endoff = 0;			/* To shut up compilers. */
@@ -3327,8 +3333,17 @@ vn_generic_copy_file_range(struct vnode *invp, off_t *inoffp,
 					*inoffp += xfer;
 					*outoffp += xfer;
 					len -= xfer;
-					if (len < savlen)
+					if (len < savlen) {
 						interrupted = sig_intr();
+						if (timespecisset(&endts) &&
+						    interrupted == 0) {
+							getnanouptime(&curts);
+							if (timespeccmp(&curts,
+							    &endts, >=))
+								interrupted =
+								    EINTR;
+						}
+					}
 				}
 			}
 			copylen = MIN(len, endoff - startoff);
@@ -3391,8 +3406,17 @@ vn_generic_copy_file_range(struct vnode *invp, off_t *inoffp,
 					*outoffp += xfer;
 					copylen -= xfer;
 					len -= xfer;
-					if (len < savlen)
+					if (len < savlen) {
 						interrupted = sig_intr();
+						if (timespecisset(&endts) &&
+						    interrupted == 0) {
+							getnanouptime(&curts);
+							if (timespeccmp(&curts,
+							    &endts, >=))
+								interrupted =
+								    EINTR;
+						}
+					}
 				}
 			}
 			xfer = blksize;
@@ -3463,7 +3487,8 @@ vn_fallocate(struct file *fp, off_t offset, off_t len, struct thread *td)
 
 static int
 vn_deallocate_impl(struct vnode *vp, off_t *offset, off_t *length, int flags,
-    int ioflag, struct ucred *active_cred, struct ucred *file_cred)
+    int ioflag, struct ucred *cred, struct ucred *active_cred,
+    struct ucred *file_cred)
 {
 	struct mount *mp;
 	void *rl_cookie;
@@ -3510,7 +3535,7 @@ vn_deallocate_impl(struct vnode *vp, off_t *offset, off_t *length, int flags,
 #endif
 		if (error == 0)
 			error = VOP_DEALLOCATE(vp, &off, &len, flags, ioflag,
-			    active_cred);
+			    cred);
 
 		if ((ioflag & IO_NODELOCKED) == 0) {
 			VOP_UNLOCK(vp);
@@ -3530,17 +3555,24 @@ out:
 	return (error);
 }
 
+/*
+ * This function is supposed to be used in the situations where the deallocation
+ * is not triggered by a user request.
+ */
 int
 vn_deallocate(struct vnode *vp, off_t *offset, off_t *length, int flags,
     int ioflag, struct ucred *active_cred, struct ucred *file_cred)
 {
+	struct ucred *cred;
+
 	if (*offset < 0 || *length <= 0 || *length > OFF_MAX - *offset ||
 	    flags != 0)
 		return (EINVAL);
 	if (vp->v_type != VREG)
 		return (ENODEV);
 
-	return (vn_deallocate_impl(vp, offset, length, flags, ioflag,
+	cred = file_cred != NOCRED ? file_cred : active_cred;
+	return (vn_deallocate_impl(vp, offset, length, flags, ioflag, cred,
 	    active_cred, file_cred));
 }
 
@@ -3565,7 +3597,7 @@ vn_fspacectl(struct file *fp, int cmd, off_t *offset, off_t *length, int flags,
 	switch (cmd) {
 	case SPACECTL_DEALLOC:
 		error = vn_deallocate_impl(vp, offset, length, flags, ioflag,
-		    active_cred, fp->f_cred);
+		    active_cred, active_cred, fp->f_cred);
 		break;
 	default:
 		panic("vn_fspacectl: unknown cmd %d", cmd);

@@ -47,6 +47,7 @@ MAN=	accept_filter.9 \
 	bus_generic_read_ivar.9 \
 	bus_generic_shutdown.9 \
 	BUS_GET_CPUS.9 \
+	BUS_GET_PROPERTY.9 \
 	bus_get_resource.9 \
 	bus_map_resource.9 \
 	BUS_NEW_PASS.9 \
@@ -108,6 +109,7 @@ MAN=	accept_filter.9 \
 	device_get_ivars.9 \
 	device_get_name.9 \
 	device_get_parent.9 \
+	device_get_property.9 \
 	device_get_softc.9 \
 	device_get_state.9 \
 	device_get_sysctl.9 \
@@ -2311,7 +2313,7 @@ MLINKS+=vmem.9 vmem_add.9 \
 	vmem.9 vmem_destroy.9 \
 	vmem.9 vmem_free.9 \
 	vmem.9 vmem_xalloc.9 \
-	vmem.9 vmem_xfree.9  
+	vmem.9 vmem_xfree.9
 MLINKS+=vm_map_lock.9 vm_map_lock_downgrade.9 \
 	vm_map_lock.9 vm_map_lock_read.9 \
 	vm_map_lock.9 vm_map_lock_upgrade.9 \

@@ -107,6 +107,7 @@ SUBDIR=	\
 	${_dpms} \
 	dummynet \
 	${_dwwdt} \
+	${_e6000sw} \
 	${_efirt} \
 	${_em} \
 	${_ena} \
@@ -262,6 +263,7 @@ SUBDIR=	\
 	mxge \
 	my \
 	${_nctgpio} \
+	${_neta} \
 	${_netgraph} \
 	${_nfe} \
 	nfscl \
@@ -623,6 +625,8 @@ _rockchip=	rockchip
 
 .if ${MACHINE_CPUARCH} == "aarch64" || ${MACHINE_CPUARCH} == "arm"
 _sdhci_fdt=	sdhci_fdt
+_e6000sw=	e6000sw
+_neta=		neta
 .endif
 
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
@@ -728,6 +732,7 @@ _tpm=		tpm
 _twa=		twa
 _vesa=		vesa
 _viawd=		viawd
+_vmd=		vmd
 _wpi=		wpi
 .if ${MK_SOURCELESS_UCODE} != "no"
 _wpifw=		wpifw
@@ -746,7 +751,6 @@ _pms=		pms
 _qlxge=		qlxge
 _qlxgb=		qlxgb
 _sume=		sume
-_vmd=		vmd
 .if ${MK_SOURCELESS_UCODE} != "no"
 _qlxgbe=	qlxgbe
 _qlnx=		qlnx

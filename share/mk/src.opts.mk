@@ -130,9 +130,9 @@ __DEFAULT_YES_OPTIONS = \
     LLD_BOOTSTRAP \
     LLD_IS_LD \
     LLVM_ASSERTIONS \
+    LLVM_BINUTILS \
     LLVM_COV \
     LLVM_CXXFILT \
-    LLVM_TARGET_ALL \
     LOADER_GELI \
     LOADER_LUA \
     LOADER_OFW \
@@ -199,6 +199,7 @@ __DEFAULT_NO_OPTIONS = \
     BHYVE_SNAPSHOT \
     DEVD_PIE \
     CLANG_FORMAT \
+    DETECT_TZ_CHANGES \
     DTRACE_TESTS \
     EXPERIMENTAL \
     FREEBSD_UPDATE \
@@ -224,6 +225,7 @@ __DEFAULT_NO_OPTIONS = \
 # RIGHT option is disabled.
 __DEFAULT_DEPENDENT_OPTIONS= \
 	CLANG_FULL/CLANG \
+	LLVM_TARGET_ALL/CLANG \
 	LOADER_VERIEXEC/BEARSSL \
 	LOADER_EFI_SECUREBOOT/LOADER_VERIEXEC \
 	LOADER_VERIEXEC_VECTX/LOADER_VERIEXEC \
@@ -343,15 +345,9 @@ __DEFAULT_NO_OPTIONS+=LTOLIB
 .if ${__T} == "amd64" || ${__T} == "aarch64"
 __DEFAULT_YES_OPTIONS+=CFI
 __DEFAULT_YES_OPTIONS+=CLANG_EXTRAS
-__DEFAULT_YES_OPTIONS+=LLVM_AR_IS_AR
-__DEFAULT_YES_OPTIONS+=LLVM_NM_IS_NM
-__DEFAULT_YES_OPTIONS+=LLVM_OBJDUMP_IS_OBJDUMP
 .else
 __DEFAULT_NO_OPTIONS+=CFI
 __DEFAULT_NO_OPTIONS+=CLANG_EXTRAS
-__DEFAULT_NO_OPTIONS+=LLVM_AR_IS_AR
-__DEFAULT_NO_OPTIONS+=LLVM_NM_IS_NM
-__DEFAULT_NO_OPTIONS+=LLVM_OBJDUMP_IS_OBJDUMP
 .endif
 
 # OFW is only for powerpc, exclude others
@@ -504,6 +500,7 @@ MK_CLANG:=	no
 MK_INCLUDES:=	no
 MK_LLD:=	no
 MK_LLDB:=	no
+MK_LLVM_BINUTILS:=	no
 .endif
 
 .if ${MK_CLANG} == "no"
@@ -519,6 +516,7 @@ MK_CFI:=	no
 MK_RETPOLINE:=	no
 .endif
 
+<<<<<<< HEAD
 .if ${MK_CFI} == "no"
 MK_CROSS_DSO_CFI:=	no
 .endif
@@ -542,6 +540,18 @@ MK_DEVD_PIE:=	yes
 # libpmc and friends are receiving a lot of code churn right now.
 # Disable building libpmc and friends due to build issues.
 MK_PMC:=	no
+=======
+.if ${MK_ASAN} == "yes"
+# In order to get sensible backtraces from ASAN we have to install
+# llvm-symbolizer as /usr/bin/addr2line instead of the elftoolchain version.
+MK_LLVM_BINUTILS:=	yes
+.endif
+
+.if ${MK_LLVM_BINUTILS} == "yes"
+# MK_LLVM_CXXFILT is a subset of MK_LLVM_BINUTILS and should therefore be
+# enabled if MK_LLVM_BINUTILS is set.
+MK_LLVM_CXXFILT:=	yes
+>>>>>>> origin/hardened/current/master
 .endif
 
 .if ${MK_LOADER_VERIEXEC} == "no"

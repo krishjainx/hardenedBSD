@@ -51,6 +51,7 @@
 #include <sys/pax.h>
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
+#include <sys/reg.h>
 #include <sys/syscall.h>
 #include <sys/syscallsubr.h>
 #include <sys/sysproto.h>
@@ -63,7 +64,6 @@
 
 #include <machine/cpuinfo.h>
 #include <machine/md_var.h>
-#include <machine/reg.h>
 #include <machine/sigframe.h>
 #include <machine/sysarch.h>
 #include <machine/tls.h>
