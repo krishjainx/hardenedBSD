@@ -516,7 +516,6 @@ MK_CFI:=	no
 MK_RETPOLINE:=	no
 .endif
 
-<<<<<<< HEAD
 .if ${MK_CFI} == "no"
 MK_CROSS_DSO_CFI:=	no
 .endif
@@ -540,7 +539,8 @@ MK_DEVD_PIE:=	yes
 # libpmc and friends are receiving a lot of code churn right now.
 # Disable building libpmc and friends due to build issues.
 MK_PMC:=	no
-=======
+.endif
+
 .if ${MK_ASAN} == "yes"
 # In order to get sensible backtraces from ASAN we have to install
 # llvm-symbolizer as /usr/bin/addr2line instead of the elftoolchain version.
@@ -551,7 +551,6 @@ MK_LLVM_BINUTILS:=	yes
 # MK_LLVM_CXXFILT is a subset of MK_LLVM_BINUTILS and should therefore be
 # enabled if MK_LLVM_BINUTILS is set.
 MK_LLVM_CXXFILT:=	yes
->>>>>>> origin/hardened/current/master
 .endif
 
 .if ${MK_LOADER_VERIEXEC} == "no"
