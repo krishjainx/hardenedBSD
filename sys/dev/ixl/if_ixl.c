@@ -49,7 +49,7 @@
  *********************************************************************/
 #define IXL_DRIVER_VERSION_MAJOR	2
 #define IXL_DRIVER_VERSION_MINOR	3
-#define IXL_DRIVER_VERSION_BUILD	0
+#define IXL_DRIVER_VERSION_BUILD	1
 
 #define IXL_DRIVER_VERSION_STRING			\
     __XSTRING(IXL_DRIVER_VERSION_MAJOR) "."		\
@@ -304,6 +304,10 @@ static int ixl_tx_itr = IXL_ITR_4K;
 TUNABLE_INT("hw.ixl.tx_itr", &ixl_tx_itr);
 SYSCTL_INT(_hw_ixl, OID_AUTO, tx_itr, CTLFLAG_RDTUN,
     &ixl_tx_itr, 0, "TX Interrupt Rate");
+
+static int ixl_flow_control = -1;
+SYSCTL_INT(_hw_ixl, OID_AUTO, flow_control, CTLFLAG_RDTUN,
+    &ixl_flow_control, 0, "Initial Flow Control setting");
 
 #ifdef IXL_IW
 int ixl_enable_iwarp = 0;
@@ -771,6 +775,12 @@ ixl_if_attach_post(if_ctx_t ctx)
 	ixl_update_stats_counters(pf);
 	ixl_add_hw_stats(pf);
 
+	/*
+	 * Driver may have been reloaded. Ensure that the link state
+	 * is consistent with current settings.
+	 */
+	ixl_set_link(pf, (pf->state & IXL_PF_STATE_LINK_ACTIVE_ON_DOWN) != 0);
+
 	hw->phy.get_link_info = true;
 	i40e_get_link_status(hw, &pf->link_up);
 	ixl_update_link_status(pf);
@@ -959,6 +969,8 @@ ixl_if_init(if_ctx_t ctx)
 		return;
 	}
 
+	ixl_set_link(pf, true);
+
 	/* Reconfigure multicast filters in HW */
 	ixl_if_multi_set(ctx);
 
@@ -1001,6 +1013,7 @@ void
 ixl_if_stop(if_ctx_t ctx)
 {
 	struct ixl_pf *pf = iflib_get_softc(ctx);
+	struct ifnet *ifp = iflib_get_ifp(ctx);
 	struct ixl_vsi *vsi = &pf->vsi;
 
 	INIT_DEBUGOUT("ixl_if_stop: begin\n");
@@ -1017,6 +1030,15 @@ ixl_if_stop(if_ctx_t ctx)
 
 	ixl_disable_rings_intr(vsi);
 	ixl_disable_rings(pf, vsi, &pf->qtag);
+
+	/*
+	 * Don't set link state if only reconfiguring
+	 * e.g. on MTU change.
+	 */
+	if ((if_getflags(ifp) & IFF_UP) == 0 &&
+	    (atomic_load_acq_32(&pf->state) &
+	    IXL_PF_STATE_LINK_ACTIVE_ON_DOWN) == 0)
+		ixl_set_link(pf, false);
 }
 
 static int
@@ -1503,11 +1525,11 @@ ixl_if_media_status(if_ctx_t ctx, struct ifmediareq *ifmr)
 			ifmr->ifm_active |= IFM_1000_T;
 			break;
 		/* 2.5 G */
-		case I40E_PHY_TYPE_2_5GBASE_T:
+		case I40E_PHY_TYPE_2_5GBASE_T_LINK_STATUS:
 			ifmr->ifm_active |= IFM_2500_T;
 			break;
 		/* 5 G */
-		case I40E_PHY_TYPE_5GBASE_T:
+		case I40E_PHY_TYPE_5GBASE_T_LINK_STATUS:
 			ifmr->ifm_active |= IFM_5000_T;
 			break;
 		/* 10 G */
@@ -1863,5 +1885,20 @@ ixl_save_pf_tunables(struct ixl_pf *pf)
 		pf->rx_itr = IXL_ITR_8K;
 	} else
 		pf->rx_itr = ixl_rx_itr;
+
+	pf->fc = -1;
+	if (ixl_flow_control != -1) {
+		if (ixl_flow_control < 0 || ixl_flow_control > 3) {
+			device_printf(dev,
+			    "Invalid flow_control value of %d set!\n",
+			    ixl_flow_control);
+			device_printf(dev,
+			    "flow_control must be between %d and %d, "
+			    "inclusive\n", 0, 3);
+			device_printf(dev,
+			    "Using default configuration instead\n");
+		} else
+			pf->fc = ixl_flow_control;
+	}
 }
 
