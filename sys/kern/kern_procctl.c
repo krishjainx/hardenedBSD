@@ -594,32 +594,12 @@ stackgap_status(struct thread *td, struct proc *p, int *data)
 static int
 wxmap_ctl(struct thread *td, struct proc *p, int state)
 {
-	struct vmspace *vm;
-	vm_map_t map;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	if ((p->p_flag & P_WEXIT) != 0)
 		return (ESRCH);
 
 	switch (state) {
-	case PROC_WX_MAPPINGS_PERMIT:
-		p->p_flag2 |= P2_WXORX_DISABLE;
-		_PHOLD(p);
-		PROC_UNLOCK(p);
-		vm = vmspace_acquire_ref(p);
-		if (vm != NULL) {
-			map = &vm->vm_map;
-			vm_map_lock(map);
-			map->flags &= ~MAP_WXORX;
-			vm_map_unlock(map);
-			vmspace_free(vm);
-		}
-		PROC_LOCK(p);
-		_PRELE(p);
-		break;
-	case PROC_WX_MAPPINGS_DISALLOW_EXEC:
-		p->p_flag2 |= P2_WXORX_ENABLE_EXEC;
-		break;
 	default:
 		return (EINVAL);
 	}
@@ -630,7 +610,6 @@ wxmap_ctl(struct thread *td, struct proc *p, int state)
 static int
 wxmap_status(struct thread *td, struct proc *p, int *data)
 {
-	struct vmspace *vm;
 	int d;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
@@ -638,20 +617,6 @@ wxmap_status(struct thread *td, struct proc *p, int *data)
 		return (ESRCH);
 
 	d = 0;
-	if ((p->p_flag2 & P2_WXORX_DISABLE) != 0)
-		d |= PROC_WX_MAPPINGS_PERMIT;
-	if ((p->p_flag2 & P2_WXORX_ENABLE_EXEC) != 0)
-		d |= PROC_WX_MAPPINGS_DISALLOW_EXEC;
-	_PHOLD(p);
-	PROC_UNLOCK(p);
-	vm = vmspace_acquire_ref(p);
-	if (vm != NULL) {
-		if ((vm->vm_map.flags & MAP_WXORX) != 0)
-			d |= PROC_WXORX_ENFORCE;
-		vmspace_free(vm);
-	}
-	PROC_LOCK(p);
-	_PRELE(p);
 	*data = d;
 	return (0);
 }
