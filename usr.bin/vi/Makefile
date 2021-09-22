@@ -16,13 +16,9 @@ VIEW=	nview
 
 PROG=	nvi
 
-<<<<<<< HEAD
 CFI_OVERRIDE=-fno-sanitize=cfi-icall
 
-CFLAGS+=	-D__REGEX_PRIVATE
-=======
 CFLAGS+=	-D__REGEX_PRIVATE -D_XOPEN_SOURCE_EXTENDED=1
->>>>>>> origin/freebsd/12-stable/main
 
 LINKS=	${BINDIR}/${VI} ${BINDIR}/${EX} ${BINDIR}/${VI} ${BINDIR}/${VIEW}
 LINKS+= ${BINDIR}/${VI} ${BINDIR}/vi ${BINDIR}/${EX} ${BINDIR}/ex
