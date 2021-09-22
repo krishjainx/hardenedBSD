@@ -12,9 +12,7 @@
 .\" that you would have purchased it, or if any company wishes to
 .\" redistribute it, contributions to the authors would be appreciated.
 .\"
-.\"     $Id: vi.1,v 9.0 2013/11/02 12:11:56 zy Exp $
-.\"
-.Dd November 2, 2013
+.Dd September 25, 2020
 .Dt VI 1
 .Os
 .Sh NAME
@@ -353,7 +351,7 @@ matches the beginning of the word.
 .Sq \e>
 matches the end of the word.
 .It
-.Sq \(a~
+.Sq \(ti
 matches the replacement part of the last
 .Cm substitute
 command.
@@ -403,7 +401,7 @@ commands depend on their associated motion command:
 .Cm F ,
 .Cm T ,
 .Cm W ,
-.Cm ^ ,
+.Cm \(ha ,
 .Cm b ,
 .Cm e ,
 .Cm f
@@ -711,7 +709,7 @@ command being entered, or cancel it if it is only partial.
 .It Aq Cm control-]
 Push a tag reference onto the tag stack.
 .Pp
-.It Aq Cm control-^
+.It Aq Cm control-\(ha
 Switch to the most recently edited file.
 .Pp
 .It Xo
@@ -981,7 +979,11 @@ command.
 .Cm ;\&
 .Xc
 Repeat the last character find
-.Pq i.e., the last .Cm F , f , T No or Cm t No command
+(i.e., the last
+.Cm F , f , T
+or
+.Cm t
+command)
 .Ar count
 times.
 .Pp
@@ -1259,7 +1261,7 @@ Move forward
 .Ar count
 section boundaries.
 .Pp
-.It Cm ^
+.It Cm \(ha
 Move to the first non-blank character on the current line.
 .Pp
 .It Xo
@@ -1500,7 +1502,7 @@ in the center of the screen.
 Place the line
 .Ar count1
 at the bottom of the screen.
-.It Cm ^
+.It Cm \(ha
 If
 .Ar count1
 is given,
@@ -1540,7 +1542,7 @@ paragraphs.
 .Pp
 .It Xo
 .Op Ar count
-.Cm ~
+.Cm \(ti
 .Ar motion
 .Xc
 If the
@@ -1553,7 +1555,7 @@ can be specified.
 Otherwise
 .Ar motion
 is mandatory and
-.Cm ~
+.Cm \(ti
 reverses the case of the characters in a text region specified by the
 .Ar count
 and
@@ -1581,7 +1583,7 @@ Erase to the previous
 .Ar shiftwidth
 column boundary.
 .Pp
-.It Cm ^ Ns Aq Cm control-D
+.It Cm \(ha Ns Aq Cm control-D
 Erase all of the autoindent characters, and reset the autoindent level.
 .Pp
 .It Cm 0 Ns Aq Cm control-D
@@ -1595,6 +1597,11 @@ and
 characters to move forward to the next
 .Ar shiftwidth
 column boundary.
+If the
+.Cm expandtab
+option is set, only insert
+.Aq space
+characters.
 .Pp
 .It Aq Cm erase
 .It Aq Cm control-H
@@ -1802,7 +1809,8 @@ Display buffers, Cscope connections, screens or tags.
 .Op Ar +cmd
 .Op Ar file
 .Xc
-Edit a different file.
+Edit a different file. The capitalized command opens a new screen below the
+current screen.
 .Pp
 .It Xo
 .Cm exu Ns Op Cm sage
@@ -1825,7 +1833,8 @@ Display and optionally change the file name.
 .Xc
 .Nm vi
 mode only.
-Foreground the specified screen.
+Foreground the specified screen. The capitalized command opens a new screen
+below the current screen.
 .Pp
 .It Xo
 .Op Ar range
@@ -1912,7 +1921,8 @@ Write the abbreviations, editor options and maps to the specified
 .Op Cm !\&
 .Op Ar
 .Xc
-Edit the next file from the argument list.
+Edit the next file from the argument list. The capitalized command opens a
+new screen below the current screen.
 .\" .Pp
 .\" .It Xo
 .\" .Op Ar line
@@ -1933,7 +1943,8 @@ option.
 .Cm rev Ns Op Cm ious Ns
 .Op Cm !\&
 .Xc
-Edit the previous file from the argument list.
+Edit the previous file from the argument list. The capitalized command opens
+a new screen below the current screen.
 .Pp
 .It Xo
 .Op Ar range
@@ -2028,7 +2039,7 @@ commands from a file.
 .Xc
 .It Xo
 .Op Ar range
-.Cm ~
+.Cm \(ti
 .Op Ar options
 .Op Ar count
 .Op Ar flags
@@ -2041,7 +2052,7 @@ field may contain any of the following sequences:
 .It Sq \*(Am
 The text matched by
 .Ar pattern .
-.It Sq \(a~
+.It Sq \(ti
 The replacement part of the previous
 .Cm substitute
 command.
@@ -2096,7 +2107,8 @@ character is usually
 .Op Cm !\&
 .Ar tagstring
 .Xc
-Edit the file containing the specified tag.
+Edit the file containing the specified tag. The capitalized command opens a
+new screen below the current screen.
 .Pp
 .It Xo
 .Cm tagn Ns Op Cm ext Ns
@@ -2159,15 +2171,15 @@ Enter
 .Nm vi .
 .Pp
 .It Xo
-.Op Cm Vi Ns
-.Cm i Ns Op Cm sual Ns
+.Cm Vi Ns
+.Op Cm sual Ns
 .Op Cm !\&
 .Op Ar +cmd
 .Op Ar file
 .Xc
 .Nm vi
-mode only.
-Edit a new file.
+mode only. Edit a different file by opening a new screen below the current
+screen.
 .Pp
 .It Xo
 .Cm viu Ns Op Cm sage
@@ -2176,6 +2188,14 @@ Edit a new file.
 Display usage for a
 .Nm vi
 command.
+.Pp
+.It Xo
+.Cm vs Ns Op Cm plit
+.Op Ar +cmd
+.Op Ar file
+.Xc
+Edit a different file by opening a new screen to the right of the current
+screen.
 .Pp
 .It Xo
 .Op Ar range
@@ -2187,8 +2207,7 @@ command.
 .It Xo
 .Op Ar range
 .Cm w Ns Op Cm rite
-.Op Cm !\&
-.Op Ar file
+.Cm !\& Ns Ar shell-command
 .Xc
 .It Xo
 .Op Ar range
@@ -2202,7 +2221,21 @@ command.
 .Op >>
 .Op Ar file
 .Xc
-Write the file.
+Write the entire file, or
+.Ar range .
+.Sq !\&
+overwrites a different, preexisting file.
+.Sq >>
+appends to a file that may preexist. Whitespace followed by
+.Sq !\&
+pipes the file to
+.Ar shell-command .
+.Cm wn
+moves to the next file if writing succeeds.
+.Cm wq
+exits the editor if writing succeeds, unless there are more files to edit;
+.Sq !\&
+exits regardless.
 .Pp
 .It Xo
 .Op Ar range
@@ -2298,6 +2331,20 @@ The tenths of a second
 waits for a subsequent key to complete an
 .Aq escape
 key mapping.
+.It Cm expandtab , et Bq off
+Expand
+.Aq tab
+characters to
+.Aq space
+when inserting, replacing or shifting text, autoindenting,
+indenting with
+.Aq Ic control-T ,
+outdenting with
+.Aq Ic control-D ,
+or
+when filtering lines with the
+.Cm !\&
+command.
 .It Cm exrc , ex Bq off
 Read the startup files in the local directory.
 .It Cm extended Bq off
@@ -2449,7 +2496,7 @@ commands.
 Turns off all access to external programs.
 .It Cm shell , sh Bo environment variable Ev SHELL , or Pa /bin/sh Bc
 Select the shell used by the editor.
-.It Cm shellmeta Bq ~{[*?$\`\(aq\&"\e
+.It Cm shellmeta Bq \(ti{[*?$\`\(aq\&"\e
 Set the meta characters checked to determine if file name expansion
 is necessary.
 .It Cm shiftwidth , sw Bq 8
@@ -2490,7 +2537,7 @@ This option has historically made editor messages less verbose.
 It has no effect in this implementation.
 .It Cm tildeop Bq off
 Modify the
-.Cm ~
+.Cm \(ti
 command to take an associated motion.
 .It Cm timeout , to Bq on
 Time out on keys which may be mapped.
@@ -2722,6 +2769,10 @@ and \*(Gt0 if an error occurs.
 .Xr ctags 1 ,
 .Xr iconv 1 ,
 .Xr re_format 7
+.Rs
+.%T vi/ex reference manual
+.%U https://docs.freebsd.org/44doc/usd/13.viref/paper.pdf
+.Re
 .Sh STANDARDS
 .Nm nex Ns / Ns Nm nvi
 is close to
