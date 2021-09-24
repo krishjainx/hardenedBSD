@@ -1,32 +1,32 @@
 /******************************************************************************
   SPDX-License-Identifier: BSD-3-Clause
 
-  Copyright (c) 2001-2015, Intel Corporation 
+  Copyright (c) 2001-2020, Intel Corporation
   All rights reserved.
-  
-  Redistribution and use in source and binary forms, with or without 
+
+  Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
-  
-   1. Redistributions of source code must retain the above copyright notice, 
+
+   1. Redistributions of source code must retain the above copyright notice,
       this list of conditions and the following disclaimer.
-  
-   2. Redistributions in binary form must reproduce the above copyright 
-      notice, this list of conditions and the following disclaimer in the 
+
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-  
-   3. Neither the name of the Intel Corporation nor the names of its 
-      contributors may be used to endorse or promote products derived from 
+
+   3. Neither the name of the Intel Corporation nor the names of its
+      contributors may be used to endorse or promote products derived from
       this software without specific prior written permission.
-  
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
@@ -841,7 +841,7 @@ static s32 e1000_init_mac_params_ich8lan(struct e1000_hw *hw)
 /**
  *  __e1000_access_emi_reg_locked - Read/write EMI register
  *  @hw: pointer to the HW structure
- *  @addr: EMI address to program
+ *  @address: EMI address to program
  *  @data: pointer to value to read/write from/to the EMI address
  *  @read: boolean flag to indicate read or write
  *
@@ -1307,6 +1307,10 @@ s32 e1000_enable_ulp_lpt_lp(struct e1000_hw *hw, bool to_sx)
 			 (E1000_READ_REG(hw, E1000_FEXT) &
 			  E1000_FEXT_PHY_CABLE_DISCONNECTED) ? "" : "not",
 			 i * 50);
+		if (!(E1000_READ_REG(hw, E1000_FEXT) &
+		    E1000_FEXT_PHY_CABLE_DISCONNECTED))
+			return 0;
+
 	}
 
 	ret_val = hw->phy.ops.acquire(hw);
@@ -1413,6 +1417,7 @@ out:
 s32 e1000_disable_ulp_lpt_lp(struct e1000_hw *hw, bool force)
 {
 	s32 ret_val = E1000_SUCCESS;
+	u8 ulp_exit_timeout = 30;
 	u32 mac_reg;
 	u16 phy_reg;
 	int i = 0;
@@ -1434,10 +1439,12 @@ s32 e1000_disable_ulp_lpt_lp(struct e1000_hw *hw, bool force)
 			E1000_WRITE_REG(hw, E1000_H2ME, mac_reg);
 		}
 
-		/* Poll up to 300msec for ME to clear ULP_CFG_DONE. */
+		if (hw->mac.type == e1000_pch_cnp)
+			ulp_exit_timeout = 100;
+
 		while (E1000_READ_REG(hw, E1000_FWSM) &
 		       E1000_FWSM_ULP_CFG_DONE) {
-			if (i++ == 30) {
+			if (i++ == ulp_exit_timeout) {
 				ret_val = -E1000_ERR_PHY;
 				goto out;
 			}
@@ -1619,8 +1626,6 @@ static s32 e1000_check_for_copper_link_ich8lan(struct e1000_hw *hw)
 
 
 		if (hw->mac.type >= e1000_pch_lpt) {
-			u16 phy_reg;
-
 			hw->phy.ops.read_reg_locked(hw, I217_PLL_CLOCK_GATE_REG,
 						    &phy_reg);
 			phy_reg &= ~I217_PLL_CLOCK_GATE_MASK;
@@ -2474,7 +2479,7 @@ release:
 /**
  *  e1000_configure_k1_ich8lan - Configure K1 power state
  *  @hw: pointer to the HW structure
- *  @enable: K1 state to configure
+ *  @k1_enable: K1 state to configure
  *
  *  Configure the K1 power state based on the provided parameter.
  *  Assumes semaphore already acquired.
@@ -2622,6 +2627,7 @@ static s32 e1000_set_mdio_slow_mode_hv(struct e1000_hw *hw)
 /**
  *  e1000_hv_phy_workarounds_ich8lan - A series of Phy workarounds to be
  *  done after every PHY reset.
+ *  @hw: pointer to the HW structure
  **/
 static s32 e1000_hv_phy_workarounds_ich8lan(struct e1000_hw *hw)
 {
@@ -2943,6 +2949,7 @@ s32 e1000_lv_jumbo_workaround_ich8lan(struct e1000_hw *hw, bool enable)
 /**
  *  e1000_lv_phy_workarounds_ich8lan - A series of Phy workarounds to be
  *  done after every PHY reset.
+ *  @hw: pointer to the HW structure
  **/
 static s32 e1000_lv_phy_workarounds_ich8lan(struct e1000_hw *hw)
 {
@@ -3550,8 +3557,9 @@ static s32 e1000_read_nvm_spt(struct e1000_hw *hw, u16 offset, u16 words,
 
 	for (i = 0; i < words; i += 2) {
 		if (words - i == 1) {
-			if (dev_spec->shadow_ram[offset+i].modified) {
-				data[i] = dev_spec->shadow_ram[offset+i].value;
+			if (dev_spec->shadow_ram[offset + i].modified) {
+				data[i] =
+				    dev_spec->shadow_ram[offset + i].value;
 			} else {
 				offset_to_read = act_offset + i -
 						 ((act_offset + i) % 2);
@@ -3568,8 +3576,8 @@ static s32 e1000_read_nvm_spt(struct e1000_hw *hw, u16 offset, u16 words,
 			}
 		} else {
 			offset_to_read = act_offset + i;
-			if (!(dev_spec->shadow_ram[offset+i].modified) ||
-			    !(dev_spec->shadow_ram[offset+i+1].modified)) {
+			if (!(dev_spec->shadow_ram[offset + i].modified) ||
+			    !(dev_spec->shadow_ram[offset + i + 1].modified)) {
 				ret_val =
 				   e1000_read_flash_dword_ich8lan(hw,
 								 offset_to_read,
@@ -3577,15 +3585,16 @@ static s32 e1000_read_nvm_spt(struct e1000_hw *hw, u16 offset, u16 words,
 				if (ret_val)
 					break;
 			}
-			if (dev_spec->shadow_ram[offset+i].modified)
-				data[i] = dev_spec->shadow_ram[offset+i].value;
+			if (dev_spec->shadow_ram[offset + i].modified)
+				data[i] =
+				    dev_spec->shadow_ram[offset + i].value;
 			else
-				data[i] = (u16) (dword & 0xFFFF);
-			if (dev_spec->shadow_ram[offset+i].modified)
-				data[i+1] =
-				   dev_spec->shadow_ram[offset+i+1].value;
+				data[i] = (u16)(dword & 0xFFFF);
+			if (dev_spec->shadow_ram[offset + i + 1].modified)
+				data[i + 1] =
+				   dev_spec->shadow_ram[offset + i + 1].value;
 			else
-				data[i+1] = (u16) (dword >> 16 & 0xFFFF);
+				data[i + 1] = (u16)(dword >> 16 & 0xFFFF);
 		}
 	}
 
@@ -3639,8 +3648,8 @@ static s32 e1000_read_nvm_ich8lan(struct e1000_hw *hw, u16 offset, u16 words,
 
 	ret_val = E1000_SUCCESS;
 	for (i = 0; i < words; i++) {
-		if (dev_spec->shadow_ram[offset+i].modified) {
-			data[i] = dev_spec->shadow_ram[offset+i].value;
+		if (dev_spec->shadow_ram[offset + i].modified) {
+			data[i] = dev_spec->shadow_ram[offset + i].value;
 		} else {
 			ret_val = e1000_read_flash_word_ich8lan(hw,
 								act_offset + i,
@@ -4045,8 +4054,8 @@ static s32 e1000_write_nvm_ich8lan(struct e1000_hw *hw, u16 offset, u16 words,
 	nvm->ops.acquire(hw);
 
 	for (i = 0; i < words; i++) {
-		dev_spec->shadow_ram[offset+i].modified = TRUE;
-		dev_spec->shadow_ram[offset+i].value = data[i];
+		dev_spec->shadow_ram[offset + i].modified = TRUE;
+		dev_spec->shadow_ram[offset + i].value = data[i];
 	}
 
 	nvm->ops.release(hw);
@@ -4961,6 +4970,7 @@ static s32 e1000_reset_hw_ich8lan(struct e1000_hw *hw)
 	u16 kum_cfg;
 	u32 ctrl, reg;
 	s32 ret_val;
+	u16 pci_cfg;
 
 	DEBUGFUNC("e1000_reset_hw_ich8lan");
 
@@ -5021,10 +5031,27 @@ static s32 e1000_reset_hw_ich8lan(struct e1000_hw *hw)
 			e1000_gate_hw_phy_config_ich8lan(hw, TRUE);
 	}
 	ret_val = e1000_acquire_swflag_ich8lan(hw);
+
+	/* Read from EXTCNF_CTRL in e1000_acquire_swflag_ich8lan function
+	 * may occur during global reset and cause system hang.
+	 * Configuration space access creates the needed delay.
+	 * Write to E1000_STRAP RO register E1000_PCI_VENDOR_ID_REGISTER value
+	 * insures configuration space read is done before global reset.
+	 */
+	e1000_read_pci_cfg(hw, E1000_PCI_VENDOR_ID_REGISTER, &pci_cfg);
+	E1000_WRITE_REG(hw, E1000_STRAP, pci_cfg);
 	DEBUGOUT("Issuing a global reset to ich8lan\n");
 	E1000_WRITE_REG(hw, E1000_CTRL, (ctrl | E1000_CTRL_RST));
 	/* cannot issue a flush here because it hangs the hardware */
 	msec_delay(20);
+
+	/* Configuration space access improve HW level time sync mechanism.
+	 * Write to E1000_STRAP RO register E1000_PCI_VENDOR_ID_REGISTER
+	 * value to insure configuration space read is done
+	 * before any access to mac register.
+	 */
+	e1000_read_pci_cfg(hw, E1000_PCI_VENDOR_ID_REGISTER, &pci_cfg);
+	E1000_WRITE_REG(hw, E1000_STRAP, pci_cfg);
 
 	/* Set Phy Config Counter to 50msec */
 	if (hw->mac.type == e1000_pch2lan) {
@@ -5597,7 +5624,7 @@ void e1000_igp3_phy_powerdown_workaround_ich8lan(struct e1000_hw *hw)
 void e1000_gig_downshift_workaround_ich8lan(struct e1000_hw *hw)
 {
 	s32 ret_val;
-	u16 reg_data;
+	u16 reg_data = 0;
 
 	DEBUGFUNC("e1000_gig_downshift_workaround_ich8lan");
 

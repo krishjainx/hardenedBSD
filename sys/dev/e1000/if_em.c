@@ -233,6 +233,7 @@ static pci_vendor_info_t igb_vendor_info_array[] =
 	PVID(0x8086, E1000_DEV_ID_I210_COPPER_OEM1, "Intel(R) I210 (OEM)"),
 	PVID(0x8086, E1000_DEV_ID_I210_COPPER_FLASHLESS, "Intel(R) I210 Flashless (Copper)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SERDES_FLASHLESS, "Intel(R) I210 Flashless (SERDES)"),
+	PVID(0x8086, E1000_DEV_ID_I210_SGMII_FLASHLESS, "Intel(R) I210 Flashless (SGMII)"),
 	PVID(0x8086, E1000_DEV_ID_I210_FIBER, "Intel(R) I210 (Fiber)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SERDES, "Intel(R) I210 (SERDES)"),
 	PVID(0x8086, E1000_DEV_ID_I210_SGMII, "Intel(R) I210 (SGMII)"),
@@ -1323,7 +1324,7 @@ em_if_init(if_ctx_t ctx)
 
 	/* Clear bad data from Rx FIFOs */
 	if (adapter->hw.mac.type >= igb_mac_min)
-		e1000_rx_fifo_flush_82575(&adapter->hw);
+		e1000_rx_fifo_flush_base(&adapter->hw);
 
 	/* Configure for OS presence */
 	em_init_manageability(adapter);
