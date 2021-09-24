@@ -1230,14 +1230,6 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			imgp->map_flags |= MAP_ASLR_IGNSTART;
 	}
 
-<<<<<<< HEAD
-=======
-	if ((!__elfN(allow_wx) && (fctl0 & NT_FREEBSD_FCTL_WXNEEDED) == 0 &&
-	    (imgp->proc->p_flag2 & P2_WXORX_DISABLE) == 0) ||
-	    (imgp->proc->p_flag2 & P2_WXORX_ENABLE_EXEC) != 0)
-		imgp->map_flags |= MAP_WXORX;
-
->>>>>>> origin/freebsd/13-stable/main
 	error = exec_new_vmspace(imgp, sv);
 	vmspace = imgp->proc->p_vmspace;
 	map = &vmspace->vm_map;
