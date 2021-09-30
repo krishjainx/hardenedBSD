@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
+#include "opt_pax.h"
 #include "opt_tcpdebug.h"
 
 #include <sys/param.h>
@@ -138,7 +139,11 @@ SYSCTL_INT(_net_inet_tcp, OID_AUTO, log_in_vain, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(tcp_log_in_vain), 0,
     "Log all incoming TCP segments to closed ports");
 
+#ifdef PAX_HARDENING
+VNET_DEFINE(int, blackhole) = 2;
+#else
 VNET_DEFINE(int, blackhole) = 0;
+#endif
 #define	V_blackhole		VNET(blackhole)
 SYSCTL_INT(_net_inet_tcp, OID_AUTO, blackhole, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(blackhole), 0,

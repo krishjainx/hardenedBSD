@@ -44,6 +44,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
+#include "opt_pax.h"
 #include "opt_route.h"
 #include "opt_rss.h"
 
@@ -123,7 +124,11 @@ VNET_DEFINE(int, udp_log_in_vain) = 0;
 SYSCTL_INT(_net_inet_udp, OID_AUTO, log_in_vain, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(udp_log_in_vain), 0, "Log all incoming UDP packets");
 
+#ifdef PAX_HARDENING
+VNET_DEFINE(int, udp_blackhole) = 2;
+#else
 VNET_DEFINE(int, udp_blackhole) = 0;
+#endif
 SYSCTL_INT(_net_inet_udp, OID_AUTO, blackhole, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(udp_blackhole), 0,
     "Do not send port unreachables for refused connects");
