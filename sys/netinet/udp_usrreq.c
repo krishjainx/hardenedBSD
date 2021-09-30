@@ -125,7 +125,7 @@ SYSCTL_INT(_net_inet_udp, OID_AUTO, log_in_vain, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(udp_log_in_vain), 0, "Log all incoming UDP packets");
 
 #ifdef PAX_HARDENING
-VNET_DEFINE(int, udp_blackhole) = 2;
+VNET_DEFINE(int, udp_blackhole) = 1;
 #else
 VNET_DEFINE(int, udp_blackhole) = 0;
 #endif
