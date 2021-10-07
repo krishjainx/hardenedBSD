@@ -31,22 +31,43 @@
  *
  */
 
-#ifndef ENA_SYSCTL_H
-#define ENA_SYSCTL_H
+#ifndef ENA_RSS_H
+#define ENA_RSS_H
+
+#include "opt_rss.h"
 
 #include <sys/types.h>
-#include <sys/sysctl.h>
+
+#ifdef RSS
+#include <net/rss_config.h>
+#endif
 
 #include "ena.h"
 
-void	ena_sysctl_add_nodes(struct ena_adapter *adapter);
-void	ena_sysctl_update_queue_node_nb(struct ena_adapter *adapter, int old,
-    int new);
+#define ENA_RX_RSS_MSG_RECORD_SZ	8
 
-extern int ena_enable_9k_mbufs;
-#define ena_mbuf_sz (ena_enable_9k_mbufs ? MJUM9BYTES : MJUMPAGESIZE)
+struct ena_indir {
+	uint32_t table[ENA_RX_RSS_TABLE_SIZE];
+	/* This is the buffer wired to `rss.indir_table` sysctl. */
+	char sysctl_buf[ENA_RX_RSS_TABLE_SIZE * ENA_RX_RSS_MSG_RECORD_SZ];
+};
 
-/* Force the driver to use large LLQ (Low Latency Queue) headers. */
-extern bool ena_force_large_llq_header;
+int	ena_rss_set_hash(struct ena_com_dev *ena_dev, const u8 *key);
+int	ena_rss_get_hash_key(struct ena_com_dev *ena_dev, u8 *key);
+int	ena_rss_configure(struct ena_adapter *);
+int	ena_rss_indir_get(struct ena_adapter *adapter, uint32_t *table);
+int	ena_rss_indir_set(struct ena_adapter *adapter, uint32_t *table);
+int	ena_rss_indir_init(struct ena_adapter *adapter);
 
-#endif /* !(ENA_SYSCTL_H) */
+static inline void
+ena_rss_copy_indir_buf(char *buf, uint32_t *table)
+{
+	int i;
+
+	for (i = 0; i < ENA_RX_RSS_TABLE_SIZE; ++i) {
+		buf += snprintf(buf, ENA_RX_RSS_MSG_RECORD_SZ + 1,
+		    "%s%d:%d", i == 0 ? "" : " ", i, table[i]);
+	}
+}
+
+#endif /* !(ENA_RSS_H) */
