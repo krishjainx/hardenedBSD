@@ -1,6 +1,5 @@
 /*-
- * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
- * All rights reserved.
+ * Copyright (c) 2020 M. Warner Losh <imp@FreeBSD.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,52 +23,13 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * The parts of kern_tc.c and other timekeeping bits of the kernel.
+ */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-/*
- * MD primitives supporting placement of module data 
- *
- * XXX should check load address/size against memory top.
- */
-#include <stand.h>
+#include <sys/time.h>
 
-#include "libi386.h"
-#include "btxv86.h"
-
-ssize_t
-i386_copyin(const void *src, vm_offset_t dest, const size_t len)
-{
-	if (dest + len >= memtop) {
-		errno = EFBIG;
-		return (-1);
-	}
-
-	bcopy(src, PTOV(dest), len);
-	return (len);
-}
-
-ssize_t
-i386_copyout(const vm_offset_t src, void *dest, const size_t len)
-{
-	if (src + len >= memtop) {
-		errno = EFBIG;
-		return (-1);
-	}
-
-	bcopy(PTOV(src), dest, len);
-	return (len);
-}
-
-
-ssize_t
-i386_readin(readin_handle_t fd, vm_offset_t dest, const size_t len)
-{
-
-	if (dest + len >= memtop_copyin) {
-		errno = EFBIG;
-		return (-1);
-	}
-
-	return (VECTX_READ(fd, PTOV(dest), len));
-}
+volatile time_t time_second = 1;

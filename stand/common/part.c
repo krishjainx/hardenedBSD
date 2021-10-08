@@ -39,7 +39,7 @@ __FBSDID("$FreeBSD$");
 
 #include <fs/cd9660/iso.h>
 
-#include <crc32.h>
+#include <zlib.h>
 #include <part.h>
 #include <uuid.h>
 
@@ -168,8 +168,8 @@ gpt_checkhdr(struct gpt_hdr *hdr, uint64_t lba_self, uint64_t lba_last,
 		return (NULL);
 	}
 	crc = le32toh(hdr->hdr_crc_self);
-	hdr->hdr_crc_self = 0;
-	if (crc32(hdr, sz) != crc) {
+	hdr->hdr_crc_self = crc32(0, Z_NULL, 0);
+	if (crc32(hdr->hdr_crc_self, (const Bytef *)hdr, sz) != crc) {
 		DPRINTF("GPT header's CRC doesn't match");
 		return (NULL);
 	}
@@ -217,7 +217,7 @@ gpt_checktbl(const struct gpt_hdr *hdr, uint8_t *tbl, size_t size,
 		cnt = hdr->hdr_entries;
 		/* Check CRC only when buffer size is enough for table. */
 		if (hdr->hdr_crc_table !=
-		    crc32(tbl, hdr->hdr_entries * hdr->hdr_entsz)) {
+		    crc32(0, tbl, hdr->hdr_entries * hdr->hdr_entsz)) {
 			DPRINTF("GPT table's CRC doesn't match");
 			return (-1);
 		}
@@ -655,7 +655,6 @@ ptable_open(void *dev, uint64_t sectors, uint16_t sectorsize,
 	struct dos_partition *dp;
 	struct ptable *table;
 	uint8_t *buf;
-	int i;
 #ifdef LOADER_MBR_SUPPORT
 	struct pentry *entry;
 	uint32_t start, end;
@@ -728,7 +727,7 @@ ptable_open(void *dev, uint64_t sectors, uint16_t sectorsize,
 	 * start sector 1. After DOSPTYP_PMBR, there may be other partitions.
 	 * UEFI compliant PMBR has no other partitions.
 	 */
-	for (i = 0; i < NDOSPART; i++) {
+	for (int i = 0; i < NDOSPART; i++) {
 		if (dp[i].dp_flag != 0 && dp[i].dp_flag != 0x80) {
 			DPRINTF("invalid partition flag %x", dp[i].dp_flag);
 			goto out;
@@ -750,7 +749,7 @@ ptable_open(void *dev, uint64_t sectors, uint16_t sectorsize,
 	/* Read MBR. */
 	DPRINTF("MBR detected");
 	table->type = PTABLE_MBR;
-	for (i = has_ext = 0; i < NDOSPART; i++) {
+	for (int i = has_ext = 0; i < NDOSPART; i++) {
 		if (dp[i].dp_typ == 0)
 			continue;
 		start = le32dec(&(dp[i].dp_start));

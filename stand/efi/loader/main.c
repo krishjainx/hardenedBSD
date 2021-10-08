@@ -264,6 +264,8 @@ probe_zfs_currdev(uint64_t guid)
 {
 	char *devname;
 	struct zfs_devdesc currdev;
+	char *buf = NULL;
+	bool rv;
 
 	currdev.dd.d_dev = &zfs_dev;
 	currdev.dd.d_unit = 0;
@@ -273,7 +275,18 @@ probe_zfs_currdev(uint64_t guid)
 	devname = efi_fmtdev(&currdev);
 	init_zfs_bootenv(devname);
 
-	return (sanity_check_currdev());
+	rv = sanity_check_currdev();
+	if (rv) {
+		buf = malloc(VDEV_PAD_SIZE);
+		if (buf != NULL) {
+			if (zfs_nextboot(&currdev, buf, VDEV_PAD_SIZE) == 0) {
+				printf("zfs nextboot: %s\n", buf);
+				set_currdev(buf);
+			}
+			free(buf);
+		}
+	}
+	return (rv);
 }
 #endif
 
@@ -352,9 +365,9 @@ match_boot_info(char *boot_info, size_t bisz)
 	CHAR16 *text;
 
 	/*
-	 * FreeBSD encodes it's boot loading path into the boot loader
+	 * FreeBSD encodes its boot loading path into the boot loader
 	 * BootXXXX variable. We look for the last one in the path
-	 * and use that to load the kernel. However, if we only fine
+	 * and use that to load the kernel. However, if we only find
 	 * one DEVICE_PATH, then there's nothing specific and we should
 	 * fall back.
 	 *
@@ -365,8 +378,8 @@ match_boot_info(char *boot_info, size_t bisz)
 	 * boot loader to get to the next boot loader. However, that
 	 * doesn't work. We rarely have the path to the image booted
 	 * (just the device) so we can't count on that. So, we do the
-	 * enxt best thing, we look through the device path(s) passed
-	 * in the BootXXXX varaible. If there's only one, we return
+	 * next best thing: we look through the device path(s) passed
+	 * in the BootXXXX variable. If there's only one, we return
 	 * NOT_SPECIFIC. Otherwise, we look at the last one and try to
 	 * load that. If we can, we return BOOT_INFO_OK. Otherwise we
 	 * return BAD_CHOICE for the caller to sort out.
@@ -782,7 +795,7 @@ parse_uefi_con_out(void)
 			 */
 			pci_pending = true;
 		}
-		node = NextDevicePathNode(node); /* Skip the end node */
+		node = NextDevicePathNode(node);
 	}
 
 	/*
@@ -882,7 +895,11 @@ read_loader_env(const char *name, char *def_fn, bool once)
 	}
 }
 
-
+caddr_t
+ptov(uintptr_t x)
+{
+	return ((caddr_t)x);
+}
 
 EFI_STATUS
 main(int argc, CHAR16 *argv[])
