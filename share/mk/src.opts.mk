@@ -215,9 +215,12 @@ __DEFAULT_NO_OPTIONS = \
     OFED \
     OFED_EXTRA \
     OPENLDAP \
+<<<<<<< HEAD
     PORTSNAP \
     REPRODUCIBLE_BUILD \
     OPENSSL_KTLS \
+=======
+>>>>>>> origin/freebsd/13-stable/main
     RPCBIND_WARMSTART_SUPPORT \
     SORT_THREADS \
     SPECTREV1_FIX \
@@ -365,6 +368,13 @@ BROKEN_OPTIONS+=LOADER_UBOOT
 # crazy high addresses, which is typical of endianness problems).
 .if ${__T:Mpowerpc*}
 BROKEN_OPTIONS+=LOADER_GELI LOADER_LUA
+.endif
+
+# Kernel TLS is enabled by default on amd64 and aarch64
+.if ${__T} == "aarch64" || ${__T} == "amd64"
+__DEFAULT_YES_OPTIONS+=OPENSSL_KTLS
+.else
+__DEFAULT_NO_OPTIONS+=OPENSSL_KTLS
 .endif
 
 .if ${__T:Mmips64*}
