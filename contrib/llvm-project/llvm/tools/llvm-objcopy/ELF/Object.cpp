@@ -997,12 +997,16 @@ Error RelocationSection::accept(MutableSectionVisitor &Visitor) {
 
 Error RelocationSection::removeSymbols(
     function_ref<bool(const Symbol &)> ToRemove) {
-  for (const Relocation &Reloc : Relocations)
-    if (Reloc.RelocSymbol && ToRemove(*Reloc.RelocSymbol))
+  for (const Relocation &Reloc : Relocations) {
+    if (Reloc.RelocSymbol && ToRemove(*Reloc.RelocSymbol)) {
+#if 0
       return createStringError(
           llvm::errc::invalid_argument,
           "not stripping symbol '%s' because it is named in a relocation",
           Reloc.RelocSymbol->Name.data());
+#endif
+    }
+  }
   return Error::success();
 }
 
