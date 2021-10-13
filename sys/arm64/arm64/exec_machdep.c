@@ -604,7 +604,7 @@ sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	tf->tf_sp = (register_t)fp;
 	sysent = p->p_sysent;
 	if (sysent->sv_sigcode_base != 0)
-		tf->tf_lr = (register_t)sysent->sv_sigcode_base;
+		tf->tf_lr = (register_t)(p->p_sigcode_base);
 	else
 		tf->tf_lr = (register_t)(sysent->sv_psstrings -
 		    *(sysent->sv_szsigcode));
