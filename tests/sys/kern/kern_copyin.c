@@ -164,15 +164,9 @@ ATF_TC_BODY(kern_copyin, tc)
 	ATF_CHECK(copyin_checker(FMAX - 10, 9) == EFAULT);
 	ATF_CHECK(copyin_checker(FMAX - 10, 10) == EFAULT);
 	ATF_CHECK(copyin_checker(FMAX - 10, 11) == EFAULT);
-<<<<<<< HEAD
 
 #ifdef HARDENEDBSD
 	munmap(p, PAGE_SIZE);
-=======
-#if __SIZEOF_POINTER__ == 8
-	ATF_CHECK(copyin_checker(ADDR_SIGNED, 1) == EFAULT);
-	ATF_CHECK(copyin_checker2(ADDR_SIGNED) == EFAULT);
->>>>>>> origin/freebsd/13-stable/main
 #endif
 }
 
