@@ -1,8 +1,15 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
- *
- * Copyright (c) 2003 Alan L. Cox <alc@cs.rice.edu>
+ * Copyright (c) 2014 Andrew Turner
+ * Copyright (c) 2015-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
+ *
+ * Portions of this software were developed by SRI International and the
+ * University of Cambridge Computer Laboratory under DARPA/AFRL contract
+ * FA8750-10-C-0237 ("CTSRD"), as part of the DARPA CRASH research programme.
+ *
+ * Portions of this software were developed by the University of Cambridge
+ * Computer Laboratory as part of the CTSRD Project, with support from the
+ * UK Higher Education Innovation Fund (HEIF).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,47 +37,53 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_page.h>
-#include <vm/vm_phys.h>
-#include <vm/vm_dumpset.h>
-#include <vm/uma.h>
-#include <vm/uma_int.h>
-#include <machine/md_var.h>
+#include <sys/systm.h>
+#include <sys/exec.h>
+#include <sys/imgact.h>
+#include <sys/kdb.h>
+#include <sys/kernel.h>
+#include <sys/ktr.h>
+#include <sys/limits.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/proc.h>
+#include <sys/ptrace.h>
+#include <sys/rwlock.h>
+#include <sys/sched.h>
+#include <sys/signalvar.h>
+#include <sys/syscallsubr.h>
+#include <sys/sysent.h>
+#include <sys/sysproto.h>
+#include <sys/ucontext.h>
 
-void *
-uma_small_alloc(uma_zone_t zone, vm_size_t bytes, int domain, u_int8_t *flags,
-    int wait)
+#include <machine/cpu.h>
+#include <machine/pcb.h>
+#include <machine/pte.h>
+#include <machine/riscvreg.h>
+#include <machine/sbi.h>
+#include <machine/trap.h>
+
+int
+ptrace_set_pc(struct thread *td, u_long addr)
 {
-	vm_page_t m;
-	vm_paddr_t pa;
-	void *va;
 
-	*flags = UMA_SLAB_PRIV;
-	m = vm_page_alloc_domain(NULL, 0, domain,
-	    malloc2vm_flags(wait) | VM_ALLOC_NOOBJ | VM_ALLOC_WIRED);
-	if (m == NULL)
-		return (NULL);
-	pa = m->phys_addr;
-	if ((wait & M_NODUMP) == 0)
-		dump_add_page(pa);
-	va = (void *)PHYS_TO_DMAP(pa);
-	if ((wait & M_ZERO) && (m->flags & PG_ZERO) == 0)
-		pagezero(va);
-	return (va);
+	td->td_frame->tf_sepc = addr;
+	return (0);
 }
 
-void
-uma_small_free(void *mem, vm_size_t size, u_int8_t flags)
+int
+ptrace_single_step(struct thread *td)
 {
-	vm_page_t m;
-	vm_paddr_t pa;
 
-	pa = DMAP_TO_PHYS((vm_offset_t)mem);
-	dump_drop_page(pa);
-	m = PHYS_TO_VM_PAGE(pa);
-	vm_page_unwire_noq(m);
-	vm_page_free(m);
+	/* TODO; */
+	return (EOPNOTSUPP);
 }
+
+int
+ptrace_clear_single_step(struct thread *td)
+{
+
+	/* TODO; */
+	return (EOPNOTSUPP);
+}
+
