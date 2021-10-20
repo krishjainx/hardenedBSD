@@ -4190,6 +4190,7 @@ ctrl_eq_alloc(struct adapter *sc, struct sge_eq *eq)
 	}
 
 	eq->cntxt_id = G_FW_EQ_CTRL_CMD_EQID(be32toh(c.cmpliqid_eqid));
+	eq->abs_id = G_FW_EQ_CTRL_CMD_PHYSEQID(be32toh(c.physeqid_pkd));
 	cntxt_id = eq->cntxt_id - sc->sge.eq_start;
 	if (cntxt_id >= sc->sge.eqmap_sz)
 	    panic("%s: eq->cntxt_id (%d) more than the max (%d)", __func__,
@@ -4279,6 +4280,7 @@ ofld_eq_alloc(struct adapter *sc, struct vi_info *vi, struct sge_eq *eq)
 	}
 
 	eq->cntxt_id = G_FW_EQ_OFLD_CMD_EQID(be32toh(c.eqid_pkd));
+	eq->abs_id = G_FW_EQ_OFLD_CMD_PHYSEQID(be32toh(c.physeqid_pkd));
 	cntxt_id = eq->cntxt_id - sc->sge.eq_start;
 	if (cntxt_id >= sc->sge.eqmap_sz)
 	    panic("%s: eq->cntxt_id (%d) more than the max (%d)", __func__,
@@ -4317,7 +4319,8 @@ static void
 free_eq(struct adapter *sc, struct sge_eq *eq)
 {
 	MPASS(eq->flags & EQ_SW_ALLOCATED);
-	MPASS(eq->pidx == eq->cidx);
+	if (eq->type == EQ_ETH)
+		MPASS(eq->pidx == eq->cidx);
 
 	free_ring(sc, eq->desc_tag, eq->desc_map, eq->ba, eq->desc);
 	mtx_destroy(&eq->eq_lock);
@@ -4470,6 +4473,8 @@ free_wrq(struct adapter *sc, struct sge_wrq *wrq)
 {
 	free_eq(sc, &wrq->eq);
 	MPASS(wrq->nwr_pending == 0);
+	MPASS(TAILQ_EMPTY(&wrq->incomplete_wrs));
+	MPASS(STAILQ_EMPTY(&wrq->wr_list));
 	bzero(wrq, sizeof(*wrq));
 }
 
