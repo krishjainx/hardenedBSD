@@ -602,6 +602,8 @@ crypto_cipher(const struct crypto_session_params *csp)
 		return (&enc_xform_chacha20);
 	case CRYPTO_AES_CCM_16:
 		return (&enc_xform_ccm);
+	case CRYPTO_CHACHA20_POLY1305:
+		return (&enc_xform_chacha20_poly1305);
 	default:
 		return (NULL);
 	}
@@ -693,6 +695,7 @@ static enum alg_type {
 	[CRYPTO_POLY1305] = ALG_KEYED_DIGEST,
 	[CRYPTO_AES_CCM_CBC_MAC] = ALG_KEYED_DIGEST,
 	[CRYPTO_AES_CCM_16] = ALG_AEAD,
+	[CRYPTO_CHACHA20_POLY1305] = ALG_AEAD,
 };
 
 static enum alg_type
@@ -837,6 +840,7 @@ check_csp(const struct crypto_session_params *csp)
 		switch (csp->csp_cipher_alg) {
 		case CRYPTO_AES_NIST_GCM_16:
 		case CRYPTO_AES_CCM_16:
+		case CRYPTO_CHACHA20_POLY1305:
 			if (csp->csp_auth_mlen > 16)
 				return (false);
 			break;
@@ -1220,6 +1224,8 @@ crypto_buffer_len(struct crypto_buffer *cb)
 		if (cb->cb_mbuf->m_flags & M_PKTHDR)
 			return (cb->cb_mbuf->m_pkthdr.len);
 		return (m_length(cb->cb_mbuf, NULL));
+	case CRYPTO_BUF_SINGLE_MBUF:
+		return (cb->cb_mbuf->m_len);
 	case CRYPTO_BUF_VMPAGE:
 		return (cb->cb_vm_page_len);
 	case CRYPTO_BUF_UIO:
@@ -1310,12 +1316,8 @@ crp_sanity(struct cryptop *crp)
 		    crp->crp_op ==
 		    (CRYPTO_OP_DECRYPT | CRYPTO_OP_VERIFY_DIGEST),
 		    ("invalid AEAD op %x", crp->crp_op));
-		if (csp->csp_cipher_alg == CRYPTO_AES_NIST_GCM_16)
-			KASSERT(crp->crp_flags & CRYPTO_F_IV_SEPARATE,
-			    ("GCM without a separate IV"));
-		if (csp->csp_cipher_alg == CRYPTO_AES_CCM_16)
-			KASSERT(crp->crp_flags & CRYPTO_F_IV_SEPARATE,
-			    ("CCM without a separate IV"));
+		KASSERT(crp->crp_flags & CRYPTO_F_IV_SEPARATE,
+		    ("AEAD without a separate IV"));
 		break;
 	case CSP_MODE_ETA:
 		KASSERT(crp->crp_op ==
