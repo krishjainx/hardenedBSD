@@ -66,7 +66,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "rtld.h"
 #include "libmap.h"
-#include "paths.h"
+#include "rtld_paths.h"
 #include "rtld_tls.h"
 #include "rtld_printf.h"
 #include "rtld_malloc.h"
@@ -1280,6 +1280,18 @@ digest_dynamic1(Obj_Entry *obj, int early, const Elf_Dyn **dyn_rpath,
 
 	case DT_RELAENT:
 	    assert(dynp->d_un.d_val == sizeof(Elf_Rela));
+	    break;
+
+	case DT_RELR:
+	    obj->relr = (const Elf_Relr *)(obj->relocbase + dynp->d_un.d_ptr);
+	    break;
+
+	case DT_RELRSZ:
+	    obj->relrsize = dynp->d_un.d_val;
+	    break;
+
+	case DT_RELRENT:
+	    assert(dynp->d_un.d_val == sizeof(Elf_Relr));
 	    break;
 
 	case DT_PLTREL:
@@ -3267,6 +3279,29 @@ reloc_textrel_prot(Obj_Entry *obj, bool before)
 	return (0);
 }
 
+/* Process RELR relative relocations. */
+static void
+reloc_relr(Obj_Entry *obj)
+{
+	const Elf_Relr *relr, *relrlim;
+	Elf_Addr *where;
+
+	relrlim = (const Elf_Relr *)((const char *)obj->relr + obj->relrsize);
+	for (relr = obj->relr; relr < relrlim; relr++) {
+	    Elf_Relr entry = *relr;
+
+	    if ((entry & 1) == 0) {
+		where = (Elf_Addr *)(obj->relocbase + entry);
+		*where++ += (Elf_Addr)obj->relocbase;
+	    } else {
+		for (long i = 0; (entry >>= 1) != 0; i++)
+		    if ((entry & 1) != 0)
+			where[i] += (Elf_Addr)obj->relocbase;
+		where += CHAR_BIT * sizeof(Elf_Relr) - 1;
+	    }
+	}
+}
+
 /*
  * Relocate single object.
  * Returns 0 on success, or -1 on failure.
@@ -3293,6 +3328,7 @@ relocate_object(Obj_Entry *obj, bool bind_now, Obj_Entry *rtldobj,
 	/* Process the non-PLT non-IFUNC relocations. */
 	if (reloc_non_plt(obj, rtldobj, flags, lockstate))
 		return (-1);
+	reloc_relr(obj);
 
 	/* Re-protected the text segment. */
 	if (obj->textrel && reloc_textrel_prot(obj, false) != 0)
