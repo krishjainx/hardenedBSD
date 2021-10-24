@@ -778,6 +778,7 @@ apply_kernel() {
 
 	if [ ! -z "${backupkern}" ]; then
 		rm -rf ${mountpoint}/boot/${backupkern}
+		mkdir -p ${mountpoint}/boot/kernel
 		cp -pR ${mountpoint}/boot/kernel \
 			${mountpoint}/boot/${backupkern}
 		res=${?}
@@ -787,6 +788,7 @@ apply_kernel() {
 
 		if [ -d ${mountpoint}/usr/lib/debug/boot/kernel ]; then
 			rm -rf ${mountpoint}/usr/lib/debug/boot/${backupkern}
+			mkdir -p ${mountpoint}/usr/lib/debug/boot/kernel
 			cp -pR ${mountpoint}/usr/lib/debug/boot/kernel \
 				${mountpoint}/usr/lib/debug/boot/${backupkern}
 			res=${?}
