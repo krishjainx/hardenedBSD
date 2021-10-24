@@ -433,7 +433,7 @@ check_pubkey_validity() {
 
 	updatehash=$(${SHA256} -q ${tmpdir}/pubkey.pem)
 
-	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f); do
+	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f -print 2>/dev/null); do
 		filehash=$(${SHA256} -q ${f})
 		if [ "${filehash}" = "${updatehash}" ]; then
 			echo "[-] This update has been signed with a revoked key." >&2
