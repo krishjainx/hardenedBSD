@@ -19,7 +19,6 @@ COMPAT_MOTD="/etc/motd"
 TARGET="/var/run/motd"
 TEMPLATE="/etc/motd.template"
 PERMS="644"
-MOTD_FILE="/etc/motd"
 
 motd_start()
 {
@@ -47,7 +46,7 @@ motd_start()
 
 	T=`mktemp -t motd`
 	uname -v | sed -e 's,^\([^#]*\) #\(.* [1-2][0-9][0-9][0-9]\).*/\([^\]*\) $,\1 (\3) #\2,' > ${T}
-	awk '{if (NR == 1) {if ($1 == "FreeBSD" || $1 == "HardenedBSD") {next} else {print "\n"$0}} else {print}}' < ${MOTD_FILE} >> ${T}
+	awk '{if (NR == 1) {if ($1 == "FreeBSD" || $1 == "HardenedBSD") {next} else {print "\n"$0}} else {print}}' < ${TEMPLATE} >> ${T}
 
 	install -C -o root -g wheel -m "${PERMS}" "$T" "${TARGET}"
 	rm -f "$T"
