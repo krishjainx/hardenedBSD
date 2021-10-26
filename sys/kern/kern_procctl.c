@@ -27,6 +27,8 @@
  * SUCH DAMAGE.
  */
 
+#include "opt_pax.h"
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -620,12 +622,10 @@ stackgap_status(struct thread *td, struct proc *p, void *data)
 static int
 wxmap_ctl(struct thread *td, struct proc *p, void *data)
 {
-<<<<<<< HEAD
-=======
+#ifndef PAX
 	struct vmspace *vm;
 	vm_map_t map;
 	int state;
->>>>>>> origin/freebsd/13-stable/main
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	if ((p->p_flag & P_WEXIT) != 0)
@@ -636,6 +636,7 @@ wxmap_ctl(struct thread *td, struct proc *p, void *data)
 	default:
 		return (EINVAL);
 	}
+#endif
 
 	return (0);
 }
@@ -643,6 +644,7 @@ wxmap_ctl(struct thread *td, struct proc *p, void *data)
 static int
 wxmap_status(struct thread *td, struct proc *p, void *data)
 {
+#ifndef PAX
 	int d;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
@@ -650,9 +652,7 @@ wxmap_status(struct thread *td, struct proc *p, void *data)
 		return (ESRCH);
 
 	d = 0;
-<<<<<<< HEAD
 	*data = d;
-=======
 	if ((p->p_flag2 & P2_WXORX_DISABLE) != 0)
 		d |= PROC_WX_MAPPINGS_PERMIT;
 	if ((p->p_flag2 & P2_WXORX_ENABLE_EXEC) != 0)
@@ -668,7 +668,7 @@ wxmap_status(struct thread *td, struct proc *p, void *data)
 	PROC_LOCK(p);
 	_PRELE(p);
 	*(int *)data = d;
->>>>>>> origin/freebsd/13-stable/main
+#endif
 	return (0);
 }
 
