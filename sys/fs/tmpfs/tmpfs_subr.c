@@ -565,12 +565,8 @@ tmpfs_alloc_node(struct mount *mp, struct tmpfs_mount *tmp, enum vtype type,
 		break;
 
 	case VREG:
-<<<<<<< HEAD
 		LIST_INIT(&(nnode->tn_reg.tn_extattr_list));
-		obj = nnode->tn_reg.tn_aobj =
-=======
 		nnode->tn_reg.tn_aobj =
->>>>>>> origin/freebsd/13-stable/main
 		    vm_pager_allocate(tmpfs_pager_type, NULL, 0,
 			VM_PROT_DEFAULT, 0,
 			NULL /* XXXKIB - tmpfs needs swap reservation */);
