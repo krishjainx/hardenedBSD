@@ -7585,6 +7585,10 @@ t4_sysctls(struct adapter *sc)
 		    CTLFLAG_RW, &sc->tt.autorcvbuf_inc, 0,
 		    "autorcvbuf increment");
 
+		sc->tt.iso = 1;
+		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "iso", CTLFLAG_RW,
+		    &sc->tt.iso, 0, "Enable iSCSI segmentation offload");
+
 		SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "timer_tick",
 		    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE, sc, 0,
 		    sysctl_tp_tick, "A", "TP timer tick (us)");
@@ -11900,6 +11904,7 @@ clear_stats(struct adapter *sc, u_int port_id)
 				ofld_txq->wrq.tx_wrs_copied = 0;
 				counter_u64_zero(ofld_txq->tx_iscsi_pdus);
 				counter_u64_zero(ofld_txq->tx_iscsi_octets);
+				counter_u64_zero(ofld_txq->tx_iscsi_iso_wrs);
 				counter_u64_zero(ofld_txq->tx_toe_tls_records);
 				counter_u64_zero(ofld_txq->tx_toe_tls_octets);
 			}
@@ -11909,6 +11914,14 @@ clear_stats(struct adapter *sc, u_int port_id)
 				ofld_rxq->fl.cl_allocated = 0;
 				ofld_rxq->fl.cl_recycled = 0;
 				ofld_rxq->fl.cl_fast_recycled = 0;
+				counter_u64_zero(
+				    ofld_rxq->rx_iscsi_ddp_setup_ok);
+				counter_u64_zero(
+				    ofld_rxq->rx_iscsi_ddp_setup_error);
+				ofld_rxq->rx_iscsi_ddp_pdus = 0;
+				ofld_rxq->rx_iscsi_ddp_octets = 0;
+				ofld_rxq->rx_iscsi_fl_pdus = 0;
+				ofld_rxq->rx_iscsi_fl_octets = 0;
 				ofld_rxq->rx_toe_tls_records = 0;
 				ofld_rxq->rx_toe_tls_octets = 0;
 			}
