@@ -305,8 +305,7 @@ mp_realloc_pcpu(int cpuid, int domain)
 	oa = (vm_offset_t)&__pcpu[cpuid];
 	if (vm_phys_domain(pmap_kextract(oa)) == domain)
 		return;
-	m = vm_page_alloc_domain(NULL, 0, domain,
-	    VM_ALLOC_NORMAL | VM_ALLOC_NOOBJ);
+	m = vm_page_alloc_noobj_domain(domain, 0);
 	if (m == NULL)
 		return;
 	na = PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m));
@@ -335,8 +334,7 @@ native_start_all_aps(void)
 	mtx_init(&ap_boot_mtx, "ap boot", NULL, MTX_SPIN);
 
 	MPASS(bootMP_size <= PAGE_SIZE);
-	m_boottramp = vm_page_alloc_contig(NULL, 0, VM_ALLOC_NORMAL |
-	    VM_ALLOC_NOBUSY | VM_ALLOC_NOOBJ, 1, 0,
+	m_boottramp = vm_page_alloc_noobj_contig(0, 1, 0,
 	    (1ULL << 20), /* Trampoline should be below 1M for real mode */
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	boot_address = VM_PAGE_TO_PHYS(m_boottramp);

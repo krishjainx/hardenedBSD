@@ -178,17 +178,22 @@ kmem_alloc_contig_pages(vm_object_t object, vm_pindex_t pindex, int domain,
 {
 	vm_page_t m;
 	int tries;
-	bool wait;
+	bool wait, reclaim;
 
 	VM_OBJECT_ASSERT_WLOCKED(object);
 
+	/* Disallow an invalid combination of flags. */
+	MPASS((pflags & (VM_ALLOC_WAITOK | VM_ALLOC_NORECLAIM)) !=
+	    (VM_ALLOC_WAITOK | VM_ALLOC_NORECLAIM));
+
 	wait = (pflags & VM_ALLOC_WAITOK) != 0;
+	reclaim = (pflags & VM_ALLOC_NORECLAIM) == 0;
 	pflags &= ~(VM_ALLOC_NOWAIT | VM_ALLOC_WAITOK | VM_ALLOC_WAITFAIL);
 	pflags |= VM_ALLOC_NOWAIT;
 	for (tries = wait ? 3 : 1;; tries--) {
 		m = vm_page_alloc_contig_domain(object, pindex, domain, pflags,
 		    npages, low, high, alignment, boundary, memattr);
-		if (m != NULL || tries == 0)
+		if (m != NULL || tries == 0 || !reclaim)
 			break;
 
 		VM_OBJECT_WUNLOCK(object);
@@ -693,10 +698,7 @@ kmem_init_zero_region(void)
 	 * zeros, while not using much more physical resources.
 	 */
 	addr = kva_alloc(ZERO_REGION_SIZE);
-	m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL |
-	    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO);
-	if ((m->flags & PG_ZERO) == 0)
-		pmap_zero_page(m);
+	m = vm_page_alloc_noobj(VM_ALLOC_WIRED | VM_ALLOC_ZERO);
 	for (i = 0; i < ZERO_REGION_SIZE; i += PAGE_SIZE)
 		pmap_qenter(addr + i, &m, 1);
 	pmap_protect(kernel_pmap, addr, addr + ZERO_REGION_SIZE, VM_PROT_READ);
