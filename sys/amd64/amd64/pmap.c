@@ -11366,9 +11366,6 @@ pmap_kasan_enter(vm_offset_t va)
 }
 #endif
 
-<<<<<<< HEAD
-#ifndef PAX_HARDENING
-=======
 #ifdef KMSAN
 static vm_page_t
 pmap_kmsan_enter_alloc_4k(void)
@@ -11439,7 +11436,7 @@ pmap_kmsan_enter(vm_offset_t va)
 }
 #endif
 
->>>>>>> origin/freebsd/13-stable/main
+#ifndef PAX_HARDENING
 /*
  * Track a range of the kernel's virtual address space that is contiguous
  * in various mapping attributes.
