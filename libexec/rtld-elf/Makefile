@@ -11,7 +11,9 @@ PACKAGE=	clibs
 MK_SSP=		no
 MK_CFI=		no
 
+.if !defined(NEED_COMPAT)
 CONFS=		libmap.conf
+.endif
 PROG?=		ld-elf.so.1
 .if (${PROG:M*ld-elf32*} != "")
 TAGS+=		lib32
