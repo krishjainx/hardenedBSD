@@ -2883,7 +2883,7 @@ do_load_object(int fd, const char *name, char *path, struct stat *sbp,
 	    _rtld_error("Cannot execute objects on %s", fs.f_mntonname);
 	    return (NULL);
     }
-<<<<<<< HEAD
+
 #ifdef HARDENEDBSD
     if (path != NULL) {
 	    sz = sizeof(int);
@@ -2902,9 +2902,7 @@ do_load_object(int fd, const char *name, char *path, struct stat *sbp,
 	    }
     }
 #endif
-=======
 
->>>>>>> origin/freebsd/13-stable/main
     dbg("loading \"%s\"", printable_path(path));
     obj = map_object(fd, printable_path(path), sbp);
     if (obj == NULL)
