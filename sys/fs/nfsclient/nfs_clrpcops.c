@@ -727,8 +727,9 @@ nfsrpc_close(vnode_t vp, int doclose, NFSPROC_T *p)
 /*
  * Close the open.
  */
-void
-nfsrpc_doclose(struct nfsmount *nmp, struct nfsclopen *op, NFSPROC_T *p)
+int
+nfsrpc_doclose(struct nfsmount *nmp, struct nfsclopen *op, NFSPROC_T *p,
+    bool loop_on_delayed, bool freeop)
 {
 	struct nfsrv_descript nfsd, *nd = &nfsd;
 	struct nfscllockowner *lp, *nlp;
@@ -807,7 +808,7 @@ nfsrpc_doclose(struct nfsmount *nmp, struct nfsclopen *op, NFSPROC_T *p)
 	nfscl_lockexcl(&op->nfso_own->nfsow_rwlock, NFSCLSTATEMUTEXPTR);
 	NFSUNLOCKCLSTATE();
 	do {
-		error = nfscl_tryclose(op, tcred, nmp, p, true);
+		error = nfscl_tryclose(op, tcred, nmp, p, loop_on_delayed);
 		if (error == NFSERR_GRACE)
 			(void) nfs_catnap(PZERO, error, "nfs_close");
 	} while (error == NFSERR_GRACE);
@@ -816,9 +817,11 @@ nfsrpc_doclose(struct nfsmount *nmp, struct nfsclopen *op, NFSPROC_T *p)
 
 	LIST_FOREACH_SAFE(lp, &op->nfso_lock, nfsl_list, nlp)
 		nfscl_freelockowner(lp, 0);
-	nfscl_freeopen(op, 0, true);
+	if (freeop && error != NFSERR_DELAY)
+		nfscl_freeopen(op, 0, true);
 	NFSUNLOCKCLSTATE();
 	NFSFREECRED(tcred);
+	return (error);
 }
 
 /*
@@ -835,11 +838,13 @@ nfsrpc_closerpc(struct nfsrv_descript *nd, struct nfsmount *nmp,
 	nfscl_reqstart(nd, NFSPROC_CLOSE, nmp, op->nfso_fh,
 	    op->nfso_fhlen, NULL, NULL, 0, 0);
 	NFSM_BUILD(tl, u_int32_t *, NFSX_UNSIGNED + NFSX_STATEID);
-	*tl++ = txdr_unsigned(op->nfso_own->nfsow_seqid);
-	if (NFSHASNFSV4N(nmp))
+	if (NFSHASNFSV4N(nmp)) {
 		*tl++ = 0;
-	else
+		*tl++ = 0;
+	} else {
+		*tl++ = txdr_unsigned(op->nfso_own->nfsow_seqid);
 		*tl++ = op->nfso_stateid.seqid;
+	}
 	*tl++ = op->nfso_stateid.other[0];
 	*tl++ = op->nfso_stateid.other[1];
 	*tl = op->nfso_stateid.other[2];
@@ -849,11 +854,12 @@ nfsrpc_closerpc(struct nfsrv_descript *nd, struct nfsmount *nmp,
 	    NFS_PROG, NFS_VER4, NULL, 1, NULL, NULL);
 	if (error)
 		return (error);
-	NFSCL_INCRSEQID(op->nfso_own->nfsow_seqid, nd);
+	if (!NFSHASNFSV4N(nmp))
+		NFSCL_INCRSEQID(op->nfso_own->nfsow_seqid, nd);
 	if (nd->nd_repstat == 0)
 		NFSM_DISSECT(tl, u_int32_t *, NFSX_STATEID);
 	error = nd->nd_repstat;
-	if (error == NFSERR_STALESTATEID)
+	if (!NFSHASNFSV4N(nmp) && error == NFSERR_STALESTATEID)
 		nfscl_initiate_recovery(op->nfso_own->nfsow_clp);
 nfsmout:
 	mbuf_freem(nd->nd_mrep);
