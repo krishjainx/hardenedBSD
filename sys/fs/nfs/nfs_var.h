@@ -562,7 +562,7 @@ int nfscl_checkwritelocked(vnode_t, struct flock *,
 void nfscl_lockrelease(struct nfscllockowner *, int, int);
 void nfscl_fillclid(u_int64_t, char *, u_int8_t *, u_int16_t);
 void nfscl_filllockowner(void *, u_int8_t *, int);
-void nfscl_freeopen(struct nfsclopen *, int);
+void nfscl_freeopen(struct nfsclopen *, int, bool);
 void nfscl_umount(struct nfsmount *, NFSPROC_T *, struct nfscldeleghead *);
 void nfscl_renewthread(struct nfsclclient *, NFSPROC_T *);
 void nfscl_initiate_recovery(struct nfsclclient *);
@@ -596,13 +596,13 @@ void nfscl_newnode(vnode_t);
 void nfscl_delegmodtime(vnode_t);
 void nfscl_deleggetmodtime(vnode_t, struct timespec *);
 int nfscl_tryclose(struct nfsclopen *, struct ucred *,
-    struct nfsmount *, NFSPROC_T *);
+    struct nfsmount *, NFSPROC_T *, bool);
 void nfscl_cleanup(NFSPROC_T *);
 int nfscl_layout(struct nfsmount *, vnode_t, u_int8_t *, int, nfsv4stateid_t *,
     int, int, struct nfsclflayouthead *, struct nfscllayout **, struct ucred *,
     NFSPROC_T *);
 struct nfscllayout *nfscl_getlayout(struct nfsclclient *, uint8_t *, int,
-    uint64_t, struct nfsclflayout **, int *);
+    uint64_t, uint32_t, struct nfsclflayout **, int *);
 void nfscl_dserr(uint32_t, uint32_t, struct nfscldevinfo *,
     struct nfscllayout *, struct nfsclds *);
 void nfscl_cancelreqs(struct nfsclds *);
