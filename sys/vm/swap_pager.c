@@ -2360,8 +2360,8 @@ sys_swapon(struct thread *td, struct swapon_args *uap)
 		goto done;
 	}
 
-	NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | AUDITVNODE1, UIO_USERSPACE,
-	    uap->name, td);
+	NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | LOCKLEAF | AUDITVNODE1,
+	    UIO_USERSPACE, uap->name, td);
 	error = namei(&nd);
 	if (error)
 		goto done;
@@ -2381,8 +2381,10 @@ sys_swapon(struct thread *td, struct swapon_args *uap)
 		error = swaponvp(td, vp, attr.va_size / DEV_BSIZE);
 	}
 
-	if (error)
-		vrele(vp);
+	if (error != 0)
+		vput(vp);
+	else
+		VOP_UNLOCK(vp);
 done:
 	sx_xunlock(&swdev_syscall_lock);
 	return (error);
@@ -3005,7 +3007,7 @@ swapongeom(struct vnode *vp)
 {
 	int error;
 
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	ASSERT_VOP_ELOCKED(vp, "swapongeom");
 	if (vp->v_type != VCHR || VN_IS_DOOMED(vp)) {
 		error = ENOENT;
 	} else {
@@ -3013,7 +3015,6 @@ swapongeom(struct vnode *vp)
 		error = swapongeom_locked(vp->v_rdev, vp);
 		g_topology_unlock();
 	}
-	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -3035,24 +3036,30 @@ swapdev_strategy(struct buf *bp, struct swdevt *sp)
 	vp2 = sp->sw_id;
 	vhold(vp2);
 	if (bp->b_iocmd == BIO_WRITE) {
+		vn_lock(vp2, LK_EXCLUSIVE | LK_RETRY);
 		if (bp->b_bufobj)
 			bufobj_wdrop(bp->b_bufobj);
 		bufobj_wref(&vp2->v_bufobj);
+	} else {
+		vn_lock(vp2, LK_SHARED | LK_RETRY);
 	}
 	if (bp->b_bufobj != &vp2->v_bufobj)
 		bp->b_bufobj = &vp2->v_bufobj;
 	bp->b_vp = vp2;
 	bp->b_iooffset = dbtob(bp->b_blkno);
 	bstrategy(bp);
-	return;
+	VOP_UNLOCK(vp2);
 }
 
 static void
 swapdev_close(struct thread *td, struct swdevt *sp)
 {
+	struct vnode *vp;
 
-	VOP_CLOSE(sp->sw_vp, FREAD | FWRITE, td->td_ucred, td);
-	vrele(sp->sw_vp);
+	vp = sp->sw_vp;
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	VOP_CLOSE(vp, FREAD | FWRITE, td->td_ucred, td);
+	vput(vp);
 }
 
 static int
@@ -3061,6 +3068,7 @@ swaponvp(struct thread *td, struct vnode *vp, u_long nblks)
 	struct swdevt *sp;
 	int error;
 
+	ASSERT_VOP_ELOCKED(vp, "swaponvp");
 	if (nblks == 0)
 		return (ENXIO);
 	mtx_lock(&sw_dev_mtx);
@@ -3072,14 +3080,12 @@ swaponvp(struct thread *td, struct vnode *vp, u_long nblks)
 	}
 	mtx_unlock(&sw_dev_mtx);
 
-	(void) vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 #ifdef MAC
 	error = mac_system_check_swapon(td->td_ucred, vp);
 	if (error == 0)
 #endif
 		error = VOP_OPEN(vp, FREAD | FWRITE, td->td_ucred, td, NULL);
-	(void) VOP_UNLOCK(vp);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	swaponsomething(vp, vp, nblks, swapdev_strategy, swapdev_close,
