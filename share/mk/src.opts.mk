@@ -208,7 +208,11 @@ __DEFAULT_NO_OPTIONS = \
     LIB32 \
     LIBSOFT \
     LLVM_ASSERTIONS \
+<<<<<<< HEAD
     HTTPD \
+=======
+    LLVM_BINUTILS \
+>>>>>>> origin/freebsd/13-stable/main
     LOADER_FIREWIRE \
     LOADER_VERBOSE \
     LOADER_VERIEXEC_PASS_MANIFEST \
@@ -510,6 +514,7 @@ MK_CLANG:=	no
 MK_INCLUDES:=	no
 MK_LLD:=	no
 MK_LLDB:=	no
+MK_LLVM_BINUTILS:=	no
 .endif
 
 .if ${MK_CLANG} == "no"
@@ -523,6 +528,12 @@ MK_SAFESTACK:=	no
 .if ${MK_LLD_IS_LD} == "no" || ${MK_LLD_BOOTSTRAP} == "no"
 MK_CFI:=	no
 MK_RETPOLINE:=	no
+.endif
+
+.if ${MK_LLVM_BINUTILS} == "yes"
+# MK_LLVM_CXXFILT is a subset of MK_LLVM_BINUTILS and should therefore be
+# enabled if MK_LLVM_BINUTILS is set.
+MK_LLVM_CXXFILT:=	yes
 .endif
 
 .if ${MK_LOADER_VERIEXEC} == "no"

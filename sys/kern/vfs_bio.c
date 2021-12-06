@@ -1443,16 +1443,28 @@ bufshutdown(int show_busybufs)
 		 */
 		printf("Giving up on %d buffers\n", nbusy);
 		DELAY(5000000);	/* 5 seconds */
+		swapoff_all();
 	} else {
 		if (!first_buf_printf)
 			printf("Final sync complete\n");
+
 		/*
-		 * Unmount filesystems
+		 * Unmount filesystems and perform swapoff, to quiesce
+		 * the system as much as possible.  In particular, no
+		 * I/O should be initiated from top levels since it
+		 * might be abruptly terminated by reset, or otherwise
+		 * erronously handled because other parts of the
+		 * system are disabled.
+		 *
+		 * Swapoff before unmount, because file-backed swap is
+		 * non-operational after unmount of the underlying
+		 * filesystem.
 		 */
-		if (!KERNEL_PANICKED())
+		if (!KERNEL_PANICKED()) {
+			swapoff_all();
 			vfs_unmountall();
+		}
 	}
-	swapoff_all();
 	DELAY(100000);		/* wait for console output to finish */
 }
 
