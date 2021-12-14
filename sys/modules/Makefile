@@ -626,12 +626,6 @@ _sdhci_fdt=	sdhci_fdt
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
 _agp=		agp
 _an=		an
-<<<<<<< HEAD
-=======
-.if ${MACHINE_CPUARCH} == "i386" || !empty(COMPAT_FREEBSD32_ENABLED)
-_aout=		aout
-.endif
->>>>>>> origin/freebsd/13-stable/main
 _bios=		bios
 .if ${MK_SOURCELESS_UCODE} != "no"
 _bxe=		bxe
