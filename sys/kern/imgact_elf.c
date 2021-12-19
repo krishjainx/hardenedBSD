@@ -1276,7 +1276,6 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 
 	imgp->proc->p_sysent = sv;
 	maxv = vm_map_max(map) - lim_max(td, RLIMIT_STACK);
-<<<<<<< HEAD
 
 #ifdef PAX_ASLR
 	/*
@@ -1287,22 +1286,15 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		pax_aslr_execbase(imgp->proc, &et_dyn_addr);
 	}
 #endif
-
-	if (do_asr) {
-		KASSERT((map->flags & MAP_ASLR) != 0,
-		    ("do_asr but !MAP_ASLR"));
-		et_dyn_addr = __CONCAT(rnd_, __elfN(base))(map,
-=======
 	if (mapsz >= maxv - vm_map_min(map)) {
 		uprintf("Excessive mapping size\n");
 		error = ENOEXEC;
 	}
 
-	if (error == 0 && et_dyn_addr == ET_DYN_ADDR_RAND) {
+	if (do_asr) {
 		KASSERT((map->flags & MAP_ASLR) != 0,
-		    ("ET_DYN_ADDR_RAND but !MAP_ASLR"));
+		    ("do_asr but !MAP_ASLR"));
 		error = __CONCAT(rnd_, __elfN(base))(map,
->>>>>>> origin/freebsd/13-stable/main
 		    vm_map_min(map) + mapsz + lim_max(td, RLIMIT_DATA),
 		    /* reserve half of the address space to interpreter */
 		    maxv / 2, maxalign, &et_dyn_addr);
@@ -1336,21 +1328,16 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		maxv1 = maxv / 2 + addr / 2;
 		error = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
 		    (MAXPAGESIZES > 1 && pagesizes[1] != 0) ?
-<<<<<<< HEAD
-		    pagesizes[1] : pagesizes[0]);
-=======
 		    pagesizes[1] : pagesizes[0], &anon_loc);
 		if (error != 0)
 			goto ret;
 		map->anon_loc = anon_loc;
 	} else {
-		map->anon_loc = addr;
->>>>>>> origin/freebsd/13-stable/main
-	}
 #ifdef PAX_ASLR
-	else
 		pax_aslr_rtld(imgp->proc, &addr);
 #endif
+		map->anon_loc = addr;
+	}
 	map->anon_loc = addr;
 	PROC_UNLOCK(imgp->proc);
 
