@@ -24,11 +24,6 @@
 # - c++11:     supports full (or nearly full) C++11 programming environment.
 # - retpoline: supports the retpoline speculative execution vulnerability
 #              mitigation.
-<<<<<<< HEAD
-=======
-# - init-all:  supports stack variable initialization.
-# - aarch64-sha512: supports the AArch64 sha512 intrinsic functions.
->>>>>>> origin/freebsd/13-stable/main
 #
 # When bootstrapping on macOS, 'apple-clang' will be set in COMPILER_FEATURES
 # to differentiate Apple's version of Clang. Apple Clang uses a different
