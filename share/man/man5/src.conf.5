@@ -939,8 +939,6 @@ When set, it enforces these options:
 .El
 .It Va WITH_LLVM_ASSERTIONS
 Set to enable debugging assertions in LLVM.
-.It Va WITH_LLVM_BINUTILS
-Install LLVM's binutils (ar, addr2line, nm, etc.) instead of ELF Tool Chain's.
 .It Va WITHOUT_LLVM_COV
 Set to not build the
 .Xr llvm-cov 1
@@ -1299,21 +1297,7 @@ arm/armv6, arm/armv7, mips/mips, mips/mips64, powerpc/powerpc, riscv/riscv64 and
 Set to build nvme related tools and kernel modules.
 .Pp
 This is a default setting on
-<<<<<<< HEAD
 amd64/amd64, arm64/aarch64 and powerpc/powerpc64.
-=======
-amd64/amd64, arm64/aarch64, i386/i386 and powerpc/powerpc64.
-.It Va WITHOUT_OFED
-Set to disable the build of the
-.Dq "OpenFabrics Enterprise Distribution"
-Infiniband software stack, including kernel modules and userspace libraries.
-When set, it enforces these options:
-.Pp
-.Bl -item -compact
-.It
-.Va WITHOUT_OFED_EXTRA
-.El
->>>>>>> origin/freebsd/13-stable/main
 .It Va WITH_OFED_EXTRA
 Set to build the non-essential components of the
 .Dq "OpenFabrics Enterprise Distribution"
@@ -1329,11 +1313,7 @@ arm/armv6, arm/armv7, mips/mips, mips/mips64 and powerpc/powerpc.
 Set to build LLVM's OpenMP runtime.
 .Pp
 This is a default setting on
-<<<<<<< HEAD
-amd64/amd64, arm64/aarch64 and powerpc/powerpc64.
-=======
-amd64/amd64, arm64/aarch64, i386/i386, powerpc/powerpc64, riscv/riscv64 and riscv/riscv64sf.
->>>>>>> origin/freebsd/13-stable/main
+amd64/amd64, arm64/aarch64, powerpc/powerpc64, riscv/riscv64 and riscv/riscv64sf.
 .It Va WITHOUT_OPENSSH
 Set to not build OpenSSH.
 .It Va WITHOUT_OPENSSL
