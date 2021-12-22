@@ -7,9 +7,6 @@ _LIBCXXRTDIR=	${SRCTOP}/contrib/libcxxrt
 HDRDIR=		${SRCTOP}/contrib/llvm-project/libcxx/include
 SRCDIR=		${SRCTOP}/contrib/llvm-project/libcxx/src
 CXXINCLUDEDIR=	${INCLUDEDIR}/c++/v${SHLIB_MAJOR}
-.if ${MACHINE_CPUARCH} == "arm"
-STATIC_CXXFLAGS+= -mlong-calls
-.endif
 
 .PATH: ${SRCDIR}
 
@@ -19,6 +16,8 @@ SHLIB_LDSCRIPT=	libc++.ldscript
 
 SRCS+=		algorithm.cpp
 SRCS+=		any.cpp
+SRCS+=		atomic.cpp
+SRCS+=		barrier.cpp
 SRCS+=		bind.cpp
 SRCS+=		charconv.cpp
 SRCS+=		chrono.cpp
@@ -41,6 +40,7 @@ SRCS+=		mutex_destructor.cpp
 SRCS+=		new.cpp
 SRCS+=		optional.cpp
 SRCS+=		random.cpp
+SRCS+=		random_shuffle.cpp
 SRCS+=		regex.cpp
 SRCS+=		shared_mutex.cpp
 SRCS+=		stdexcept.cpp
