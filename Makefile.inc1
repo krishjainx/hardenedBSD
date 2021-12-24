@@ -2341,6 +2341,10 @@ _btxld=		usr.sbin/btxld
 .endif
 .endif
 
+.if ${TARGET_ARCH} == "sparc64" && ${BOOTSTRAPPING} >= 1300077
+_elf2aout=	usr.bin/elf2aout
+.endif
+
 # Rebuild ctfconvert and ctfmerge to avoid difficult-to-diagnose failures
 # resulting from missing bug fixes or ELF Toolchain updates.
 .if ${MK_CDDL} != "no"
@@ -2399,6 +2403,7 @@ cross-tools: .MAKE .PHONY
     ${_dtrace_tools} \
     ${_gcc} \
     ${_btxld} \
+    ${_elf2aout} \
     ${_usb_tools}
 	${_+_}@${ECHODIR} "===> ${_tool} (obj,all,install)"; \
 		cd ${.CURDIR}/${_tool}; \
