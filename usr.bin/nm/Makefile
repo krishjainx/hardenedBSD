@@ -15,7 +15,7 @@ LIBADD=	dwarf elftc elf
 
 CFLAGS+=-I${ELFTCDIR}/libelftc -I${ELFTCDIR}/common
 
-.if ${MK_LLVM_NM_IS_NM} == "no"
+.if ${MK_LLVM_BINUTILS} == "no"
 SYMLINKS=	${BINDIR}/elftc-nm ${BINDIR}/nm
 .endif
 

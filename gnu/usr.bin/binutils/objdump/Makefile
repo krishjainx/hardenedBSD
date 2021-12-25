@@ -18,8 +18,4 @@ DPADD+=	${GNURELTOP}/libiberty/libiberty.a
 LDADD=	${DPADD}
 MAN=	objdump.1
 
-.if ${MK_LLVM_OBJDUMP_IS_OBJDUMP} != "yes"
-SYMLINKS+=	${BINDIR}/gnu-objdump ${BINDIR}/objdump
-.endif
-
 .include <bsd.prog.mk>
