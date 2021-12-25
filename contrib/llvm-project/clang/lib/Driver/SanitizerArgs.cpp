@@ -158,15 +158,7 @@ static void addDefaultIgnorelists(const Driver &D, SanitizerMask Kinds,
     clang::SmallString<64> Path(D.ResourceDir);
     llvm::sys::path::append(Path, "share", BL.File);
     if (D.getVFS().exists(Path))
-<<<<<<< HEAD
-      BlacklistFiles.push_back(std::string(Path.str()));
-=======
       IgnorelistFiles.push_back(std::string(Path.str()));
-    else if (BL.Mask == SanitizerKind::CFI)
-      // If cfi_ignorelist.txt cannot be found in the resource dir, driver
-      // should fail.
-      D.Diag(clang::diag::err_drv_no_such_file) << Path;
->>>>>>> origin/freebsd/12-stable/main
   }
   validateSpecialCaseListFormat(
       D, IgnorelistFiles, clang::diag::err_drv_malformed_sanitizer_ignorelist);

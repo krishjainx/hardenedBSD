@@ -623,11 +623,11 @@ MK_LLVM_COV:= no
 MK_SAFESTACK:=	no
 .endif
 
-<<<<<<< HEAD
 .if ${MK_LLD_IS_LD} == "no" || ${MK_LLD_BOOTSTRAP} == "no"
 MK_CFI:=	no
 MK_RETPOLINE:=	no
-=======
+.endif
+
 .if ${MK_LLVM_BINUTILS} == "yes"
 # MK_LLVM_CXXFILT is a subset of MK_LLVM_BINUTILS and should therefore be
 # enabled if MK_LLVM_BINUTILS is set.
@@ -636,7 +636,6 @@ MK_LLVM_CXXFILT:=	yes
 
 .if ${MK_LOADER_VERIEXEC} == "no"
 MK_LOADER_VERIEXEC_PASS_MANIFEST := no
->>>>>>> origin/freebsd/12-stable/main
 .endif
 
 .if ${MK_LIBRESSL} == "no"
