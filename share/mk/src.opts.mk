@@ -214,6 +214,7 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_FIREWIRE \
     LOADER_FORCE_LE \
     LOADER_VERIEXEC_PASS_MANIFEST \
+    LLVM_BINUTILS \
     NAND \
     OFED \
     OFED_EXTRA \
@@ -607,6 +608,7 @@ MK_GDB:=	no
 MK_INCLUDES:=	no
 MK_LLD:=	no
 MK_LLDB:=	no
+MK_LLVM_BINUTILS:=	no
 .endif
 
 .if ${MK_LOADER_VERIEXEC} == "no"
@@ -621,9 +623,20 @@ MK_LLVM_COV:= no
 MK_SAFESTACK:=	no
 .endif
 
+<<<<<<< HEAD
 .if ${MK_LLD_IS_LD} == "no" || ${MK_LLD_BOOTSTRAP} == "no"
 MK_CFI:=	no
 MK_RETPOLINE:=	no
+=======
+.if ${MK_LLVM_BINUTILS} == "yes"
+# MK_LLVM_CXXFILT is a subset of MK_LLVM_BINUTILS and should therefore be
+# enabled if MK_LLVM_BINUTILS is set.
+MK_LLVM_CXXFILT:=	yes
+.endif
+
+.if ${MK_LOADER_VERIEXEC} == "no"
+MK_LOADER_VERIEXEC_PASS_MANIFEST := no
+>>>>>>> origin/freebsd/12-stable/main
 .endif
 
 .if ${MK_LIBRESSL} == "no"
