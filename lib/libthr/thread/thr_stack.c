@@ -155,18 +155,20 @@ singlethread_map_stacks_exec(void)
 {
 	int mib[2];
 	struct rlimit rlim;
-	u_long usrstack;
+	u_long stacktop;
 	size_t len;
 
 	mib[0] = CTL_KERN;
-	mib[1] = KERN_USRSTACK;
-	len = sizeof(usrstack);
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]), &usrstack, &len, NULL, 0)
-	    == -1)
-		return;
+	mib[1] = KERN_STACKTOP;
+	len = sizeof(stacktop);
+	if (sysctl(mib, nitems(mib), &stacktop, &len, NULL, 0) == -1) {
+		mib[1] = KERN_USRSTACK;
+		if (sysctl(mib, nitems(mib), &stacktop, &len, NULL, 0) == -1)
+			return;
+	}
 	if (getrlimit(RLIMIT_STACK, &rlim) == -1)
 		return;
-	mprotect((void *)(uintptr_t)(usrstack - rlim.rlim_cur),
+	mprotect((void *)(uintptr_t)(stacktop - rlim.rlim_cur),
 	    rlim.rlim_cur, _rtld_get_stack_prot());
 }
 
@@ -223,7 +225,7 @@ _thr_stack_alloc(struct pthread_attr *attr)
 
 	/*
 	 * Use the garbage collector lock for synchronization of the
-	 * spare stack lists and allocations from usrstack.
+	 * spare stack lists and allocations from stacktop.
 	 */
 	THREAD_LIST_WRLOCK(curthread);
 	/*
@@ -259,11 +261,16 @@ _thr_stack_alloc(struct pthread_attr *attr)
 	}
 	else {
 		/*
-		 * Allocate a stack from or below usrstack, depending
+		 * Allocate a stack from or below stacktop, depending
 		 * on the LIBPTHREAD_BIGSTACK_MAIN env variable.
 		 */
+<<<<<<< HEAD
 		if (last_stack == NULL) {
 			last_stack = _usrstack - _thr_stack_initial -
+=======
+		if (last_stack == NULL)
+			last_stack = _stacktop - _thr_stack_initial -
+>>>>>>> origin/freebsd/13-stable/main
 			    _thr_guard_default;
 		}
 

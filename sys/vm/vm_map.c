@@ -349,6 +349,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 	vm->vm_taddr = 0;
 	vm->vm_daddr = 0;
 	vm->vm_maxsaddr = 0;
+<<<<<<< HEAD
 #ifdef PAX_ASLR
 	vm->vm_aslr_delta_mmap = 0;
 	vm->vm_aslr_delta_stack = 0;
@@ -360,6 +361,9 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #endif
 #endif
 
+=======
+	vm->vm_stkgap = 0;
+>>>>>>> origin/freebsd/13-stable/main
 	return (vm);
 }
 
@@ -4275,6 +4279,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_taddr = vm1->vm_taddr;
 	vm2->vm_daddr = vm1->vm_daddr;
 	vm2->vm_maxsaddr = vm1->vm_maxsaddr;
+<<<<<<< HEAD
 #ifdef PAX_ASLR
 	vm2->vm_aslr_delta_exec = vm1->vm_aslr_delta_exec;
 	vm2->vm_aslr_delta_mmap = vm1->vm_aslr_delta_mmap;
@@ -4285,6 +4290,9 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_aslr_delta_map32bit = vm1->vm_aslr_delta_map32bit;
 #endif
 #endif
+=======
+	vm2->vm_stkgap = vm1->vm_stkgap;
+>>>>>>> origin/freebsd/13-stable/main
 	vm_map_lock(old_map);
 	if (old_map->busy)
 		vm_map_wait_busy(old_map);
