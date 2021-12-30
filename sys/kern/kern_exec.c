@@ -192,20 +192,14 @@ sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 		error = SYSCTL_OUT(req, &val, sizeof(val));
 	} else
 #endif
-<<<<<<< HEAD
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
-	return error;
-=======
-		error = SYSCTL_OUT(req, &p->p_sysent->sv_usrstack,
-		    sizeof(p->p_sysent->sv_usrstack));
 	return (error);
 }
 
 static int
 sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
 {
-	vm_offset_t stacktop;
 	struct proc *p;
 	int error;
 
@@ -214,17 +208,13 @@ sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
 	if (req->flags & SCTL_MASK32) {
 		unsigned int val;
 
-		val = (unsigned int)(p->p_sysent->sv_usrstack -
-		    p->p_vmspace->vm_stkgap);
+		val = (unsigned int)(p->p_usrstack);
 		error = SYSCTL_OUT(req, &val, sizeof(val));
 	} else
 #endif
-	{
-		stacktop = p->p_sysent->sv_usrstack - p->p_vmspace->vm_stkgap;
-		error = SYSCTL_OUT(req, &stacktop, sizeof(stacktop));
-	}
+		error = SYSCTL_OUT(req, &p->p_usrstack,
+		    sizeof(p->p_usrstack));
 	return (error);
->>>>>>> origin/freebsd/13-stable/main
 }
 
 static int
