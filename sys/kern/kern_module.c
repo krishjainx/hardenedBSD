@@ -465,20 +465,15 @@ sys_modstat(struct thread *td, struct modstat_args *uap)
 int
 sys_modfind(struct thread *td, struct modfind_args *uap)
 {
-<<<<<<< HEAD
-	int error;
-	char name[MAXMODNAME];
-=======
-	int error = 0;
 	char name[MAXMODNAMEV3];
->>>>>>> origin/freebsd/13-stable/main
 	module_t mod;
+	int error;
 
 	error = priv_check(td, PRIV_KLD_STAT);
 	if (error)
 		return (error);
 
-	if ((error = copyinstr(uap->name, name, sizeof name, 0)) != 0)
+	if ((error = copyinstr(uap->name, name, sizeof(name), 0)) != 0)
 		return (error);
 
 	MOD_SLOCK;
