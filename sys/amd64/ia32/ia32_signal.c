@@ -422,13 +422,9 @@ ia32_osendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	}
 
 	regs->tf_rsp = (uintptr_t)fp;
-<<<<<<< HEAD
-	regs->tf_rip = p->p_psstrings - sz_ia32_osigcode;
-=======
-	regs->tf_rip = p->p_sysent->sv_psstrings -
+	regs->tf_rip = p->p_psstrings -
 	    (_binary_elf_vdso32_so_1_end - _binary_elf_vdso32_so_1_start) +
 	    VDSO_IA32_OSIGCODE_OFFSET;
->>>>>>> origin/freebsd/13-stable/main
 	regs->tf_rflags &= ~(PSL_T | PSL_D);
 	regs->tf_cs = _ucode32sel;
 	regs->tf_ds = _udatasel;
@@ -539,13 +535,8 @@ freebsd4_ia32_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	}
 
 	regs->tf_rsp = (uintptr_t)sfp;
-<<<<<<< HEAD
-	regs->tf_rip = p->p_sigcode_base + sz_ia32_sigcode -
-	    sz_freebsd4_ia32_sigcode;
-=======
-	regs->tf_rip = p->p_sysent->sv_sigcode_base +
+	regs->tf_rip = p->p_sigcode_base +
 	    VDSO_FREEBSD4_IA32_SIGCODE_OFFSET - VDSO_IA32_SIGCODE_OFFSET;
->>>>>>> origin/freebsd/13-stable/main
 	regs->tf_rflags &= ~(PSL_T | PSL_D);
 	regs->tf_cs = _ucode32sel;
 	regs->tf_ss = _udatasel;

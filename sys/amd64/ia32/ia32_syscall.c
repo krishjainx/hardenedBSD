@@ -266,13 +266,9 @@ setup_lcall_gate(void)
 	bzero(&uap, sizeof(uap));
 	uap.start = 0;
 	uap.num = 1;
-<<<<<<< HEAD
-	lcall_addr = curproc->p_psstrings - sz_lcall_tramp;
-=======
-	lcall_addr = curproc->p_sysent->sv_psstrings -
+	lcall_addr = curproc->p_psstrings -
 	    (_binary_elf_vdso32_so_1_end - _binary_elf_vdso32_so_1_start) +
 	    VDSO_LCALL_TRAMP_OFFSET;
->>>>>>> origin/freebsd/13-stable/main
 	bzero(&desc, sizeof(desc));
 	desc.sd_type = SDT_MEMERA;
 	desc.sd_dpl = SEL_UPL;
