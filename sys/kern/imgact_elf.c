@@ -133,6 +133,24 @@ SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     nxstack, CTLFLAG_RW, &__elfN(nxstack), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable non-executable stack");
 
+<<<<<<< HEAD
+=======
+#if defined(__amd64__)
+static int __elfN(vdso) = 1;
+SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
+    vdso, CTLFLAG_RWTUN, &__elfN(vdso), 0,
+    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable vdso preloading");
+#else
+static int __elfN(vdso) = 0;
+#endif
+
+#if __ELF_WORD_SIZE == 32 && (defined(__amd64__) || defined(__i386__))
+int i386_read_exec = 0;
+SYSCTL_INT(_kern_elf32, OID_AUTO, read_exec, CTLFLAG_RW, &i386_read_exec, 0,
+    "enable execution from readable segments");
+#endif
+
+>>>>>>> origin/freebsd/13-stable/main
 static u_long __elfN(pie_base) = ET_DYN_LOAD_ADDR;
 static int
 sysctl_pie_base(SYSCTL_HANDLER_ARGS)
@@ -1452,6 +1470,8 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintptr_t base)
 	AUXARGS_ENTRY_PTR(pos, AT_PS_STRINGS, imgp->ps_strings);
 	if (imgp->sysent->sv_fxrng_gen_base != 0)
 		AUXARGS_ENTRY(pos, AT_FXRNG, imgp->sysent->sv_fxrng_gen_base);
+	if (imgp->sysent->sv_vdso_base != 0 && __elfN(vdso) != 0)
+		AUXARGS_ENTRY(pos, AT_KPRELOAD, imgp->sysent->sv_vdso_base);
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 
 	free(imgp->auxargs, M_TEMP);

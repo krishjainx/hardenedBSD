@@ -3098,9 +3098,17 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
 		bzero(&kst32, sizeof(kst32));
 		if (SV_PROC_FLAG(p, SV_ILP32)) {
 			if (sv->sv_sigcode_base != 0) {
+<<<<<<< HEAD
 				kst32.ksigtramp_start = p->p_sigcode_base;
 				kst32.ksigtramp_end = p->p_sigcode_base +
 				    *sv->sv_szsigcode;
+=======
+				kst32.ksigtramp_start = sv->sv_sigcode_base;
+				kst32.ksigtramp_end = sv->sv_sigcode_base +
+				    ((sv->sv_flags & SV_DSO_SIG) == 0 ?
+				    *sv->sv_szsigcode :
+				    (uintptr_t)sv->sv_szsigcode);
+>>>>>>> origin/freebsd/13-stable/main
 			} else {
 				kst32.ksigtramp_start = p->p_psstrings -
 				    *sv->sv_szsigcode;
@@ -3114,9 +3122,16 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
 #endif
 	bzero(&kst, sizeof(kst));
 	if (sv->sv_sigcode_base != 0) {
+<<<<<<< HEAD
 		kst.ksigtramp_start = (char *)p->p_sigcode_base;
 		kst.ksigtramp_end = (char *)p->p_sigcode_base +
 		    *sv->sv_szsigcode;
+=======
+		kst.ksigtramp_start = (char *)sv->sv_sigcode_base;
+		kst.ksigtramp_end = (char *)sv->sv_sigcode_base +
+		    ((sv->sv_flags & SV_DSO_SIG) == 0 ? *sv->sv_szsigcode :
+		    (uintptr_t)sv->sv_szsigcode);
+>>>>>>> origin/freebsd/13-stable/main
 	} else {
 		kst.ksigtramp_start = (char *)p->p_psstrings -
 		    *sv->sv_szsigcode;

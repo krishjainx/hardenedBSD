@@ -58,7 +58,4 @@ CLEANFILES+= .version version.c
 version.c:
 	sh -e ${.CURDIR:H}/scripts/mkver ntpd
 
-afterbuild:
-	${ELFCTL} -e +noaslrstkgap ${PROG}
-
 .include <bsd.prog.mk>
