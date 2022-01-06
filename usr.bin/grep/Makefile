@@ -4,7 +4,11 @@
 
 .include <src.opts.mk>
 
+<<<<<<< HEAD
 NOCFI=	yes
+=======
+PACKAGE=	runtime
+>>>>>>> origin/freebsd/13-stable/main
 
 PROG=	grep
 MAN1=	grep.1 zgrep.1
