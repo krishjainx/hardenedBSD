@@ -37,4 +37,6 @@ CFLAGS+=	-I${SRCTOP}/sys/cddl/compat/opensolaris \
 
 LIBADD+=	spl z
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

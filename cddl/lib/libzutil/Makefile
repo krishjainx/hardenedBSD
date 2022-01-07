@@ -38,4 +38,6 @@ CFLAGS+= -I${SRCTOP}/sys/contrib/openzfs/lib/libzutil
 CFLAGS+= -DHAVE_ISSETUGID -DIN_BASE
 CFLAGS+= -include ${SRCTOP}/sys/modules/zfs/zfs_config.h
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

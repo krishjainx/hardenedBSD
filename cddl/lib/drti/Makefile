@@ -27,4 +27,6 @@ CFLAGS+=	-I${SRCTOP}/sys/cddl/compat/opensolaris \
 		-I${OPENSOLARIS_SYS_DISTDIR}/uts/common \
 		-DPIC ${PICFLAG}
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

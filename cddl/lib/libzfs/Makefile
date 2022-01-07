@@ -105,4 +105,6 @@ CFLAGS+= -include ${SRCTOP}/sys/modules/zfs/zfs_config.h
 CFLAGS+= -DSYSCONFDIR=\"/etc\"
 CFLAGS+= -DPKGDATADIR=\"/usr/share/zfs\"
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

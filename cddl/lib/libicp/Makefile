@@ -98,4 +98,6 @@ CFLAGS.sha1-x86_64.S+= -DLOCORE
 CFLAGS.sha256_impl.S+= -DLOCORE
 CFLAGS.sha512_impl.S+= -DLOCORE
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

@@ -28,4 +28,7 @@ CFLAGS+= -DHAVE_ISSETUGID  -DHAVE_CONFIG_H -DHAVE_XDR_BYTESREC
 
 
 CFLAGS.nvpair.c+= -UHAVE_RPC_TYPES
+
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

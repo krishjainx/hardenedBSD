@@ -13,4 +13,7 @@ CFLAGS+= -I${SRCTOP}/sys/contrib/openzfs/lib/libspl/include/
 CFLAGS+= -I${SRCTOP}/sys/contrib/openzfs/lib/libspl/include/os/freebsd
 CFLAGS+= -I${SRCTOP}/sys
 CFLAGS+= -include ${SRCTOP}/sys/contrib/openzfs/include/os/freebsd/spl/sys/ccompile.h
+
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

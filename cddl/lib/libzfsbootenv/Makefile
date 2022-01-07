@@ -30,4 +30,6 @@ CFLAGS+= -DHAVE_ISSETUGID
 CFLAGS+= -include ${SRCTOP}/sys/modules/zfs/zfs_config.h
 CFLAGS+= -I${SRCTOP}/sys/contrib/openzfs/include/os/freebsd/zfs
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

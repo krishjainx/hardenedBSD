@@ -47,4 +47,6 @@ CFLAGS+= -include ${SRCTOP}/sys/modules/zfs/zfs_config.h
 CFLAGS.atomic.c+=	-Wno-error=atomic-alignment
 .endif
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>

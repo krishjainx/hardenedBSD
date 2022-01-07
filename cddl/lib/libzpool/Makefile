@@ -264,4 +264,6 @@ CFLAGS+=	-g -DDEBUG=1
 CFLAGS.zfs_zstd.c=	-Wno-cast-qual -Wno-pointer-arith
 CFLAGS.zstd.c+=	-fno-tree-vectorize
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.lib.mk>
