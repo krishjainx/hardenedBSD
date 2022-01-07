@@ -50,12 +50,18 @@
 
 #include "libpfctl.h"
 
+const char* PFCTL_SYNCOOKIES_MODE_NAMES[] = {
+	"never",
+	"always",
+	"adaptive"
+};
+
 static int	_pfctl_clear_states(int , const struct pfctl_kill *,
 		    unsigned int *, uint64_t);
 
 static void
 pf_nvuint_8_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    u_int8_t *numbers, size_t *nelems)
+    uint8_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -72,7 +78,7 @@ pf_nvuint_8_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 
 static void
 pf_nvuint_16_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    u_int16_t *numbers, size_t *nelems)
+    uint16_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -89,7 +95,7 @@ pf_nvuint_16_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 
 static void
 pf_nvuint_32_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    u_int32_t *numbers, size_t *nelems)
+    uint32_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -106,7 +112,7 @@ pf_nvuint_32_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 
 static void
 pf_nvuint_64_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    u_int64_t *numbers, size_t *nelems)
+    uint64_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -281,14 +287,20 @@ pfctl_nv_add_addr_wrap(nvlist_t *nvparent, const char *name,
 static void
 pf_nvaddr_wrap_to_addr_wrap(const nvlist_t *nvl, struct pf_addr_wrap *addr)
 {
+	bzero(addr, sizeof(*addr));
+
 	addr->type = nvlist_get_number(nvl, "type");
 	addr->iflags = nvlist_get_number(nvl, "iflags");
-	if (addr->type == PF_ADDR_DYNIFTL)
+	if (addr->type == PF_ADDR_DYNIFTL) {
 		strlcpy(addr->v.ifname, nvlist_get_string(nvl, "ifname"),
 		    IFNAMSIZ);
-	if (addr->type == PF_ADDR_TABLE)
+		addr->p.dyncnt = nvlist_get_number(nvl, "dyncnt");
+	}
+	if (addr->type == PF_ADDR_TABLE) {
 		strlcpy(addr->v.tblname, nvlist_get_string(nvl, "tblname"),
 		    PF_TABLE_NAME_SIZE);
+		addr->p.tblcnt = nvlist_get_number(nvl, "tblcnt");
+	}
 
 	pf_nvaddr_to_addr(nvlist_get_nvlist(nvl, "addr"), &addr->v.a.addr);
 	pf_nvaddr_to_addr(nvlist_get_nvlist(nvl, "mask"), &addr->v.a.mask);
@@ -298,7 +310,7 @@ static void
 pfctl_nv_add_rule_addr(nvlist_t *nvparent, const char *name,
     const struct pf_rule_addr *addr)
 {
-	u_int64_t ports[2];
+	uint64_t ports[2];
 	nvlist_t *nvl = nvlist_create(0);
 
 	pfctl_nv_add_addr_wrap(nvl, "addr", &addr->addr);
@@ -339,7 +351,7 @@ static void
 pfctl_nv_add_pool(nvlist_t *nvparent, const char *name,
     const struct pfctl_pool *pool)
 {
-	u_int64_t ports[2];
+	uint64_t ports[2];
 	nvlist_t *nvl = nvlist_create(0);
 
 	nvlist_add_binary(nvl, "key", &pool->key, sizeof(pool->key));
@@ -388,7 +400,7 @@ static void
 pfctl_nv_add_uid(nvlist_t *nvparent, const char *name,
     const struct pf_rule_uid *uid)
 {
-	u_int64_t uids[2];
+	uint64_t uids[2];
 	nvlist_t *nvl = nvlist_create(0);
 
 	uids[0] = uid->uid[0];
@@ -449,6 +461,7 @@ pf_nvrule_to_rule(const nvlist_t *nvl, struct pfctl_rule *rule)
 	assert(labelcount <= PF_RULE_MAX_LABEL_COUNT);
 	for (size_t i = 0; i < labelcount; i++)
 		strlcpy(rule->label[i], labels[i], PF_RULE_LABEL_SIZE);
+	rule->ridentifier = nvlist_get_number(nvl, "ridentifier");
 	strlcpy(rule->ifname, nvlist_get_string(nvl, "ifname"), IFNAMSIZ);
 	strlcpy(rule->qname, nvlist_get_string(nvl, "qname"), PF_QNAME_SIZE);
 	strlcpy(rule->pqname, nvlist_get_string(nvl, "pqname"), PF_QNAME_SIZE);
@@ -480,6 +493,9 @@ pf_nvrule_to_rule(const nvlist_t *nvl, struct pfctl_rule *rule)
 	    nvlist_get_number(nvl, "max_src_conn_rate.seconds");
 	rule->qid = nvlist_get_number(nvl, "qid");
 	rule->pqid = nvlist_get_number(nvl, "pqid");
+	rule->dnpipe = nvlist_get_number(nvl, "dnpipe");
+	rule->dnrpipe = nvlist_get_number(nvl, "dnrpipe");
+	rule->free_flags = nvlist_get_number(nvl, "dnflags");
 	rule->prob = nvlist_get_number(nvl, "prob");
 	rule->cuid = nvlist_get_number(nvl, "cuid");
 	rule->cpid = nvlist_get_number(nvl, "cpid");
@@ -532,11 +548,11 @@ pf_nvrule_to_rule(const nvlist_t *nvl, struct pfctl_rule *rule)
 
 int
 pfctl_add_rule(int dev, const struct pfctl_rule *r, const char *anchor,
-    const char *anchor_call, u_int32_t ticket, u_int32_t pool_ticket)
+    const char *anchor_call, uint32_t ticket, uint32_t pool_ticket)
 {
 	struct pfioc_nv nv;
-	u_int64_t timeouts[PFTM_MAX];
-	u_int64_t set_prio[2];
+	uint64_t timeouts[PFTM_MAX];
+	uint64_t set_prio[2];
 	nvlist_t *nvl, *nvlr;
 	size_t labelcount;
 	int ret;
@@ -560,6 +576,7 @@ pfctl_add_rule(int dev, const struct pfctl_rule *r, const char *anchor,
 		    r->label[labelcount]);
 		labelcount++;
 	}
+	nvlist_add_number(nvlr, "ridentifier", r->ridentifier);
 
 	nvlist_add_string(nvlr, "ifname", r->ifname);
 	nvlist_add_string(nvlr, "qname", r->qname);
@@ -584,6 +601,9 @@ pfctl_add_rule(int dev, const struct pfctl_rule *r, const char *anchor,
 	    r->max_src_conn_rate.limit);
 	nvlist_add_number(nvlr, "max_src_conn_rate.seconds",
 	    r->max_src_conn_rate.seconds);
+	nvlist_add_number(nvlr, "dnpipe", r->dnpipe);
+	nvlist_add_number(nvlr, "dnrpipe", r->dnrpipe);
+	nvlist_add_number(nvlr, "dnflags", r->free_flags);
 	nvlist_add_number(nvlr, "prob", r->prob);
 	nvlist_add_number(nvlr, "cuid", r->cuid);
 	nvlist_add_number(nvlr, "cpid", r->cpid);
@@ -648,15 +668,15 @@ pfctl_add_rule(int dev, const struct pfctl_rule *r, const char *anchor,
 }
 
 int
-pfctl_get_rule(int dev, u_int32_t nr, u_int32_t ticket, const char *anchor,
-    u_int32_t ruleset, struct pfctl_rule *rule, char *anchor_call)
+pfctl_get_rule(int dev, uint32_t nr, uint32_t ticket, const char *anchor,
+    uint32_t ruleset, struct pfctl_rule *rule, char *anchor_call)
 {
 	return (pfctl_get_clear_rule(dev, nr, ticket, anchor, ruleset, rule,
 	    anchor_call, false));
 }
 
-int	pfctl_get_clear_rule(int dev, u_int32_t nr, u_int32_t ticket,
-	    const char *anchor, u_int32_t ruleset, struct pfctl_rule *rule,
+int	pfctl_get_clear_rule(int dev, uint32_t nr, uint32_t ticket,
+	    const char *anchor, uint32_t ruleset, struct pfctl_rule *rule,
 	    char *anchor_call, bool clear)
 {
 	struct pfioc_nv nv;
@@ -932,17 +952,40 @@ pfctl_kill_states(int dev, const struct pfctl_kill *kill, unsigned int *killed)
 	return (_pfctl_clear_states(dev, kill, killed, DIOCKILLSTATESNV));
 }
 
+static int
+pfctl_get_limit(int dev, const int index, uint *limit)
+{
+	struct pfioc_limit pl;
+
+	bzero(&pl, sizeof(pl));
+	pl.index = index;
+
+	if (ioctl(dev, DIOCGETLIMIT, &pl) == -1)
+		return (errno);
+
+	*limit = pl.limit;
+
+	return (0);
+}
+
 int
 pfctl_set_syncookies(int dev, const struct pfctl_syncookies *s)
 {
 	struct pfioc_nv	 nv;
 	nvlist_t	*nvl;
 	int		 ret;
+	uint		 state_limit;
+
+	ret = pfctl_get_limit(dev, PF_LIMIT_STATES, &state_limit);
+	if (ret != 0)
+		return (ret);
 
 	nvl = nvlist_create(0);
 
 	nvlist_add_bool(nvl, "enabled", s->mode != PFCTL_SYNCOOKIES_NEVER);
-	nvlist_add_bool(nvl, "adaptive", false); /* XXX TODO */
+	nvlist_add_bool(nvl, "adaptive", s->mode == PFCTL_SYNCOOKIES_ADAPTIVE);
+	nvlist_add_number(nvl, "highwater", state_limit * s->highwater / 100);
+	nvlist_add_number(nvl, "lowwater", state_limit * s->lowwater / 100);
 
 	nv.data = nvlist_pack(nvl, &nv.len);
 	nv.size = nv.len;
@@ -960,12 +1003,18 @@ pfctl_get_syncookies(int dev, struct pfctl_syncookies *s)
 {
 	struct pfioc_nv	 nv;
 	nvlist_t	*nvl;
-	bool		enabled, adaptive;
+	int		 ret;
+	uint		 state_limit;
+	bool		 enabled, adaptive;
+
+	ret = pfctl_get_limit(dev, PF_LIMIT_STATES, &state_limit);
+	if (ret != 0)
+		return (ret);
 
 	bzero(s, sizeof(*s));
 
-	nv.data = malloc(128);
-	nv.len = nv.size = 128;
+	nv.data = malloc(256);
+	nv.len = nv.size = 256;
 
 	if (ioctl(dev, DIOCGETSYNCOOKIES, &nv)) {
 		free(nv.data);
@@ -981,7 +1030,17 @@ pfctl_get_syncookies(int dev, struct pfctl_syncookies *s)
 	enabled = nvlist_get_bool(nvl, "enabled");
 	adaptive = nvlist_get_bool(nvl, "adaptive");
 
-	s->mode = enabled ? PFCTL_SYNCOOKIES_ALWAYS : PFCTL_SYNCOOKIES_NEVER;
+	if (enabled) {
+		if (adaptive)
+			s->mode = PFCTL_SYNCOOKIES_ADAPTIVE;
+		else
+			s->mode = PFCTL_SYNCOOKIES_ALWAYS;
+	} else {
+		s->mode = PFCTL_SYNCOOKIES_NEVER;
+	}
+
+	s->highwater = nvlist_get_number(nvl, "highwater") * 100 / state_limit;
+	s->lowwater = nvlist_get_number(nvl, "lowwater") * 100 / state_limit;
 
 	nvlist_destroy(nvl);
 

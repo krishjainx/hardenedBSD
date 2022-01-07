@@ -10,6 +10,7 @@ SUBDIR=	alias \
 	backlight \
 	banner \
 	basename \
+	beep \
 	brandelf \
 	bsdcat \
 	bsdiff \
@@ -260,7 +261,6 @@ SUBDIR.${MK_TOOLCHAIN}+=	addr2line
 SUBDIR.${MK_TOOLCHAIN}+=	ar
 SUBDIR.${MK_TOOLCHAIN}+=	nm
 SUBDIR.${MK_TOOLCHAIN}+=	objcopy
-SUBDIR.${MK_TOOLCHAIN}+=	readelf
 SUBDIR.${MK_TOOLCHAIN}+=	size
 .endif
 SUBDIR.${MK_TOOLCHAIN}+=	c89
@@ -274,6 +274,7 @@ SUBDIR.${MK_TOOLCHAIN}+=	gprof
 SUBDIR.${MK_TOOLCHAIN}+=	indent
 SUBDIR.${MK_TOOLCHAIN}+=	lex
 SUBDIR.${MK_TOOLCHAIN}+=	mkstr
+SUBDIR.${MK_TOOLCHAIN}+=	readelf
 SUBDIR.${MK_TOOLCHAIN}+=	rpcgen
 SUBDIR.${MK_TOOLCHAIN}+=	unifdef
 SUBDIR.${MK_TOOLCHAIN}+=	xstr

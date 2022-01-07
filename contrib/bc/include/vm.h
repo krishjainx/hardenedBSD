@@ -164,14 +164,20 @@
 /// The flag for read prompt. This is also reversed; the option clears the flag.
 #define BC_FLAG_R (UINTMAX_C(1)<<8)
 
+/// The flag for a leading zero.
+#define BC_FLAG_Z (UINTMAX_C(1)<<9)
+
 /// The flag for stdin being a TTY.
-#define BC_FLAG_TTYIN (UINTMAX_C(1)<<9)
+#define BC_FLAG_TTYIN (UINTMAX_C(1)<<10)
 
 /// The flag for TTY mode.
-#define BC_FLAG_TTY (UINTMAX_C(1)<<10)
+#define BC_FLAG_TTY (UINTMAX_C(1)<<11)
 
 /// The flag for reset on SIGINT.
-#define BC_FLAG_SIGINT (UINTMAX_C(1)<<11)
+#define BC_FLAG_SIGINT (UINTMAX_C(1)<<12)
+
+/// The flag for exiting with expressions.
+#define BC_FLAG_EXPR_EXIT (UINTMAX_C(1)<<13)
 
 /// A convenience macro for getting the TTYIN flag.
 #define BC_TTYIN (vm.flags & BC_FLAG_TTYIN)
@@ -214,6 +220,12 @@
 /// A convenience macro for getting the read prompt flag.
 #define BC_R (vm.flags & BC_FLAG_R)
 
+/// A convenience macro for getting the leading zero flag.
+#define BC_Z (vm.flags & BC_FLAG_Z)
+
+/// A convenience macro for getting the expression exit flag.
+#define BC_EXPR_EXIT (vm.flags & BC_FLAG_EXPR_EXIT)
+
 #if BC_ENABLED
 
 /// A convenience macro for checking if bc is in POSIX mode.
@@ -252,6 +264,10 @@
 
 /// A convenience macro for checking if the prompt is enabled.
 #define BC_PROMPT (BC_P)
+
+#else // !BC_ENABLE_LIBRARY
+
+#define BC_Z (vm.leading_zeroes)
 
 #endif // !BC_ENABLE_LIBRARY
 
@@ -405,6 +421,9 @@ typedef struct BcVm {
 
 	/// Whether or not bcl should abort on fatal errors.
 	bool abrt;
+
+	/// Whether or not to print leading zeros.
+	bool leading_zeroes;
 
 	/// The number of "references," or times that the library was initialized.
 	unsigned int refs;

@@ -50,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <net/pfvar.h>
 #include <arpa/inet.h>
 
+#include <assert.h>
 #include <search.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -618,9 +619,9 @@ print_status(struct pfctl_status *s, struct pfctl_syncookies *cookies, int opts)
 		}
 
 		printf("Syncookies\n");
+		assert(cookies->mode <= PFCTL_SYNCOOKIES_ADAPTIVE);
 		printf("  %-25s %s\n", "mode",
-		    cookies->mode == PFCTL_SYNCOOKIES_NEVER ?
-		    "never" : "always");
+		    PFCTL_SYNCOOKIES_MODE_NAMES[cookies->mode]);
 	}
 }
 
@@ -1018,6 +1019,17 @@ print_rule(struct pfctl_rule *r, const char *anchor_call, int verbose, int numer
 	i = 0;
 	while (r->label[i][0])
 		printf(" label \"%s\"", r->label[i++]);
+	if (r->ridentifier)
+		printf(" ridentifier %u", r->ridentifier);
+	/* Only dnrpipe as we might do (0, 42) to only queue return traffic. */
+	if (r->dnrpipe)
+		printf(" %s(%d, %d)",
+		    r->free_flags & PFRULE_DN_IS_PIPE ? "dnpipe" : "dnqueue",
+		    r->dnpipe, r->dnrpipe);
+	else if (r->dnpipe)
+		printf(" %s %d",
+		    r->free_flags & PFRULE_DN_IS_PIPE ? "dnpipe" : "dnqueue",
+		    r->dnpipe);
 	if (r->qname[0] && r->pqname[0])
 		printf(" queue(%s, %s)", r->qname, r->pqname);
 	else if (r->qname[0])

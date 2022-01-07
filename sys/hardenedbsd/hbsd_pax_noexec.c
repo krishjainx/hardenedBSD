@@ -1,7 +1,7 @@
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * Copyright (c) 2013-2017, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
- * Copyright (c) 2014, by Shawn Webb <lattera at gmail.com>
+ * Copyright (c) 2014, by Shawn Webb <shawn.webb@hardenedbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,6 @@
 #include <sys/jail.h>
 #include <sys/kthread.h>
 #include <sys/ktr.h>
-#include <sys/libkern.h>
 #include <sys/libkern.h>
 #include <sys/mman.h>
 #include <sys/pax.h>

@@ -1,10 +1,13 @@
 # $FreeBSD$
 
-PROG=	pkg
-SRCS=	pkg.c dns_utils.c config.c
-MAN=	pkg.7
+PACKAGE=	pkg-bootstrap
+
+PROG=		pkg
+SRCS=		pkg.c dns_utils.c config.c
+MAN=		pkg.7
 
 CONFS=		HardenedBSD.conf HardenedBSD.tor.conf
+PKGCONF?=	HardenedBSD.conf
 CONFSDIR=	/etc/pkg
 CONFSMODE=	644
 

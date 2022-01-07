@@ -46,7 +46,7 @@ However, if you wish to build it yourself, this `bc` can be built using Visual
 Studio or MSBuild.
 
 Unfortunately, only one build configuration (besides Debug or Release) is
-supported: extra math, and history enabled, NLS (locale support) disabled, with
+supported: extra math enabled, history and NLS (locale support) disabled, with
 both calculators built. The default [settings][11] are `BC_BANNER=1`,
 `{BC,DC}_SIGINT_RESET=0`, `{BC,DC}_TTY_MODE=1`, `{BC,DC}_PROMPT=1`.
 
@@ -65,7 +65,7 @@ with Visual Studio*.
 To build `bc`, run the following from the root directory:
 
 ```
-msbuild -property:Configuration=<config> bc.sln
+msbuild -property:Configuration=<config> vs/bc.sln
 ```
 
 where `<config>` is either one of `Debug` or `Release`.
@@ -73,15 +73,32 @@ where `<config>` is either one of `Debug` or `Release`.
 To build the library, run the following from the root directory:
 
 ```
-msbuild -property:Configuration=<config> bcl.sln
+msbuild -property:Configuration=<config> vs/bcl.sln
 ```
 
-where `<config>` is either one of `Debug` or `Release`.
+where `<config>` is either one of `Debug`, `ReleaseMD`, or `ReleaseMT`.
 
 ## POSIX-Compatible Systems
 
 Building `bc`, `dc`, and `bcl` (the library) is more complex than on Windows
 because many build options are supported.
+
+### Out-of-Source Builds
+
+Out-of-source builds are done by calling `configure.sh` from the directory where
+the build will happen. The `Makefile` is generated into that directory, and the
+build can happen normally from there.
+
+For example, if the source is in `bc`, the build should happen in `build`, then
+call `configure.sh` and `make` like so:
+
+```
+../bc/configure.sh
+make
+```
+
+***WARNING***: The path to `configure.sh` from the build directory must not have
+spaces because `make` does not support target names with spaces.
 
 ### Cross Compiling
 

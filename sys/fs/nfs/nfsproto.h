@@ -402,10 +402,13 @@
 /* Do an NFSv4.2 Deallocate. */
 #define	NFSPROC_DEALLOCATE	67
 
+/* Do an NFSv4.2 LayoutError. */
+#define	NFSPROC_LAYOUTERROR	68
+
 /*
  * Must be defined as one higher than the last NFSv4.2 Proc# above.
  */
-#define	NFSV42_NPROCS		68
+#define	NFSV42_NPROCS		69
 
 #endif	/* NFS_V3NPROCS */
 
@@ -505,6 +508,7 @@
 #define	NFSV4ACE_SUCCESSFULACCESS	0x00000010
 #define	NFSV4ACE_FAILEDACCESS		0x00000020
 #define	NFSV4ACE_IDENTIFIERGROUP	0x00000040
+#define	NFSV4ACE_INHERITED		0x00000080
 
 #define	NFSV4ACE_READDATA		0x00000001
 #define	NFSV4ACE_LISTDIRECTORY		0x00000001

@@ -89,6 +89,10 @@ Options:
 
       Put dc into interactive mode. See the man page for more details.
 
+  -L  --no-line-length
+
+      Disable line length checking.
+
   -P  --no-prompt
 
       Disable the prompts in interactive mode.
@@ -105,6 +109,10 @@ Options:
 
       Enable extended register mode.
 
+  -z  --leading-zeroes
+
+      Enable leading zeroes on numbers greater than -1 and less than 1.
+
 Environment variables:
 
   DC_ENV_ARGS
@@ -114,7 +122,7 @@ Environment variables:
   DC_LINE_LENGTH
 
       If an integer, the number of characters to print on a line before
-      wrapping.
+      wrapping. Using 0 will disable line length checking.
 
   DC_SIGINT_RESET
 
@@ -134,3 +142,10 @@ Environment variables:
       If an integer and non-zero, enable prompt when TTY mode is possible.
 
       Overrides the default, which is prompt %s.
+
+  DC_EXPR_EXIT
+
+      If an integer and non-zero, exit when expressions or expression files are
+      given on the command-line, and does not exit when an integer and zero.
+
+      Overrides the default, which is %s.

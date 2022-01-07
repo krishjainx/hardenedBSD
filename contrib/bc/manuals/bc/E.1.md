@@ -125,6 +125,14 @@ The following are the options that bc(1) accepts.
 
     This is a **non-portable extension**.
 
+**-L**, **-\-no-line-length**
+
+:   Disables line length checking and prints numbers without backslashes and
+    newlines. In other words, this option sets **BC_LINE_LENGTH** to **0** (see
+    the **ENVIRONMENT VARIABLES** section).
+
+    This is a **non-portable extension**.
+
 **-l**, **-\-mathlib**
 
 :   Sets **scale** (see the **SYNTAX** section) to **20** and loads the included
@@ -225,6 +233,17 @@ The following are the options that bc(1) accepts.
 
 :   Like **-s** and **-\-standard**, except that warnings (and not errors) are
     printed for non-standard extensions and execution continues normally.
+
+    This is a **non-portable extension**.
+
+**-z**, **-\-leading-zeroes**
+
+:   Makes bc(1) print all numbers greater than **-1** and less than **1**, and
+    not equal to **0**, with a leading zero.
+
+    This can be set for individual numbers with the **plz(x)**, plznl(x)**,
+    **pnlz(x)**, and **pnlznl(x)** functions in the extended math library (see
+    the **LIBRARY** section).
 
     This is a **non-portable extension**.
 
@@ -442,6 +461,14 @@ The following are valid operands in bc(1):
 	extension**.
 16.	**maxscale()**: The max allowable **scale**. This is a **non-portable
 	extension**.
+17.	**line_length()**: The line length set with **BC_LINE_LENGTH** (see the
+	**ENVIRONMENT VARIABLES** section). This is a **non-portable extension**.
+18.	**global_stacks()**: **0** if global stacks are not enabled with the **-g**
+	or **-\-global-stacks** options, non-zero otherwise. See the **OPTIONS**
+	section. This is a **non-portable extension**.
+19.	**leading_zero()**: **0** if leading zeroes are not enabled with the **-z**
+	or **--leading-zeroes** options, non-zero otherwise. See the **OPTIONS**
+	section. This is a **non-portable extension**.
 
 ## Numbers
 
@@ -1064,6 +1091,9 @@ bc(1) recognizes the following environment variables:
     lines to that length, including the backslash (**\\**). The default line
     length is **70**.
 
+    The special value of **0** will disable line length checking and print
+    numbers without regard to line length and without backslashes and newlines.
+
 **BC_BANNER**
 
 :   If this environment variable exists and contains an integer, then a non-zero
@@ -1118,6 +1148,17 @@ bc(1) recognizes the following environment variables:
     This environment variable and the **BC_TTY_MODE** environment variable
     override the default, which can be queried with the **-h** or **-\-help**
     options.
+
+**BC_EXPR_EXIT**
+
+:   If any expressions or expression files are given on the command-line with
+    **-e**, **-\-expression**, **-f**, or **-\-file**, then if this environment
+    variable exists and contains an integer, a non-zero value makes bc(1) exit
+    after executing the expressions and expression files, and a non-zero value
+    makes bc(1) not exit.
+
+    This environment variable overrides the default, which can be queried with
+    the **-h** or **-\-help** options.
 
 # EXIT STATUS
 

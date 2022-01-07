@@ -3,12 +3,15 @@
 /*-
  * Copyright (c) 2001 Theo de Raadt
  * Copyright (c) 2002-2006 Sam Leffler, Errno Consulting
- * Copyright (c) 2014 The FreeBSD Foundation
+ * Copyright (c) 2014-2021 The FreeBSD Foundation
  * All rights reserved.
  *
  * Portions of this software were developed by John-Mark Gurney
  * under sponsorship of the FreeBSD Foundation and
  * Rubicon Communications, LLC (Netgate).
+ *
+ * Portions of this software were developed by Ararat River
+ * Consulting, LLC under sponsorship of the FreeBSD Foundation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -100,7 +103,9 @@ struct session2_op32 {
 	uint32_t	mackey;
 	uint32_t	ses;
 	int		crid;
-	int		pad[4];
+	int		ivlen;
+	int		maclen;
+	int		pad[2];
 };
 
 struct crypt_op32 {
@@ -153,6 +158,8 @@ session2_op_from_32(const struct session2_op32 *from, struct session2_op *to)
 
 	session_op_from_32((const struct session_op32 *)from, to);
 	CP(*from, *to, crid);
+	CP(*from, *to, ivlen);
+	CP(*from, *to, maclen);
 }
 
 static void
@@ -262,10 +269,9 @@ struct csession {
 	uint32_t	ses;
 	struct mtx	lock;		/* for op submission */
 
-	const struct enc_xform *txform;
+	u_int		blocksize;
 	int		hashsize;
 	int		ivsize;
-	int		mode;
 
 	void		*key;
 	void		*mackey;
@@ -333,71 +339,11 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 	void *key = NULL;
 	void *mackey = NULL;
 	crypto_session_t cses;
-	int crid, error;
+	int crid, error, mac;
 
-	switch (sop->cipher) {
-	case 0:
-		txform = NULL;
-		break;
-	case CRYPTO_AES_CBC:
-		txform = &enc_xform_rijndael128;
-		break;
-	case CRYPTO_AES_XTS:
-		txform = &enc_xform_aes_xts;
-		break;
-	case CRYPTO_NULL_CBC:
-		txform = &enc_xform_null;
-		break;
-	case CRYPTO_CAMELLIA_CBC:
-		txform = &enc_xform_camellia;
-		break;
-	case CRYPTO_AES_ICM:
-		txform = &enc_xform_aes_icm;
-		break;
-	case CRYPTO_AES_NIST_GCM_16:
-		txform = &enc_xform_aes_nist_gcm;
-		break;
-	case CRYPTO_CHACHA20:
-		txform = &enc_xform_chacha20;
-		break;
-	case CRYPTO_AES_CCM_16:
-		txform = &enc_xform_ccm;
-		break;
-	case CRYPTO_CHACHA20_POLY1305:
-		txform = &enc_xform_chacha20_poly1305;
-		break;
-	default:
-		CRYPTDEB("invalid cipher");
-		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-		return (EINVAL);
-	}
-
-	switch (sop->mac) {
-	case 0:
-		thash = NULL;
-		break;
-	case CRYPTO_POLY1305:
-		thash = &auth_hash_poly1305;
-		break;
-	case CRYPTO_SHA1_HMAC:
-		thash = &auth_hash_hmac_sha1;
-		break;
-	case CRYPTO_SHA2_224_HMAC:
-		thash = &auth_hash_hmac_sha2_224;
-		break;
-	case CRYPTO_SHA2_256_HMAC:
-		thash = &auth_hash_hmac_sha2_256;
-		break;
-	case CRYPTO_SHA2_384_HMAC:
-		thash = &auth_hash_hmac_sha2_384;
-		break;
-	case CRYPTO_SHA2_512_HMAC:
-		thash = &auth_hash_hmac_sha2_512;
-		break;
-	case CRYPTO_RIPEMD160_HMAC:
-		thash = &auth_hash_hmac_ripemd_160;
-		break;
+	mac = sop->mac;
 #ifdef COMPAT_FREEBSD12
+	switch (sop->mac) {
 	case CRYPTO_AES_128_NIST_GMAC:
 	case CRYPTO_AES_192_NIST_GMAC:
 	case CRYPTO_AES_256_NIST_GMAC:
@@ -407,135 +353,58 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
 			return (EINVAL);
 		}
-		break;
-#endif
-	case CRYPTO_AES_NIST_GMAC:
-		switch (sop->mackeylen * 8) {
-		case 128:
-			thash = &auth_hash_nist_gmac_aes_128;
-			break;
-		case 192:
-			thash = &auth_hash_nist_gmac_aes_192;
-			break;
-		case 256:
-			thash = &auth_hash_nist_gmac_aes_256;
-			break;
-		default:
-			CRYPTDEB("invalid GMAC key length");
+		if (sop->keylen != sop->mackeylen) {
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
 			return (EINVAL);
 		}
+		mac = 0;
 		break;
 	case CRYPTO_AES_CCM_CBC_MAC:
-		switch (sop->mackeylen) {
-		case 16:
-			thash = &auth_hash_ccm_cbc_mac_128;
-			break;
-		case 24:
-			thash = &auth_hash_ccm_cbc_mac_192;
-			break;
-		case 32:
-			thash = &auth_hash_ccm_cbc_mac_256;
-			break;
-		default:
-			CRYPTDEB("Invalid CBC MAC key size %d", sop->keylen);
+		/* Should always be paired with CCM. */
+		if (sop->cipher != CRYPTO_AES_CCM_16) {
+			CRYPTDEB("CBC-MAC without CCM");
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
 			return (EINVAL);
 		}
+		if (sop->keylen != sop->mackeylen) {
+			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+			return (EINVAL);
+		}
+		mac = 0;
 		break;
-	case CRYPTO_SHA1:
-		thash = &auth_hash_sha1;
-		break;
-	case CRYPTO_SHA2_224:
-		thash = &auth_hash_sha2_224;
-		break;
-	case CRYPTO_SHA2_256:
-		thash = &auth_hash_sha2_256;
-		break;
-	case CRYPTO_SHA2_384:
-		thash = &auth_hash_sha2_384;
-		break;
-	case CRYPTO_SHA2_512:
-		thash = &auth_hash_sha2_512;
-		break;
-
-	case CRYPTO_NULL_HMAC:
-		thash = &auth_hash_null;
-		break;
-
-	case CRYPTO_BLAKE2B:
-		thash = &auth_hash_blake2b;
-		break;
-	case CRYPTO_BLAKE2S:
-		thash = &auth_hash_blake2s;
-		break;
-
-	default:
-		CRYPTDEB("invalid mac");
-		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-		return (EINVAL);
 	}
-
-	if (txform == NULL && thash == NULL) {
-		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-		return (EINVAL);
-	}
+#endif
 
 	memset(&csp, 0, sizeof(csp));
 	if (use_outputbuffers)
 		csp.csp_flags |= CSP_F_SEPARATE_OUTPUT;
+	if (mac != 0) {
+		csp.csp_auth_alg = mac;
+		csp.csp_auth_klen = sop->mackeylen;
+	}
+	if (sop->cipher != 0) {
+		csp.csp_cipher_alg = sop->cipher;
+		csp.csp_cipher_klen = sop->keylen;
+	}
+	thash = crypto_auth_hash(&csp);
+	txform = crypto_cipher(&csp);
 
-	if (sop->cipher == CRYPTO_AES_NIST_GCM_16) {
-		switch (sop->mac) {
-#ifdef COMPAT_FREEBSD12
-		case CRYPTO_AES_128_NIST_GMAC:
-		case CRYPTO_AES_192_NIST_GMAC:
-		case CRYPTO_AES_256_NIST_GMAC:
-			if (sop->keylen != sop->mackeylen) {
-				SDT_PROBE1(opencrypto, dev, ioctl, error,
-				    __LINE__);
-				return (EINVAL);
-			}
-			break;
-#endif
-		case 0:
-			break;
-		default:
+	if (txform != NULL && txform->macsize != 0) {
+		if (mac != 0) {
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
 			return (EINVAL);
 		}
 		csp.csp_mode = CSP_MODE_AEAD;
-	} else if (sop->cipher == CRYPTO_AES_CCM_16) {
-		switch (sop->mac) {
-#ifdef COMPAT_FREEBSD12
-		case CRYPTO_AES_CCM_CBC_MAC:
-			if (sop->keylen != sop->mackeylen) {
-				SDT_PROBE1(opencrypto, dev, ioctl, error,
-				    __LINE__);
-				return (EINVAL);
-			}
-			thash = NULL;
-			break;
-#endif
-		case 0:
-			break;
-		default:
-			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-			return (EINVAL);
-		}
-		csp.csp_mode = CSP_MODE_AEAD;
-	} else if (sop->cipher == CRYPTO_CHACHA20_POLY1305) {
-		if (sop->mac != 0) {
-			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-			return (EINVAL);
-		}
-		csp.csp_mode = CSP_MODE_AEAD;
-	} else if (txform != NULL && thash != NULL)
+	} else if (txform != NULL && thash != NULL) {
 		csp.csp_mode = CSP_MODE_ETA;
-	else if (txform != NULL)
+	} else if (txform != NULL) {
 		csp.csp_mode = CSP_MODE_CIPHER;
-	else
+	} else if (thash != NULL) {
 		csp.csp_mode = CSP_MODE_DIGEST;
+	} else {
+		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+		return (EINVAL);
+	}
 
 	switch (csp.csp_mode) {
 	case CSP_MODE_AEAD:
@@ -546,8 +415,6 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 	}
 
 	if (txform != NULL) {
-		csp.csp_cipher_alg = txform->type;
-		csp.csp_cipher_klen = sop->keylen;
 		if (sop->keylen > txform->maxkey ||
 		    sop->keylen < txform->minkey) {
 			CRYPTDEB("invalid cipher parameters");
@@ -568,8 +435,6 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 	}
 
 	if (thash != NULL) {
-		csp.csp_auth_alg = thash->type;
-		csp.csp_auth_klen = sop->mackeylen;
 		if (sop->mackeylen > thash->keysize || sop->mackeylen < 0) {
 			CRYPTDEB("invalid mac key length");
 			error = EINVAL;
@@ -595,6 +460,25 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 			csp.csp_ivlen = AES_CCM_IV_LEN;
 	}
 
+	if (sop->ivlen != 0) {
+		if (csp.csp_ivlen == 0) {
+			CRYPTDEB("does not support an IV");
+			error = EINVAL;
+			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+			goto bail;
+		}
+		csp.csp_ivlen = sop->ivlen;
+	}
+	if (sop->maclen != 0) {
+		if (!(thash != NULL || csp.csp_mode == CSP_MODE_AEAD)) {
+			CRYPTDEB("does not support a MAC");
+			error = EINVAL;
+			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+			goto bail;
+		}
+		csp.csp_auth_mlen = sop->maclen;
+	}
+
 	crid = sop->crid;
 	error = checkforsoftware(&crid);
 	if (error) {
@@ -614,18 +498,24 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 	refcount_init(&cse->refs, 1);
 	cse->key = key;
 	cse->mackey = mackey;
-	cse->mode = csp.csp_mode;
 	cse->cses = cses;
-	cse->txform = txform;
-	if (thash != NULL)
+	if (sop->maclen != 0)
+		cse->hashsize = sop->maclen;
+	else if (thash != NULL)
 		cse->hashsize = thash->hashsize;
-	else if (csp.csp_cipher_alg == CRYPTO_AES_NIST_GCM_16)
-		cse->hashsize = AES_GMAC_HASH_LEN;
-	else if (csp.csp_cipher_alg == CRYPTO_AES_CCM_16)
-		cse->hashsize = AES_CBC_MAC_HASH_LEN;
-	else if (csp.csp_cipher_alg == CRYPTO_CHACHA20_POLY1305)
-		cse->hashsize = POLY1305_HASH_LEN;
+	else if (csp.csp_mode == CSP_MODE_AEAD)
+		cse->hashsize = txform->macsize;
 	cse->ivsize = csp.csp_ivlen;
+
+	/*
+	 * NB: This isn't necessarily the block size of the underlying
+	 * MAC or cipher but is instead a restriction on valid input
+	 * sizes.
+	 */
+	if (txform != NULL)
+		cse->blocksize = txform->blocksize;
+	else
+		cse->blocksize = 1;
 
 	mtx_lock(&fcr->lock);
 	TAILQ_INSERT_TAIL(&fcr->csessions, cse, next);
@@ -743,6 +633,7 @@ cryptodev_cb(struct cryptop *crp)
 static int
 cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 {
+	const struct crypto_session_params *csp;
 	struct cryptop_data *cod = NULL;
 	struct cryptop *crp = NULL;
 	char *dst;
@@ -753,11 +644,9 @@ cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 		return (E2BIG);
 	}
 
-	if (cse->txform) {
-		if (cop->len == 0 || (cop->len % cse->txform->blocksize) != 0) {
-			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
-			return (EINVAL);
-		}
+	if ((cop->len % cse->blocksize) != 0) {
+		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+		return (EINVAL);
 	}
 
 	if (cop->mac && cse->hashsize == 0) {
@@ -792,7 +681,8 @@ cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 	if (cse->hashsize)
 		crp->crp_digest_start = cop->len;
 
-	switch (cse->mode) {
+	csp = crypto_get_params(cse->cses);
+	switch (csp->csp_mode) {
 	case CSP_MODE_COMPRESS:
 		switch (cop->op) {
 		case COP_ENCRYPT:
@@ -808,6 +698,12 @@ cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 		}
 		break;
 	case CSP_MODE_CIPHER:
+		if (cop->len == 0 ||
+		    (cop->iv == NULL && cop->len == cse->ivsize)) {
+			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+			error = EINVAL;
+			goto bail;
+		}
 		switch (cop->op) {
 		case COP_ENCRYPT:
 			crp->crp_op = CRYPTO_OP_ENCRYPT;
@@ -836,6 +732,13 @@ cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 			goto bail;
 		}
 		break;
+	case CSP_MODE_AEAD:
+		if (cse->ivsize != 0 && cop->iv == NULL) {
+			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+			error = EINVAL;
+			goto bail;
+		}
+		/* FALLTHROUGH */
 	case CSP_MODE_ETA:
 		switch (cop->op) {
 		case COP_ENCRYPT:
@@ -884,12 +787,13 @@ cryptodev_op(struct csession *cse, const struct crypt_op *cop)
 			goto bail;
 		}
 		crp->crp_iv_start = 0;
-		crp->crp_payload_start += cse->ivsize;
 		crp->crp_payload_length -= cse->ivsize;
+		if (crp->crp_payload_length != 0)
+			crp->crp_payload_start = cse->ivsize;
 		dst += cse->ivsize;
 	}
 
-	if (cop->mac != NULL && crp->crp_op & CRYPTO_OP_VERIFY_DIGEST) {
+	if (crp->crp_op & CRYPTO_OP_VERIFY_DIGEST) {
 		error = copyin(cop->mac, cod->buf + crp->crp_digest_start,
 		    cse->hashsize);
 		if (error) {
@@ -958,6 +862,7 @@ bail:
 static int
 cryptodev_aead(struct csession *cse, struct crypt_aead *caead)
 {
+	const struct crypto_session_params *csp;
 	struct cryptop_data *cod = NULL;
 	struct cryptop *crp = NULL;
 	char *dst;
@@ -968,8 +873,12 @@ cryptodev_aead(struct csession *cse, struct crypt_aead *caead)
 		return (E2BIG);
 	}
 
-	if (cse->txform == NULL || cse->hashsize == 0 || caead->tag == NULL ||
-	    (caead->len % cse->txform->blocksize) != 0) {
+	if ((caead->len % cse->blocksize) != 0) {
+		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
+		return (EINVAL);
+	}
+
+	if (cse->hashsize == 0 || caead->tag == NULL) {
 		SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
 		return (EINVAL);
 	}
@@ -1020,7 +929,8 @@ cryptodev_aead(struct csession *cse, struct crypt_aead *caead)
 	else
 		crp->crp_digest_start = crp->crp_payload_start + caead->len;
 
-	switch (cse->mode) {
+	csp = crypto_get_params(cse->cses);
+	switch (csp->csp_mode) {
 	case CSP_MODE_AEAD:
 	case CSP_MODE_ETA:
 		switch (caead->op) {
@@ -1058,9 +968,9 @@ cryptodev_aead(struct csession *cse, struct crypt_aead *caead)
 		 * Permit a 16-byte IV for AES-XTS, but only use the
 		 * first 8 bytes as a block number.
 		 */
-		if (cse->mode == CSP_MODE_ETA &&
-		    caead->ivlen == AES_BLOCK_LEN &&
-		    cse->ivsize == AES_XTS_IV_LEN)
+		if (csp->csp_mode == CSP_MODE_ETA &&
+		    csp->csp_cipher_alg == CRYPTO_AES_XTS &&
+		    caead->ivlen == AES_BLOCK_LEN)
 			caead->ivlen = AES_XTS_IV_LEN;
 
 		if (cse->ivsize == 0) {

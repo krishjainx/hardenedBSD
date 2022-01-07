@@ -49,6 +49,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/cons.h>
 #include <sys/endian.h>
 #include <sys/proc.h>
+#include <sys/reboot.h>
 #include <sys/sbuf.h>
 #include <geom/geom.h>
 #include <geom/geom_disk.h>
@@ -2157,7 +2158,7 @@ daasync(void *callback_arg, u_int32_t code,
 		}
 		break;
 	}
-	case AC_UNIT_ATTENTION:
+	case AC_UNIT_ATTENTION:		/* Called for this path: periph locked */
 	{
 		union ccb *ccb;
 		int error_code, sense_key, asc, ascq;
@@ -2167,9 +2168,7 @@ daasync(void *callback_arg, u_int32_t code,
 
 		/*
 		 * Handle all UNIT ATTENTIONs except our own, as they will be
-		 * handled by daerror(). Since this comes from a different periph,
-		 * that periph's lock is held, not ours, so we have to take it ours
-		 * out to touch softc flags.
+		 * handled by daerror().
 		 */
 		if (xpt_path_periph(ccb->ccb_h.path) != periph &&
 		    scsi_extract_sense_ccb(ccb,
@@ -2177,22 +2176,19 @@ daasync(void *callback_arg, u_int32_t code,
 			if (asc == 0x2A && ascq == 0x09) {
 				xpt_print(ccb->ccb_h.path,
 				    "Capacity data has changed\n");
-				cam_periph_lock(periph);
+				cam_periph_assert(periph, MA_OWNED);
 				softc->flags &= ~DA_FLAG_PROBED;
 				dareprobe(periph);
-				cam_periph_unlock(periph);
 			} else if (asc == 0x28 && ascq == 0x00) {
-				cam_periph_lock(periph);
+				cam_periph_assert(periph, MA_OWNED);
 				softc->flags &= ~DA_FLAG_PROBED;
-				cam_periph_unlock(periph);
 				disk_media_changed(softc->disk, M_NOWAIT);
 			} else if (asc == 0x3F && ascq == 0x03) {
 				xpt_print(ccb->ccb_h.path,
 				    "INQUIRY data has changed\n");
-				cam_periph_lock(periph);
+				cam_periph_assert(periph, MA_OWNED);
 				softc->flags &= ~DA_FLAG_PROBED;
 				dareprobe(periph);
-				cam_periph_unlock(periph);
 			}
 		}
 		break;
@@ -4533,13 +4529,11 @@ dadone(struct cam_periph *periph, union ccb *done_ccb)
 	struct bio *bp, *bp1;
 	struct da_softc *softc;
 	struct ccb_scsiio *csio;
-	u_int32_t  priority;
 	da_ccb_state state;
 
 	CAM_DEBUG(periph->path, CAM_DEBUG_TRACE, ("dadone\n"));
 
 	softc = (struct da_softc *)periph->softc;
-	priority = done_ccb->ccb_h.pinfo.priority;
 	csio = &done_ccb->csio;
 
 #if defined(BUF_TRACKING) || defined(FULL_BUF_TRACKING)
@@ -5304,7 +5298,6 @@ dadone_probeata(struct cam_periph *periph, union ccb *done_ccb)
 	u_int32_t  priority;
 	int continue_probe;
 	int error;
-	int16_t *ptr;
 
 	CAM_DEBUG(periph->path, CAM_DEBUG_TRACE, ("dadone_probeata\n"));
 
@@ -5312,7 +5305,6 @@ dadone_probeata(struct cam_periph *periph, union ccb *done_ccb)
 	priority = done_ccb->ccb_h.pinfo.priority;
 	csio = &done_ccb->csio;
 	ata_params = (struct ata_params *)csio->data_ptr;
-	ptr = (uint16_t *)ata_params;
 	continue_probe = 0;
 	error = 0;
 
@@ -5897,12 +5889,10 @@ static void
 dadone_tur(struct cam_periph *periph, union ccb *done_ccb)
 {
 	struct da_softc *softc;
-	struct ccb_scsiio *csio;
 
 	CAM_DEBUG(periph->path, CAM_DEBUG_TRACE, ("dadone_tur\n"));
 
 	softc = (struct da_softc *)periph->softc;
-	csio = &done_ccb->csio;
 
 	cam_periph_assert(periph, MA_OWNED);
 
@@ -5927,7 +5917,7 @@ static void
 dareprobe(struct cam_periph *periph)
 {
 	struct da_softc	  *softc;
-	int status;
+	int status __diagused;
 
 	softc = (struct da_softc *)periph->softc;
 
@@ -6250,6 +6240,9 @@ dashutdown(void * arg, int howto)
 	struct da_softc *softc;
 	union ccb *ccb;
 	int error;
+
+	if ((howto & RB_NOSYNC) != 0)
+		return;
 
 	CAM_PERIPH_FOREACH(periph, &dadriver) {
 		softc = (struct da_softc *)periph->softc;

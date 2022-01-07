@@ -4,7 +4,7 @@
 
 .include <src.opts.mk>
 
-NOCFI=	yes
+PACKAGE=	runtime
 
 PROG=	grep
 MAN1=	grep.1 zgrep.1
@@ -58,5 +58,7 @@ LIBADD+=	regex
 
 HAS_TESTS=
 SUBDIR.${MK_TESTS}+= tests
+
+NOCFI=	yes
 
 .include <bsd.prog.mk>

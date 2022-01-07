@@ -107,7 +107,8 @@ MALLOC_DEFINE(M_LINKER, "linker", "kernel linker");
 linker_file_t linker_kernel_file;
 
 static struct sx kld_sx;	/* kernel linker lock */
-static bool kld_busy;
+static u_int kld_busy;
+static struct thread *kld_busy_owner;
 
 /*
  * Load counter used by clients to determine if a linker file has been
@@ -912,7 +913,7 @@ linker_debug_lookup(const char *symstr, c_linker_sym_t *sym)
 	linker_file_t lf;
 
 	TAILQ_FOREACH(lf, &linker_files, link) {
-		if (LINKER_LOOKUP_SYMBOL(lf, symstr, sym) == 0)
+		if (LINKER_LOOKUP_DEBUG_SYMBOL(lf, symstr, sym) == 0)
 			return (0);
 	}
 	return (ENOENT);
@@ -956,7 +957,7 @@ linker_debug_symbol_values(c_linker_sym_t sym, linker_symval_t *symval)
 	linker_file_t lf;
 
 	TAILQ_FOREACH(lf, &linker_files, link) {
-		if (LINKER_SYMBOL_VALUES(lf, sym, symval) == 0)
+		if (LINKER_DEBUG_SYMBOL_VALUES(lf, sym, symval) == 0)
 			return (0);
 	}
 	return (ENOENT);
@@ -1066,7 +1067,9 @@ linker_kldload_busy(int flags)
 
 	if ((flags & LINKER_UB_LOCKED) == 0)
 		sx_xlock(&kld_sx);
-	while (kld_busy) {
+	while (kld_busy > 0) {
+		if (kld_busy_owner == curthread)
+			break;
 		error = sx_sleep(&kld_busy, &kld_sx,
 		    (flags & LINKER_UB_PCATCH) != 0 ? PCATCH : 0,
 		    "kldbusy", 0);
@@ -1076,7 +1079,8 @@ linker_kldload_busy(int flags)
 			return (error);
 		}
 	}
-	kld_busy = true;
+	kld_busy++;
+	kld_busy_owner = curthread;
 	if ((flags & LINKER_UB_UNLOCK) != 0)
 		sx_xunlock(&kld_sx);
 	return (0);
@@ -1091,9 +1095,15 @@ linker_kldload_unbusy(int flags)
 
 	if ((flags & LINKER_UB_LOCKED) == 0)
 		sx_xlock(&kld_sx);
-	MPASS(kld_busy);
-	kld_busy = false;
-	wakeup(&kld_busy);
+	MPASS(kld_busy > 0);
+	if (kld_busy_owner != curthread)
+		panic("linker_kldload_unbusy done by not owning thread %p",
+		    kld_busy_owner);
+	kld_busy--;
+	if (kld_busy == 0) {
+		kld_busy_owner = NULL;
+		wakeup(&kld_busy);
+	}
 	sx_xunlock(&kld_sx);
 }
 
@@ -1886,7 +1896,7 @@ linker_lookup_file(const char *path, int pathlen, const char *name,
 		 * Attempt to open the file, and return the path if
 		 * we succeed and it's a regular file.
 		 */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, result, td);
+		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, result);
 		flags = FREAD;
 		error = vn_open(&nd, &flags, 0, NULL);
 		if (error == 0) {
@@ -1936,7 +1946,7 @@ linker_hints_lookup(const char *path, int pathlen, const char *modname,
 	snprintf(pathbuf, reclen, "%.*s%s%s", pathlen, path, sep,
 	    linker_hintfile);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, pathbuf, td);
+	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, pathbuf);
 	flags = FREAD;
 	error = vn_open(&nd, &flags, 0, NULL);
 	if (error)

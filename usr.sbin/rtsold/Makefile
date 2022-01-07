@@ -35,5 +35,4 @@ CFLAGS+= -DWITH_CASPER
 LIBADD+= casper cap_syslog nv
 .endif
 
-
 .include <bsd.prog.mk>

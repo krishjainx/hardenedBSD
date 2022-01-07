@@ -32,6 +32,8 @@
 script="$0"
 testdir=$(dirname "$script")
 
+outputdir=${BC_TEST_OUTPUT_DIR:-$testdir/..}
+
 # Gets the timeconst script, which could be a command-line argument.
 if [ "$#" -gt 0 ]; then
 	timeconst="$1"
@@ -48,9 +50,8 @@ else
 	bc="$testdir/../../bin/bc"
 fi
 
-#
-out1="$testdir/bc_outputs/bc_timeconst.txt"
-out2="$testdir/bc_outputs/bc_timeconst_results.txt"
+out1="$outputdir/bc_outputs/bc_timeconst.txt"
+out2="$outputdir/bc_outputs/bc_timeconst_results.txt"
 
 outdir=$(dirname "$out1")
 

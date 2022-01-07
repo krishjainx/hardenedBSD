@@ -28,7 +28,7 @@
 .\" ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 19, 2021
+.Dd September 25, 2021
 .Dt PF.CONF 5
 .Os
 .Sh NAME
@@ -539,6 +539,34 @@ For example:
 .Bd -literal -offset indent
 set state-policy if-bound
 .Ed
+.It Ar set syncookies never | always | adaptive
+When
+.Cm syncookies
+are active, pf will answer each incoming TCP SYN with a syncookie SYNACK,
+without allocating any resources.
+Upon reception of the client's ACK in response to the syncookie
+SYNACK, pf will evaluate the ruleset and create state if the ruleset
+permits it, complete the three way handshake with the target host and
+continue the connection with synproxy in place.
+This allows pf to be resilient against large synflood attacks which would
+run the state table against its limits otherwise.
+Due to the blind answers to every incoming SYN syncookies share the caveats of
+synproxy, namely seemingly accepting connections that will be dropped later on.
+.Pp
+.Bl -tag -width adaptive -compact
+.It Cm never
+pf will never send syncookie SYNACKs (the default).
+.It Cm always
+pf will always send syncookie SYNACKs.
+.It Cm adaptive
+pf will enable syncookie mode when a given percentage of the state table
+is used up by half-open TCP connections, as in, those that saw the initial
+SYN but didn't finish the three way handshake.
+The thresholds for entering and leaving syncookie mode can be specified using
+.Bd -literal -offset indent
+set syncookies adaptive (start 25%, end 12%)
+.Ed
+.El
 .It Ar set state-defaults
 The
 .Ar state-defaults
@@ -772,7 +800,7 @@ much in the same way as
 works in the packet filter (see below).
 This mechanism should be used when it is necessary to exclude specific packets
 from broader scrub rules.
-.Sh QUEUEING
+.Sh QUEUEING with ALTQ
 The ALTQ system is currently not available in the GENERIC kernel nor as
 loadable modules.
 In order to use the herein after called queueing options one has to use a
@@ -1104,6 +1132,33 @@ pass out on dc0 inet proto tcp from any to any port 22 \e
 pass out on dc0 inet proto tcp from any to any port 25 \e
       queue mail
 .Ed
+.Sh QUEUEING with dummynet
+Queueing can also be done with
+.Xr dummynet 4 .
+Queues and pipes can be created with
+.Xr dnctl 8 .
+.Pp
+Packets can be assigned to queues and pipes using
+.Ar dnqueue
+and
+.Ar dnpipe
+respectively.
+.Pp
+Both
+.Ar dnqueue
+and
+.Ar dnpipe
+take either a single pipe or queue number or two numbers as arguments.
+The first pipe or queue number will be used to shape the traffic in the rule
+direction, the second will be used to shape the traffic in the reverse
+direction.
+If the rule does not specify a direction the first packet to create state will
+be shaped according to the first number, and the response traffic according to
+the second.
+.Pp
+If the
+.Xr dummynet 4
+module is not loaded any traffic sent into a queue or pipe will be dropped.
 .Sh TRANSLATION
 Translation rules modify either the source or destination address of the
 packets associated with a stateful connection.
@@ -1324,7 +1379,9 @@ rules in that parameters are set every time a packet matches the rule, not only
 on the last matching rule.
 For the following parameters, this means that the parameter effectively becomes
 "sticky" until explicitly overridden:
-.Ar queue
+.Ar queue ,
+.Ar dnpipe ,
+.Ar dnqueue
 .
 .It Ar pass
 The packet is passed;
@@ -1839,6 +1896,9 @@ pass in inet proto tcp from any to 1.2.3.5 \e
 The macro expansion for the
 .Ar label
 directive occurs only at configuration file parse time, not during runtime.
+.It Ar ridentifier Aq Ar number
+Add an identifier (number) to the rule, which can be used to correlate the rule
+to pflog entries, even after ruleset updates.
 .It Xo Ar queue Aq Ar queue
 .No \*(Ba ( Aq Ar queue ,
 .Aq Ar queue )
@@ -2941,7 +3001,10 @@ filteropt      = user | group | flags | icmp-type | icmp6-type | "tos" tos |
                  "label" string | "tag" string | [ ! ] "tagged" string |
                  "set prio" ( number | "(" number [ [ "," ] number ] ")" ) |
                  "queue" ( string | "(" string [ [ "," ] string ] ")" ) |
-                 "rtable" number | "probability" number"%" | "prio" number
+                 "rtable" number | "probability" number"%" | "prio" number |
+                 "dnpipe" ( number | "(" number "," number ")" ) |
+                 "dnqueue" ( number | "(" number "," number ")" ) |
+                 "ridentifier" number
 
 nat-rule       = [ "no" ] "nat" [ "pass" [ "log" [ "(" logopts ")" ] ] ]
                  [ "on" ifspec ] [ af ]
@@ -2965,6 +3028,7 @@ rdr-rule       = [ "no" ] "rdr" [ "pass" [ "log" [ "(" logopts ")" ] ] ]
 
 antispoof-rule = "antispoof" [ "log" ] [ "quick" ]
                  "for" ifspec [ af ] [ "label" string ]
+                 [ "ridentifier" number ]
 
 table-rule     = "table" "\*(Lt" string "\*(Gt" [ tableopts-list ]
 tableopts-list = tableopts-list tableopts | tableopts

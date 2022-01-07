@@ -157,6 +157,8 @@ void dc_lex_token(BcLex *l) {
 	char c = l->buf[l->i++], c2;
 	size_t i;
 
+	BC_SIG_ASSERT_LOCKED;
+
 	// If the last token was a command that needs a register, we need to parse a
 	// register, so do so.
 	for (i = 0; i < dc_lex_regs_len; ++i) {
@@ -245,6 +247,19 @@ void dc_lex_token(BcLex *l) {
 		case 'F':
 		{
 			bc_lex_number(l, c);
+			break;
+		}
+
+		case 'g':
+		{
+			c2 = l->buf[l->i];
+
+			if (c2 == 'l') l->t = BC_LEX_KW_LINE_LENGTH;
+			else if (c2 == 'z') l->t = BC_LEX_KW_LEADING_ZERO;
+			else bc_lex_invalidChar(l, c2);
+
+			l->i += 1;
+
 			break;
 		}
 

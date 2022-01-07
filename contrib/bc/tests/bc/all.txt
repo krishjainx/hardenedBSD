@@ -43,9 +43,11 @@ misc4
 misc5
 misc6
 misc7
+misc8
 void
 rand
 recursive_arrays
 divmod
 modexp
 bitfuncs
+leadingzero

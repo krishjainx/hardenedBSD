@@ -146,10 +146,9 @@ extern struct pmap	kernel_pmap_store;
 #define	ASID_RESERVED_FOR_PID_0	0
 #define	ASID_RESERVED_FOR_EFI	1
 #define	ASID_FIRST_AVAILABLE	(ASID_RESERVED_FOR_EFI + 1)
-#define	ASID_TO_OPERAND_SHIFT	48
 #define	ASID_TO_OPERAND(asid)	({					\
 	KASSERT((asid) != -1, ("invalid ASID"));			\
-	(uint64_t)(asid) << ASID_TO_OPERAND_SHIFT;			\
+	(uint64_t)(asid) << TTBR_ASID_SHIFT;			\
 })
 
 extern vm_offset_t virtual_avail;
@@ -167,6 +166,7 @@ extern vm_offset_t virtual_end;
 void	pmap_activate_vm(pmap_t);
 void	pmap_bootstrap(vm_offset_t, vm_offset_t, vm_paddr_t, vm_size_t);
 int	pmap_change_attr(vm_offset_t va, vm_size_t size, int mode);
+int	pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot);
 void	pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode);
 void	pmap_kenter_device(vm_offset_t, vm_size_t, vm_paddr_t);
 bool	pmap_klookup(vm_offset_t va, vm_paddr_t *pa);

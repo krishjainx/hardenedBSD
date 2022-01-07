@@ -127,11 +127,24 @@ cam_sim_alloc(sim_action_func sim_action, sim_poll_func sim_poll,
 	return (sim);
 }
 
+/**
+ * @brief frees up the sim
+ *
+ * Frees up the CAM @c sim and optionally the devq. If a mutex is associated
+ * with the sim, it must be locked on entry. It will remain locked on
+ * return.
+ *
+ * This function will wait for all outstanding reference to the sim to clear
+ * before returning.
+ *
+ * @param sim          The sim to free
+ * @param free_devq    Free the devq associated with the sim at creation.
+ */
 void
 cam_sim_free(struct cam_sim *sim, int free_devq)
 {
 	struct mtx *mtx;
-	int error;
+	int error __diagused;
 
 	if (sim->mtx == NULL) {
 		mtx = &cam_sim_free_mtx;

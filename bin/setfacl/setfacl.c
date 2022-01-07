@@ -61,7 +61,6 @@ struct sf_entry {
 };
 static TAILQ_HEAD(, sf_entry) entrylist;
 
-
 bool have_mask;
 bool have_stdin;
 bool n_flag;

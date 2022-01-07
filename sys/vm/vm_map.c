@@ -360,6 +360,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #endif
 #endif
 
+	vm->vm_stkgap = 0;
 	return (vm);
 }
 
@@ -2047,10 +2048,8 @@ vm_map_alignspace(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 		 */
 		if (alignment == 0)
 			pmap_align_superpage(object, offset, addr, length);
-		else if ((*addr & (alignment - 1)) != 0) {
-			*addr &= ~(alignment - 1);
-			*addr += alignment;
-		}
+		else
+			*addr = roundup2(*addr, alignment);
 		aligned_addr = *addr;
 		if (aligned_addr == free_addr) {
 			/*
@@ -4288,6 +4287,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_aslr_delta_map32bit = vm1->vm_aslr_delta_map32bit;
 #endif
 #endif
+	vm2->vm_stkgap = vm1->vm_stkgap;
 	vm_map_lock(old_map);
 	if (old_map->busy)
 		vm_map_wait_busy(old_map);

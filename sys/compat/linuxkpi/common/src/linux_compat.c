@@ -90,6 +90,7 @@ __FBSDID("$FreeBSD$");
 #include <linux/poll.h>
 #include <linux/smp.h>
 #include <linux/wait_bit.h>
+#include <linux/rcupdate.h>
 
 #if defined(__i386__) || defined(__amd64__)
 #include <asm/smp.h>
@@ -101,6 +102,11 @@ SYSCTL_NODE(_compat, OID_AUTO, linuxkpi, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
 int linuxkpi_debug;
 SYSCTL_INT(_compat_linuxkpi, OID_AUTO, debug, CTLFLAG_RWTUN,
     &linuxkpi_debug, 0, "Set to enable pr_debug() prints. Clear to disable.");
+
+int linuxkpi_warn_dump_stack = 0;
+SYSCTL_INT(_compat_linuxkpi, OID_AUTO, warn_dump_stack, CTLFLAG_RWTUN,
+    &linuxkpi_warn_dump_stack, 0,
+    "Set to enable stack traces from WARN_ON(). Clear to disable.");
 
 static struct timeval lkpi_net_lastlog;
 static int lkpi_net_curpps;
@@ -470,9 +476,11 @@ void
 linux_file_free(struct linux_file *filp)
 {
 	if (filp->_file == NULL) {
+		if (filp->f_op != NULL && filp->f_op->release != NULL)
+			filp->f_op->release(filp->f_vnode, filp);
 		if (filp->f_shmem != NULL)
 			vm_object_deallocate(filp->f_shmem);
-		kfree(filp);
+		kfree_rcu(filp, rcu);
 	} else {
 		/*
 		 * The close method of the character device or file
@@ -557,11 +565,11 @@ linux_cdev_pager_populate(vm_object_t vm_obj, vm_pindex_t pidx, int fault_type,
 		vmap->vm_pfn_pcount = &vmap->vm_pfn_count;
 		vmap->vm_obj = vm_obj;
 
-		err = vmap->vm_ops->fault(vmap, &vmf);
+		err = vmap->vm_ops->fault(&vmf);
 
 		while (vmap->vm_pfn_count == 0 && err == VM_FAULT_NOPAGE) {
 			kern_yield(PRI_USER);
-			err = vmap->vm_ops->fault(vmap, &vmf);
+			err = vmap->vm_ops->fault(&vmf);
 		}
 	}
 
@@ -1538,6 +1546,7 @@ linux_file_close(struct file *file, struct thread *td)
 	ldev = filp->f_cdev;
 	if (ldev != NULL)
 		linux_cdev_deref(ldev);
+	linux_synchronize_rcu(RCU_TYPE_REGULAR);
 	kfree(filp);
 
 	return (error);
@@ -1694,8 +1703,7 @@ out:
 }
 
 static int
-linux_file_stat(struct file *fp, struct stat *sb, struct ucred *active_cred,
-    struct thread *td)
+linux_file_stat(struct file *fp, struct stat *sb, struct ucred *active_cred)
 {
 	struct linux_file *filp;
 	struct vnode *vp;
@@ -1708,7 +1716,7 @@ linux_file_stat(struct file *fp, struct stat *sb, struct ucred *active_cred,
 	vp = filp->f_vnode;
 
 	vn_lock(vp, LK_SHARED | LK_RETRY);
-	error = VOP_STAT(vp, sb, td->td_ucred, NOCRED, td);
+	error = VOP_STAT(vp, sb, curthread->td_ucred, NOCRED);
 	VOP_UNLOCK(vp);
 
 	return (error);
@@ -1819,7 +1827,7 @@ vmmap_remove(void *addr)
 	return (vmmap);
 }
 
-#if defined(__i386__) || defined(__amd64__) || defined(__powerpc__) || defined(__aarch64__)
+#if defined(__i386__) || defined(__amd64__) || defined(__powerpc__) || defined(__aarch64__) || defined(__riscv)
 void *
 _ioremap_attr(vm_paddr_t phys_addr, unsigned long size, int attr)
 {
@@ -1842,7 +1850,7 @@ iounmap(void *addr)
 	vmmap = vmmap_remove(addr);
 	if (vmmap == NULL)
 		return;
-#if defined(__i386__) || defined(__amd64__) || defined(__powerpc__) || defined(__aarch64__)
+#if defined(__i386__) || defined(__amd64__) || defined(__powerpc__) || defined(__aarch64__) || defined(__riscv)
 	pmap_unmapdev((vm_offset_t)addr, vmmap->vm_size);
 #endif
 	kfree(vmmap);
@@ -2462,47 +2470,6 @@ list_sort(void *priv, struct list_head *head, int (*cmp)(void *priv,
 	for (i = 0; i < count; i++)
 		list_add_tail(ar[i], head);
 	free(ar, M_KMALLOC);
-}
-
-void
-lkpi_irq_release(struct device *dev, struct irq_ent *irqe)
-{
-
-	if (irqe->tag != NULL)
-		bus_teardown_intr(dev->bsddev, irqe->res, irqe->tag);
-	if (irqe->res != NULL)
-		bus_release_resource(dev->bsddev, SYS_RES_IRQ,
-		    rman_get_rid(irqe->res), irqe->res);
-	list_del(&irqe->links);
-}
-
-void
-lkpi_devm_irq_release(struct device *dev, void *p)
-{
-	struct irq_ent *irqe;
-
-	if (dev == NULL || p == NULL)
-		return;
-
-	irqe = p;
-	lkpi_irq_release(dev, irqe);
-}
-
-void
-linux_irq_handler(void *ent)
-{
-	struct irq_ent *irqe;
-
-	if (linux_set_current_flags(curthread, M_NOWAIT))
-		return;
-
-	irqe = ent;
-	if (irqe->handler(irqe->irq, irqe->arg) == IRQ_WAKE_THREAD &&
-	    irqe->thread_handler != NULL) {
-		THREAD_SLEEPING_OK();
-		irqe->thread_handler(irqe->irq, irqe->arg);
-		THREAD_NO_SLEEPING();
-	}
 }
 
 #if defined(__i386__) || defined(__amd64__)

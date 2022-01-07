@@ -1104,7 +1104,7 @@ static int mlx5e_fast_calibration = 1;
 static int mlx5e_normal_calibration = 30;
 
 static SYSCTL_NODE(_hw_mlx5, OID_AUTO, calibr, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
-    "MLX5 timestamp calibration parameteres");
+    "MLX5 timestamp calibration parameters");
 
 SYSCTL_INT(_hw_mlx5_calibr, OID_AUTO, duration, CTLFLAG_RWTUN,
     &mlx5e_calibration_duration, 0,
@@ -1126,10 +1126,10 @@ mlx5e_reset_calibration_callout(struct mlx5e_priv *priv)
 	if (priv->clbr_done == 0)
 		mlx5e_calibration_callout(priv);
 	else
-		callout_reset_curcpu(&priv->tstmp_clbr, (priv->clbr_done <
+		callout_reset_sbt_curcpu(&priv->tstmp_clbr, (priv->clbr_done <
 		    mlx5e_calibration_duration ? mlx5e_fast_calibration :
-		    mlx5e_normal_calibration) * hz, mlx5e_calibration_callout,
-		    priv);
+		    mlx5e_normal_calibration) * SBT_1S, 0,
+		    mlx5e_calibration_callout, priv, C_DIRECT_EXEC);
 }
 
 static uint64_t
@@ -4614,7 +4614,7 @@ mlx5e_create_ifp(struct mlx5_core_dev *mdev)
 	    OID_AUTO, "rx_clbr_done", CTLFLAG_RD,
 	    &priv->clbr_done, 0,
 	    "RX timestamps calibration state");
-	callout_init(&priv->tstmp_clbr, CALLOUT_DIRECT);
+	callout_init(&priv->tstmp_clbr, 1);
 	mlx5e_reset_calibration_callout(priv);
 
 	pa.pa_version = PFIL_VERSION;

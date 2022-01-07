@@ -29,7 +29,6 @@
 
 #include <sys/cdefs.h>
 
-#include "opt_compat.h"
 #include "opt_pax.h"
 
 #include <sys/param.h>
@@ -182,7 +181,6 @@ pax_SKEL_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 	/* Unknown status, force SKEL restriction. */
 	flags |= PAX_NOTE_SKEL;
 	flags &= ~PAX_NOTE_NOSKEL;
-#endif
 
 	return (flags);
 }

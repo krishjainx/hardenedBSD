@@ -121,6 +121,7 @@ SYSCTL_INT(_kern, OID_AUTO, coredump_pack_vmmapinfo, CTLFLAG_RWTUN,
 
 static int sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS);
+static int sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_stackprot(SYSCTL_HANDLER_ARGS);
 static int do_execve(struct thread *td, struct image_args *args,
     struct mac *mac_p, struct vmspace *oldvmspace);
@@ -135,6 +136,10 @@ SYSCTL_PROC(_kern, KERN_USRSTACK, usrstack, CTLTYPE_ULONG|CTLFLAG_RD|
     CTLFLAG_CAPRD|CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_usrstack, "LU",
     "Top of process stack");
 
+SYSCTL_PROC(_kern, KERN_STACKTOP, stacktop, CTLTYPE_ULONG | CTLFLAG_RD |
+    CTLFLAG_CAPRD | CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_stacktop, "LU",
+    "Top of process stack with stack gap.");
+
 SYSCTL_PROC(_kern, OID_AUTO, stackprot, CTLTYPE_INT|CTLFLAG_RD|CTLFLAG_MPSAFE,
     NULL, 0, sysctl_kern_stackprot, "I",
     "Stack memory permissions");
@@ -148,6 +153,12 @@ static int disallow_high_osrel;
 SYSCTL_INT(_kern, OID_AUTO, disallow_high_osrel, CTLFLAG_RW,
     &disallow_high_osrel, 0,
     "Disallow execution of binaries built for higher version of the world");
+
+
+static int core_dump_can_intr = 1;
+SYSCTL_INT(_kern, OID_AUTO, core_dump_can_intr, CTLFLAG_RWTUN,
+    &core_dump_can_intr, 0,
+    "Core dumping interruptible with SIGKILL");
 
 static int
 sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS)
@@ -184,7 +195,26 @@ sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 #endif
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
-	return error;
+	return (error);
+}
+
+static int
+sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
+{
+	struct proc *p;
+	int error;
+
+	p = curproc;
+#ifdef SCTL_MASK32
+	if (req->flags & SCTL_MASK32) {
+		unsigned int val;
+		val = (unsigned int)p->p_usrstack;
+		error = SYSCTL_OUT(req, &val, sizeof(val));
+	} else
+#endif
+		error = SYSCTL_OUT(req, &p->p_usrstack,
+		    sizeof(p->p_usrstack));
+	return (error);
 }
 
 static int
@@ -205,9 +235,9 @@ static const struct execsw **execsw;
 
 #ifndef _SYS_SYSPROTO_H_
 struct execve_args {
-	char    *fname; 
+	char    *fname;
 	char    **argv;
-	char    **envv; 
+	char    **envv;
 };
 #endif
 
@@ -345,6 +375,7 @@ kern_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
     struct vmspace *oldvmspace)
 {
 
+	TSEXEC(td->td_proc->p_pid, args->begin_argv);
 	AUDIT_ARG_ARGV(args->begin_argv, args->argc,
 	    exec_args_get_begin_envv(args) - args->begin_argv);
 	AUDIT_ARG_ENVV(exec_args_get_begin_envv(args), args->envc,
@@ -383,11 +414,13 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 #ifdef KTRACE
 	struct ktr_io_params *kiop;
 #endif
-	struct vnode *oldtextvp = NULL, *newtextvp;
-	int credential_changing;
+	struct vnode *oldtextvp, *newtextvp;
+	struct vnode *oldtextdvp, *newtextdvp;
+	char *oldbinname, *newbinname;
+	bool credential_changing;
 #ifdef MAC
 	struct label *interpvplabel = NULL;
-	int will_transition;
+	bool will_transition;
 #endif
 #ifdef HWPMC_HOOKS
 	struct pmckern_procexec pe;
@@ -395,6 +428,7 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 	int error, i, orig_osrel;
 	uint32_t orig_fctl0;
 	Elf_Brandinfo *orig_brandinfo;
+	size_t freepath_size;
 	static const char fexecv_proc_title[] = "(fexecv)";
 #ifdef PAX
 	image_params.pax.req_acl_flags = 0;
@@ -402,6 +436,9 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 #endif
 
 	imgp = &image_params;
+	oldtextvp = oldtextdvp = NULL;
+	newtextvp = newtextdvp = NULL;
+	newbinname = oldbinname = NULL;
 #ifdef KTRACE
 	kiop = NULL;
 #endif
@@ -437,18 +474,6 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 		goto exec_fail;
 #endif
 
-	/*
-	 * Translate the file name. namei() returns a vnode pointer
-	 *	in ni_vp among other things.
-	 *
-	 * XXXAUDIT: It would be desirable to also audit the name of the
-	 * interpreter if this is an interpreted binary.
-	 */
-	if (args->fname != NULL) {
-		NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | LOCKSHARED | FOLLOW |
-		    SAVENAME | AUDITVNODE1, UIO_SYSSPACE, args->fname, td);
-	}
-
 	SDT_PROBE1(proc, , , exec, args->fname);
 
 interpret:
@@ -465,20 +490,61 @@ interpret:
 			goto exec_fail;
 		}
 #endif
+
+		/*
+		 * Translate the file name. namei() returns a vnode
+		 * pointer in ni_vp among other things.
+		 */
+		NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | LOCKSHARED | FOLLOW |
+		    SAVENAME | AUDITVNODE1 | WANTPARENT, UIO_SYSSPACE,
+		    args->fname);
+
 		error = namei(&nd);
 		if (error)
 			goto exec_fail;
 
 		newtextvp = nd.ni_vp;
+		newtextdvp = nd.ni_dvp;
+		nd.ni_dvp = NULL;
+		newbinname = malloc(nd.ni_cnd.cn_namelen + 1, M_PARGS,
+		    M_WAITOK);
+		memcpy(newbinname, nd.ni_cnd.cn_nameptr, nd.ni_cnd.cn_namelen);
+		newbinname[nd.ni_cnd.cn_namelen] = '\0';
 		imgp->vp = newtextvp;
+
+		/*
+		 * Do the best to calculate the full path to the image file.
+		 */
+		if (args->fname[0] == '/') {
+			imgp->execpath = args->fname;
+		} else {
+			VOP_UNLOCK(imgp->vp);
+			freepath_size = MAXPATHLEN;
+			if (vn_fullpath_hardlink(newtextvp, newtextdvp,
+			    newbinname, nd.ni_cnd.cn_namelen, &imgp->execpath,
+			    &imgp->freepath, &freepath_size) != 0)
+				imgp->execpath = args->fname;
+			vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
+		}
 	} else {
 		AUDIT_ARG_FD(args->fd);
+
 		/*
-		 * Descriptors opened only with O_EXEC or O_RDONLY are allowed.
+		 * If the descriptors was not opened with O_PATH, then
+		 * we require that it was opened with O_EXEC or
+		 * O_RDONLY.  In either case, exec_check_permissions()
+		 * below checks _current_ file access mode regardless
+		 * of the permissions additionally checked at the
+		 * open(2).
 		 */
-		error = fgetvp_exec(td, args->fd, &cap_fexecve_rights, &newtextvp);
-		if (error)
+		error = fgetvp_exec(td, args->fd, &cap_fexecve_rights,
+		    &newtextvp);
+		if (error != 0)
 			goto exec_fail;
+
+		if (vn_fullpath(newtextvp, &imgp->execpath,
+		    &imgp->freepath) != 0)
+			imgp->execpath = args->fname;
 		vn_lock(newtextvp, LK_SHARED | LK_RETRY);
 		AUDIT_ARG_VNODE1(newtextvp);
 		imgp->vp = newtextvp;
@@ -537,14 +603,14 @@ interpret:
 	 * XXXMAC: For the time being, use NOSUID to also prohibit
 	 * transitions on the file system.
 	 */
-	credential_changing = 0;
+	credential_changing = false;
 	credential_changing |= (attr.va_mode & S_ISUID) &&
 	    oldcred->cr_uid != attr.va_uid;
 	credential_changing |= (attr.va_mode & S_ISGID) &&
 	    oldcred->cr_gid != attr.va_gid;
 #ifdef MAC
 	will_transition = mac_vnode_execve_will_transition(oldcred, imgp->vp,
-	    interpvplabel, imgp);
+	    interpvplabel, imgp) != 0;
 	credential_changing |= will_transition;
 #endif
 
@@ -602,18 +668,6 @@ interpret:
 	/* The new credentials are installed into the process later. */
 
 	/*
-	 * Do the best to calculate the full path to the image file.
-	 */
-	if (args->fname != NULL && args->fname[0] == '/')
-		imgp->execpath = args->fname;
-	else {
-		VOP_UNLOCK(imgp->vp);
-		if (vn_fullpath(imgp->vp, &imgp->execpath, &imgp->freepath) != 0)
-			imgp->execpath = args->fname;
-		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
-	}
-
-	/*
 	 *	If the current process has a special image activator it
 	 *	wants to try first, call it.   For example, emulating shell
 	 *	scripts differently.
@@ -664,16 +718,24 @@ interpret:
 		VOP_UNSET_TEXT_CHECKED(newtextvp);
 		imgp->textset = false;
 		/* free name buffer and old vnode */
-		if (args->fname != NULL)
-			NDFREE(&nd, NDF_ONLY_PNBUF);
 #ifdef MAC
 		mac_execve_interpreter_enter(newtextvp, &interpvplabel);
 #endif
 		if (imgp->opened) {
 			VOP_CLOSE(newtextvp, FREAD, td->td_ucred, td);
-			imgp->opened = 0;
+			imgp->opened = false;
 		}
 		vput(newtextvp);
+		imgp->vp = newtextvp = NULL;
+		if (args->fname != NULL) {
+			if (newtextdvp != NULL) {
+				vrele(newtextdvp);
+				newtextdvp = NULL;
+			}
+			NDFREE(&nd, NDF_ONLY_PNBUF);
+			free(newbinname, M_PARGS);
+			newbinname = NULL;
+		}
 		vm_object_deallocate(imgp->object);
 		imgp->object = NULL;
 		execve_nosetid(imgp);
@@ -681,8 +743,6 @@ interpret:
 		free(imgp->freepath, M_TEMP);
 		imgp->freepath = NULL;
 		/* set new name to that of the interpreter */
-		NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | LOCKSHARED | FOLLOW |
-		    SAVENAME, UIO_SYSSPACE, imgp->interpreter_name, td);
 		args->fname = imgp->interpreter_name;
 		goto interpret;
 	}
@@ -703,13 +763,11 @@ interpret:
 	}
 
 	p->p_psstrings = p->p_sysent->sv_psstrings;
+	p->p_vdso_base = p->p_sysent->sv_vdso_base;
 #ifdef PAX_ASLR
 	pax_aslr_stack_with_gap(p, &(p->p_psstrings));
+	pax_aslr_vdso(p, &(p->p_vdso_base));
 #endif
-
-	/* ABI enforces the use of Capsicum. Switch into capabilities mode. */
-	if (SV_PROC_FLAG(p, SV_CAPSICUM))
-		sys_cap_enter(td, NULL);
 
 	/*
 	 * Copy out strings (args and env) and initialize stack base.
@@ -729,21 +787,14 @@ interpret:
 		goto exec_fail_dealloc;
 	}
 
-	if (args->fdp != NULL) {
-		/* Install a brand new file descriptor table. */
-		fdinstall_remapped(td, args->fdp);
-		args->fdp = NULL;
-	} else {
-		/*
-		 * Keep on using the existing file descriptor table. For
-		 * security and other reasons, the file descriptor table
-		 * cannot be shared after an exec.
-		 */
-		fdunshare(td);
-		pdunshare(td);
-		/* close files on exec */
-		fdcloseexec(td);
-	}
+	/*
+	 * For security and other reasons, the file descriptor table cannot be
+	 * shared after an exec.
+	 */
+	fdunshare(td);
+	pdunshare(td);
+	/* close files on exec */
+	fdcloseexec(td);
 
 	/*
 	 * Malloc things before we need locks.
@@ -860,11 +911,17 @@ interpret:
 	}
 
 	/*
-	 * Store the vp for use in procfs.  This vnode was referenced by namei
-	 * or fgetvp_exec.
+	 * Store the vp for use in kern.proc.pathname.  This vnode was
+	 * referenced by namei() or by fexecve variant of fname handling.
 	 */
 	oldtextvp = p->p_textvp;
 	p->p_textvp = newtextvp;
+	oldtextdvp = p->p_textdvp;
+	p->p_textdvp = newtextdvp;
+	newtextdvp = NULL;
+	oldbinname = p->p_binname;
+	p->p_binname = newbinname;
+	newbinname = NULL;
 
 #ifdef KDTRACE_HOOKS
 	/*
@@ -930,8 +987,6 @@ exec_fail_dealloc:
 		exec_unmap_first_page(imgp);
 
 	if (imgp->vp != NULL) {
-		if (args->fname)
-			NDFREE(&nd, NDF_ONLY_PNBUF);
 		if (imgp->opened)
 			VOP_CLOSE(imgp->vp, FREAD, td->td_ucred, td);
 		if (imgp->textset)
@@ -940,6 +995,11 @@ exec_fail_dealloc:
 			vput(imgp->vp);
 		else
 			VOP_UNLOCK(imgp->vp);
+		if (args->fname != NULL)
+			NDFREE(&nd, NDF_ONLY_PNBUF);
+		if (newtextdvp != NULL)
+			vrele(newtextdvp);
+		free(newbinname, M_PARGS);
 	}
 
 	if (imgp->object != NULL)
@@ -978,6 +1038,9 @@ exec_fail:
 	 */
 	if (oldtextvp != NULL)
 		vrele(oldtextvp);
+	if (oldtextdvp != NULL)
+		vrele(oldtextdvp);
+	free(oldbinname, M_PARGS);
 #ifdef KTRACE
 	ktr_io_params_free(kiop);
 #endif
@@ -1042,7 +1105,7 @@ exec_map_first_page(struct image_params *imgp)
 #endif
 	error = vm_page_grab_valid_unlocked(&m, object, 0,
 	    VM_ALLOC_COUNT(VM_INITIAL_PAGEIN) |
-            VM_ALLOC_NORMAL | VM_ALLOC_NOBUSY | VM_ALLOC_WIRED);
+	    VM_ALLOC_NORMAL | VM_ALLOC_NOBUSY | VM_ALLOC_WIRED);
 
 	if (error != VM_PAGER_OK)
 		return (EIO);
@@ -1073,6 +1136,30 @@ exec_onexec_old(struct thread *td)
 }
 
 /*
+ * This is an optimization which removes the unmanaged shared page
+ * mapping. In combination with pmap_remove_pages(), which cleans all
+ * managed mappings in the process' vmspace pmap, no work will be left
+ * for pmap_remove(min, max).
+ */
+void
+exec_free_abi_mappings(struct proc *p)
+{
+	struct vmspace *vmspace;
+	struct sysentvec *sv;
+
+	vmspace = p->p_vmspace;
+	if (refcount_load(&vmspace->vm_refcnt) != 1)
+		return;
+
+	sv = p->p_sysent;
+	if (sv->sv_shared_page_obj == NULL)
+		return;
+
+	pmap_remove(vmspace_pmap(vmspace), sv->sv_shared_page_base,
+	    sv->sv_shared_page_base + sv->sv_shared_page_len);
+}
+
+/*
  * Destroy old address space, and allocate a new stack.
  *	The new stack is only sgrowsiz large because it is grown
  *	automatically on a page fault.
@@ -1092,7 +1179,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	vm_prot_t stackprot;
 	vm_prot_t stackmaxprot;
 
-	imgp->vmspace_destroyed = 1;
+	imgp->vmspace_destroyed = true;
 	imgp->sysent = sv;
 
 	if (p->p_sysent->sv_onexec_old != NULL)
@@ -1112,6 +1199,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	    vm_map_min(map) == sv_minuser &&
 	    vm_map_max(map) == sv->sv_maxuser &&
 	    cpu_exec_vmspace_reuse(p, map)) {
+		exec_free_abi_mappings(p);
 		shmexit(vmspace);
 		pmap_remove_pages(vmspace_pmap(vmspace));
 		vm_map_remove(map, vm_map_min(map), vm_map_max(map));
@@ -1221,6 +1309,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 		return (vm_mmap_to_errno(error));
 	}
+	vmspace->vm_stkgap = 0;
 
 	/*
 	 * vm_ssize and vm_maxsaddr are somewhat antiquated concepts, but they
@@ -1300,69 +1389,6 @@ exec_copyin_args(struct image_args *args, const char *fname,
 
 	return (0);
 
-err_exit:
-	exec_free_args(args);
-	return (error);
-}
-
-int
-exec_copyin_data_fds(struct thread *td, struct image_args *args,
-    const void *data, size_t datalen, const int *fds, size_t fdslen)
-{
-	struct filedesc *ofdp;
-	const char *p;
-	int *kfds;
-	int error;
-
-	memset(args, '\0', sizeof(*args));
-	ofdp = td->td_proc->p_fd;
-	if (datalen >= ARG_MAX || fdslen >= ofdp->fd_nfiles)
-		return (E2BIG);
-	error = exec_alloc_args(args);
-	if (error != 0)
-		return (error);
-
-	args->begin_argv = args->buf;
-	args->stringspace = ARG_MAX;
-
-	if (datalen > 0) {
-		/*
-		 * Argument buffer has been provided. Copy it into the
-		 * kernel as a single string and add a terminating null
-		 * byte.
-		 */
-		error = copyin(data, args->begin_argv, datalen);
-		if (error != 0)
-			goto err_exit;
-		args->begin_argv[datalen] = '\0';
-		args->endp = args->begin_argv + datalen + 1;
-		args->stringspace -= datalen + 1;
-
-		/*
-		 * Traditional argument counting. Count the number of
-		 * null bytes.
-		 */
-		for (p = args->begin_argv; p < args->endp; ++p)
-			if (*p == '\0')
-				++args->argc;
-	} else {
-		/* No argument buffer provided. */
-		args->endp = args->begin_argv;
-	}
-
-	/* Create new file descriptor table. */
-	kfds = malloc(fdslen * sizeof(int), M_TEMP, M_WAITOK);
-	error = copyin(fds, kfds, fdslen * sizeof(int));
-	if (error != 0) {
-		free(kfds, M_TEMP);
-		goto err_exit;
-	}
-	error = fdcopy_remapped(ofdp, kfds, fdslen, &args->fdp);
-	free(kfds, M_TEMP);
-	if (error != 0)
-		goto err_exit;
-
-	return (0);
 err_exit:
 	exec_free_args(args);
 	return (error);
@@ -1504,8 +1530,6 @@ exec_free_args(struct image_args *args)
 		free(args->fname_buf, M_TEMP);
 		args->fname_buf = NULL;
 	}
-	if (args->fdp != NULL)
-		fdescfree_remapped(args->fdp);
 }
 
 /*
@@ -1631,12 +1655,16 @@ exec_args_get_begin_envv(struct image_args *args)
 void
 exec_stackgap(struct image_params *imgp, uintptr_t *dp)
 {
+	struct proc *p = imgp->proc;
+
 	if (imgp->sysent->sv_stackgap == NULL ||
-	    (imgp->proc->p_fctl0 & (NT_FREEBSD_FCTL_ASLR_DISABLE |
+	    (p->p_fctl0 & (NT_FREEBSD_FCTL_ASLR_DISABLE |
 	    NT_FREEBSD_FCTL_ASG_DISABLE)) != 0 ||
-	    (imgp->map_flags & MAP_ASLR) == 0)
+	    (imgp->map_flags & MAP_ASLR) == 0) {
+		p->p_vmspace->vm_stkgap = 0;
 		return;
-	imgp->sysent->sv_stackgap(imgp, dp);
+	}
+	p->p_vmspace->vm_stkgap = imgp->sysent->sv_stackgap(imgp, dp);
 }
 
 /*
@@ -1653,43 +1681,33 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	uintptr_t destp, ustringp;
 	struct ps_strings *arginfo;
 	struct proc *p;
+	struct sysentvec *sysent;
 	size_t execpath_len;
-	int error, szsigcode, szps;
+	int error, szsigcode;
 	char canary[sizeof(long) * 8];
 
-	szps = sizeof(pagesizes[0]) * MAXPAGESIZES;
-	/*
-	 * Calculate string base and vector table pointers.
-	 * Also deal with signal trampoline code for this exec type.
-	 */
-	if (imgp->execpath != NULL && imgp->auxargs != NULL)
-		execpath_len = strlen(imgp->execpath) + 1;
-	else
-		execpath_len = 0;
 	p = imgp->proc;
+	sysent = p->p_sysent;
 	szsigcode = 0;
 	arginfo = (struct ps_strings *)p->p_psstrings;
-	p->p_sigcode_base = p->p_sysent->sv_sigcode_base;
+	p->p_sigcode_base = sysent->sv_sigcode_base;
 	imgp->ps_strings = arginfo;
-	if (p->p_sigcode_base == 0) {
-		if (p->p_sysent->sv_szsigcode != NULL)
-			szsigcode = *(p->p_sysent->sv_szsigcode);
-#ifdef PAX_ASLR
-	} else {
-		// XXXOP
-		pax_aslr_vdso(p, &(p->p_sigcode_base));
-#endif
-	}
 	destp =	(uintptr_t)arginfo;
 
+#ifdef PAX_ASLR
+	if (p->p_sigcode_base != 0) {
+		pax_aslr_vdso(p, &(p->p_sigcode_base));
+	}
+#endif
+
 	/*
-	 * install sigcode
+	 * Install sigcode.
 	 */
-	if (szsigcode != 0) {
+	if (p->p_sigcode_base == 0 && sysent->sv_szsigcode != NULL) {
+		szsigcode = *(sysent->sv_szsigcode);
 		destp -= szsigcode;
 		destp = rounddown2(destp, sizeof(void *));
-		error = copyout(p->p_sysent->sv_sigcode, (void *)destp,
-		    szsigcode);
+		error = copyout(sysent->sv_sigcode, (void *)destp, szsigcode);
 		if (error != 0)
 			return (error);
 	}
@@ -1697,7 +1715,8 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	/*
 	 * Copy the image path for the rtld.
 	 */
-	if (execpath_len != 0) {
+	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
+		execpath_len = strlen(imgp->execpath) + 1;
 		destp -= execpath_len;
 		destp = rounddown2(destp, sizeof(void *));
 		imgp->execpathp = (void *)destp;
@@ -1720,13 +1739,13 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	/*
 	 * Prepare the pagesizes array.
 	 */
-	destp -= szps;
+	imgp->pagesizeslen = sizeof(pagesizes[0]) * MAXPAGESIZES;
+	destp -= imgp->pagesizeslen;
 	destp = rounddown2(destp, sizeof(void *));
 	imgp->pagesizes = (void *)destp;
-	error = copyout(pagesizes, imgp->pagesizes, szps);
+	error = copyout(pagesizes, imgp->pagesizes, imgp->pagesizeslen);
 	if (error != 0)
 		return (error);
-	imgp->pagesizeslen = szps;
 
 	/*
 	 * Allocate room for the argument and environment strings.
@@ -1898,7 +1917,7 @@ exec_check_permissions(struct image_params *imgp)
 	 */
 	error = VOP_OPEN(vp, FREAD, td->td_ucred, td, NULL);
 	if (error == 0)
-		imgp->opened = 1;
+		imgp->opened = true;
 	return (error);
 }
 
@@ -1961,9 +1980,9 @@ exec_unregister(const struct execsw *execsw_arg)
  * Write out a core segment to the compression stream.
  */
 static int
-compress_chunk(struct coredump_params *cp, char *base, char *buf, u_int len)
+compress_chunk(struct coredump_params *cp, char *base, char *buf, size_t len)
 {
-	u_int chunk_len;
+	size_t chunk_len;
 	int error;
 
 	while (len > 0) {
@@ -2020,6 +2039,8 @@ core_output(char *base, size_t len, off_t offset, struct coredump_params *cp,
 		 * anonymous memory or truncated files, for example.
 		 */
 		for (runlen = 0; runlen < len; runlen += PAGE_SIZE) {
+			if (core_dump_can_intr && curproc_sigkilled())
+				return (EINTR);
 			error = vm_fault(map, (uintptr_t)base + runlen,
 			    VM_PROT_READ, VM_FAULT_NOFILL, NULL);
 			if (runlen == 0)
@@ -2092,7 +2113,8 @@ sbuf_drain_core_output(void *arg, const char *data, int len)
 	if (locked)
 		PROC_UNLOCK(p);
 	if (cp->comp != NULL)
-		error = compressor_write(cp->comp, __DECONST(char *, data), len);
+		error = compressor_write(cp->comp, __DECONST(char *, data),
+		    len);
 	else
 		error = core_write(cp, __DECONST(void *, data), len, cp->offset,
 		    UIO_SYSSPACE, NULL);

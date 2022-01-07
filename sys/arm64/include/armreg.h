@@ -238,6 +238,7 @@
 #define	 EXCP_SOFTSTP_EL1	0x33	/* Software Step, from same EL */
 #define	 EXCP_WATCHPT_EL0	0x34	/* Watchpoint, from lower EL */
 #define	 EXCP_WATCHPT_EL1	0x35	/* Watchpoint, from same EL */
+#define	 EXCP_BRKPT_32		0x38    /* 32bits breakpoint */
 #define	 EXCP_BRK		0x3c	/* Breakpoint */
 
 /* ICC_CTLR_EL1 */
@@ -1185,6 +1186,13 @@
 #else
 #define	TCR_SMP_ATTRS	0
 #endif
+
+/* TTBR0_EL1 & TTBR1_EL1 - Translation Table Base Register 0 & 1 */
+#define	TTBR_ASID_SHIFT		48
+#define	TTBR_ASID_MASK		(0xfffful << TTBR_ASID_SHIFT)
+#define	TTBR_BADDR		0x0000fffffffffffeul
+#define	TTBR_CnP_SHIFT		0
+#define	TTBR_CnP		(1ul << TTBR_CnP_SHIFT)
 
 /* Saved Program Status Register */
 #define	DBG_SPSR_SS	(0x1 << 21)

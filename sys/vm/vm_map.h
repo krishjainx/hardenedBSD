@@ -300,6 +300,7 @@ struct vmspace {
 #ifdef __LP64__
 	vm_offset_t vm_aslr_delta_map32bit; /* random for MAP_32BIT mappings */
 #endif
+	vm_size_t vm_stkgap;	/* stack gap size in bytes */
 	u_int vm_refcnt;	/* number of references */
 	/*
 	 * Keep the PMAP last, so that CPU-specific variations of that

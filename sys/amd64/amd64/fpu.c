@@ -448,6 +448,8 @@ fpuinitstate(void *arg __unused)
 		    xsave_area_elm_descr), M_DEVBUF, M_WAITOK | M_ZERO);
 	}
 
+	cpu_thread_alloc(&thread0);
+
 	saveintr = intr_disable();
 	stop_emulating();
 
@@ -470,7 +472,8 @@ fpuinitstate(void *arg __unused)
 
 	/*
 	 * Create a table describing the layout of the CPU Extended
-	 * Save Area.
+	 * Save Area.  See Intel SDM rev. 075 Vol. 1 13.4.1 "Legacy
+	 * Region of an XSAVE Area" for the source of offsets/sizes.
 	 */
 	if (use_xsave) {
 		xstate_bv = (uint64_t *)((char *)(fpu_initialstate + 1) +
@@ -482,7 +485,7 @@ fpuinitstate(void *arg __unused)
 		xsave_area_desc[0].size = 160;
 		/* XMM */
 		xsave_area_desc[1].offset = 160;
-		xsave_area_desc[1].size = 288 - 160;
+		xsave_area_desc[1].size = 416 - 160;
 
 		for (i = 2; i < max_ext_n; i++) {
 			cpuid_count(0xd, i, cp);

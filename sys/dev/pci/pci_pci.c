@@ -1397,7 +1397,7 @@ pcib_setup_hotplug(struct pcib_softc *sc)
 	    pcib_pcie_cc_timeout, sc);
 	TIMEOUT_TASK_INIT(taskqueue_pci_hp, &sc->pcie_dll_task, 0,
 	    pcib_pcie_dll_timeout, sc);
-	sc->pcie_hp_lock = &Giant;
+	sc->pcie_hp_lock = bus_topo_mtx();
 
 	/* Allocate IRQ. */
 	if (pcib_alloc_pcie_irq(sc) != 0)
@@ -2364,7 +2364,20 @@ pcib_adjust_resource(device_t bus, device_t child, int type, struct resource *r,
 		    start, end));
 
 #ifdef PCI_RES_BUS
-	if (type != PCI_RES_BUS)
+	if (type == PCI_RES_BUS) {
+		/*
+		 * If our bus range isn't big enough to grow the sub-allocation
+		 * then we need to grow our bus range. Any request that would
+		 * require us to decrease the start of our own bus range is
+		 * invalid, we can only extend the end; ignore such requests
+		 * and let rman_adjust_resource fail below.
+		 */
+		if (start >= sc->bus.sec && end > sc->bus.sub) {
+			error = pcib_grow_subbus(&sc->bus, end);
+			if (error != 0)
+				return (error);
+		}
+	} else
 #endif
 	{
 		/*

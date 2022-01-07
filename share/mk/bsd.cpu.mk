@@ -14,8 +14,6 @@ MACHINE_CPU = amd64 sse2 sse mmx
 MACHINE_CPU = arm
 . elif ${MACHINE_CPUARCH} == "i386"
 MACHINE_CPU = i486
-. elif ${MACHINE_CPUARCH} == "mips"
-MACHINE_CPU = mips
 . elif ${MACHINE_CPUARCH} == "powerpc"
 MACHINE_CPU = aim
 . elif ${MACHINE_CPUARCH} == "riscv"
@@ -81,7 +79,6 @@ CPUTYPE = pentium
 # defined therein.  Consult:
 #	http://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html
 #	http://gcc.gnu.org/onlinedocs/gcc/RS-6000-and-PowerPC-Options.html
-#	http://gcc.gnu.org/onlinedocs/gcc/MIPS-Options.html
 #	http://gcc.gnu.org/onlinedocs/gcc/SPARC-Options.html
 #	http://gcc.gnu.org/onlinedocs/gcc/i386-and-x86_002d64-Options.html
 
@@ -116,10 +113,12 @@ _CPUCFLAGS = -march=${CPUTYPE}
 # arm: (any arm v4 or v5 processor you are targeting)
 #	arm920t, arm926ej-s, marvell-pj4, fa526, fa626,
 #	fa606te, fa626te, fa726te
-# armv6: (any arm v7 or v8 processor you are targeting and the arm1176jzf-s)
-# 	arm1176jzf-s, generic-armv7-a, cortex-a5, cortex-a7, cortex-a8,
-#	cortex-a9, cortex-a12, cortex-a15, cortex-a17, cortex-a53, cortex-a57,
-#	cortex-a72, exynos-m1
+# armv6:
+# 	arm1176jzf-s
+# armv7: generic-armv7-a, cortex-a5, cortex-a7, cortex-a8, cortex-a9,
+#       cortex-a12, cortex-a15, cortex-a17
+#       cortex-a53, cortex-a57, cortex-a72,
+#       exynos-m1
 _CPUCFLAGS = -mcpu=${CPUTYPE}
 . endif
 . elif ${MACHINE_ARCH} == "powerpc"
@@ -130,20 +129,6 @@ _CPUCFLAGS = -mcpu=${CPUTYPE} -mno-powerpc64
 .  endif
 . elif ${MACHINE_ARCH:Mpowerpc64*} != ""
 _CPUCFLAGS = -mcpu=${CPUTYPE}
-. elif ${MACHINE_CPUARCH} == "mips"
-# mips[1234], mips32, mips64, and all later releases need to have mips
-# preserved (releases later than r2 require external toolchain)
-.  if ${CPUTYPE:Mmips32*} != "" || ${CPUTYPE:Mmips64*} != "" || \
-	${CPUTYPE:Mmips[1234]} != ""
-_CPUCFLAGS = -march=${CPUTYPE}
-. else
-# Default -march to the CPUTYPE passed in, with mips stripped off so we
-# accept either mips4kc or 4kc, mostly for historical reasons
-# Typical values for cores:
-#	4kc, 24kc, 34kc, 74kc, 1004kc, octeon, octeon+, octeon2, octeon3,
-#	sb1, xlp, xlr
-_CPUCFLAGS = -march=${CPUTYPE:S/^mips//}
-. endif
 . elif ${MACHINE_CPUARCH} == "aarch64"
 .  if ${CPUTYPE:Marmv*} != ""
 # Use -march when the CPU type is an architecture value, e.g. armv8.1-a
@@ -287,9 +272,6 @@ MACHINE_CPU = ssse3 sse3
 MACHINE_CPU = sse3
 .  endif
 MACHINE_CPU += amd64 sse2 sse mmx
-########## Mips
-. elif ${MACHINE_CPUARCH} == "mips"
-MACHINE_CPU = mips
 ########## powerpc
 . elif ${MACHINE_ARCH} == "powerpc"
 .  if ${CPUTYPE} == "e500"
@@ -298,30 +280,6 @@ MACHINE_CPU = booke softfp
 ########## riscv
 . elif ${MACHINE_CPUARCH} == "riscv"
 MACHINE_CPU = riscv
-. endif
-.endif
-
-.if ${MACHINE_CPUARCH} == "mips"
-CFLAGS += -G0
-AFLAGS+= -${MIPS_ENDIAN} -mabi=${MIPS_ABI}
-CFLAGS+= -${MIPS_ENDIAN} -mabi=${MIPS_ABI}
-LDFLAGS+= -${MIPS_ENDIAN} -mabi=${MIPS_ABI}
-. if ${MACHINE_ARCH:Mmips*el*} != ""
-MIPS_ENDIAN=	EL
-. else
-MIPS_ENDIAN=	EB
-. endif
-. if ${MACHINE_ARCH:Mmips64*} != ""
-MIPS_ABI?=	64
-. elif ${MACHINE_ARCH:Mmipsn32*} != ""
-MIPS_ABI?=	n32
-. else
-MIPS_ABI?=	32
-. endif
-. if ${MACHINE_ARCH:Mmips*hf}
-CFLAGS += -mhard-float
-. else
-CFLAGS += -msoft-float
 . endif
 .endif
 

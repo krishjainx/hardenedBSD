@@ -7804,6 +7804,14 @@ enum fw_port_type {
 	FW_PORT_TYPE_NONE = M_FW_PORT_CMD_PTYPE
 };
 
+static inline bool
+is_bt(enum fw_port_type port_type)
+{
+	return (port_type == FW_PORT_TYPE_BT_SGMII ||
+	    port_type == FW_PORT_TYPE_BT_XFI ||
+	    port_type == FW_PORT_TYPE_BT_XAUI);
+}
+
 /* These are read from module's EEPROM and determined once the
    module is inserted. */
 enum fw_port_module_type {
@@ -9952,7 +9960,10 @@ struct fw_hdr {
 	__u32	reserved3;
 	__be32	magic;			/* runtime or bootstrap fw */
 	__be32	flags;
-	__be32	reserved6[23];
+	__be32	reserved6[4];
+	__u8	reserved7[3];
+	__u8	dsign_len;
+	__u8	dsign[72];		/* fw binary digital signature */
 };
 
 enum fw_hdr_chip {
@@ -9992,17 +10003,17 @@ enum fw_hdr_chip {
 enum {
 	T4FW_VERSION_MAJOR	= 1,
 	T4FW_VERSION_MINOR	= 26,
-	T4FW_VERSION_MICRO	= 0,
+	T4FW_VERSION_MICRO	= 6,
 	T4FW_VERSION_BUILD	= 0,
 
 	T5FW_VERSION_MAJOR	= 1,
 	T5FW_VERSION_MINOR	= 26,
-	T5FW_VERSION_MICRO	= 0,
+	T5FW_VERSION_MICRO	= 6,
 	T5FW_VERSION_BUILD	= 0,
 
 	T6FW_VERSION_MAJOR	= 1,
 	T6FW_VERSION_MINOR	= 26,
-	T6FW_VERSION_MICRO	= 0,
+	T6FW_VERSION_MICRO	= 6,
 	T6FW_VERSION_BUILD	= 0,
 };
 
@@ -10052,6 +10063,7 @@ enum {
 
 enum fw_hdr_flags {
 	FW_HDR_FLAGS_RESET_HALT	= 0x00000001,
+	FW_HDR_FLAGS_SIGNED_FW	= 0x00000002,
 };
 
 /*

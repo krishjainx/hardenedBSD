@@ -63,6 +63,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_extern.h>
 
 #include <geom/geom.h>
+#include <geom/geom_vfs.h>
 
 #include <ufs/ufs/extattr.h>
 #include <ufs/ufs/quota.h>
@@ -264,7 +265,7 @@ ffs_snapshot(mp, snapfile)
 	 */
 restart:
 	NDINIT(&nd, CREATE, LOCKPARENT | LOCKLEAF | NOCACHE, UIO_SYSSPACE,
-	    snapfile, td);
+	    snapfile);
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	if (nd.ni_vp != NULL) {
@@ -1083,7 +1084,8 @@ expunge_ufs1(snapvp, cancelip, fs, acctfunc, expungetype, clearmode)
 	dip->di_size = 0;
 	dip->di_blocks = 0;
 	dip->di_flags &= ~SF_SNAPSHOT;
-	bzero(&dip->di_db[0], (UFS_NDADDR + UFS_NIADDR) * sizeof(ufs1_daddr_t));
+	bzero(dip->di_db, UFS_NDADDR * sizeof(ufs1_daddr_t));
+	bzero(dip->di_ib, UFS_NIADDR * sizeof(ufs1_daddr_t));
 	bdwrite(bp);
 	/*
 	 * Now go through and expunge all the blocks in the file
@@ -1365,7 +1367,8 @@ expunge_ufs2(snapvp, cancelip, fs, acctfunc, expungetype, clearmode)
 	dip->di_size = 0;
 	dip->di_blocks = 0;
 	dip->di_flags &= ~SF_SNAPSHOT;
-	bzero(&dip->di_db[0], (UFS_NDADDR + UFS_NIADDR) * sizeof(ufs2_daddr_t));
+	bzero(dip->di_db, UFS_NDADDR * sizeof(ufs2_daddr_t));
+	bzero(dip->di_ib, UFS_NIADDR * sizeof(ufs2_daddr_t));
 	if (clearmode || cancelip->i_effnlink == 0)
 		dip->di_mode = 0;
 	else
@@ -2123,7 +2126,6 @@ ffs_snapshot_mount(mp)
 	}
 	VOP_UNLOCK(vp);
 	VI_LOCK(devvp);
-	ASSERT_VOP_LOCKED(devvp, "ffs_snapshot_mount");
 	sn->sn_listsize = snaplistsize;
 	sn->sn_blklist = (daddr_t *)snapblklist;
 	devvp->v_vflag |= VV_COPYONWRITE;
@@ -2171,7 +2173,6 @@ ffs_snapshot_unmount(mp)
 		sn = devvp->v_rdev->si_snapdata;
 	}
 	try_free_snapdata(devvp);
-	ASSERT_VOP_LOCKED(devvp, "ffs_snapshot_unmount");
 }
 
 /*
@@ -2554,22 +2555,16 @@ readblock(vp, bp, lbn)
 	ufs2_daddr_t lbn;
 {
 	struct inode *ip;
-	struct bio *bip;
 	struct fs *fs;
 
 	ip = VTOI(vp);
 	fs = ITOFS(ip);
 
-	bip = g_alloc_bio();
-	bip->bio_cmd = BIO_READ;
-	bip->bio_offset = dbtob(fsbtodb(fs, blkstofrags(fs, lbn)));
-	bip->bio_data = bp->b_data;
-	bip->bio_length = bp->b_bcount;
-	bip->bio_done = NULL;
-
-	g_io_request(bip, ITODEVVP(ip)->v_bufobj.bo_private);
-	bp->b_error = biowait(bip, "snaprdb");
-	g_destroy_bio(bip);
+	bp->b_iocmd = BIO_READ;
+	bp->b_iooffset = dbtob(fsbtodb(fs, blkstofrags(fs, lbn)));
+	bp->b_iodone = bdone;
+	g_vfs_strategy(&ITODEVVP(ip)->v_bufobj, bp);
+	bufwait(bp);
 	return (bp->b_error);
 }
 

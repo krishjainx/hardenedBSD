@@ -3424,6 +3424,7 @@ adasetgeom(struct ada_softc *softc, struct ccb_getdev *cgd)
 	u_int64_t lbasize48;
 	u_int32_t lbasize;
 	u_int maxio, d_flags;
+	size_t tmpsize;
 
 	dp->secsize = ata_logical_sector_size(&cgd->ident_data);
 	if ((cgd->ident_data.atavalid & ATA_FLAG_54_58) &&
@@ -3487,10 +3488,25 @@ adasetgeom(struct ada_softc *softc, struct ccb_getdev *cgd)
 		softc->flags |= ADA_FLAG_UNMAPPEDIO;
 	}
 	softc->disk->d_flags = d_flags;
-	strlcpy(softc->disk->d_descr, cgd->ident_data.model,
-	    MIN(sizeof(softc->disk->d_descr), sizeof(cgd->ident_data.model)));
-	strlcpy(softc->disk->d_ident, cgd->ident_data.serial,
-	    MIN(sizeof(softc->disk->d_ident), sizeof(cgd->ident_data.serial)));
+
+	/*
+	 * ata_param_fixup will strip trailing padding spaces and add a NUL,
+	 * but if the field has no padding (as is common for serial numbers)
+	 * there will still be no NUL terminator. We cannot use strlcpy, since
+	 * it keeps reading src until it finds a NUL in order to compute the
+	 * return value (and will truncate the final character due to having a
+	 * single dsize rather than separate ssize and dsize), and strncpy does
+	 * not add a NUL to the destination if it reaches the character limit.
+	 */
+	tmpsize = MIN(sizeof(softc->disk->d_descr) - 1,
+	    sizeof(cgd->ident_data.model));
+	memcpy(softc->disk->d_descr, cgd->ident_data.model, tmpsize);
+	softc->disk->d_descr[tmpsize] = '\0';
+
+	tmpsize = MIN(sizeof(softc->disk->d_ident) - 1,
+	    sizeof(cgd->ident_data.serial));
+	memcpy(softc->disk->d_ident, cgd->ident_data.serial, tmpsize);
+	softc->disk->d_ident[tmpsize] = '\0';
 
 	softc->disk->d_sectorsize = softc->params.secsize;
 	softc->disk->d_mediasize = (off_t)softc->params.sectors *
@@ -3595,6 +3611,7 @@ adaspindown(uint8_t cmd, int flags)
 	struct ada_softc *softc;
 	struct ccb_ataio local_ccb;
 	int error;
+	int mode;
 
 	CAM_PERIPH_FOREACH(periph, &adadriver) {
 		/* If we paniced with lock held - not recurse here. */
@@ -3608,6 +3625,52 @@ adaspindown(uint8_t cmd, int flags)
 		if ((softc->flags & ADA_FLAG_CAN_POWERMGT) == 0) {
 			cam_periph_unlock(periph);
 			continue;
+		}
+
+		/*
+		 * Additionally check if we would spin up the drive instead of
+		 * spinning it down.
+		 */
+		if (cmd == ATA_IDLE_IMMEDIATE) {
+			memset(&local_ccb, 0, sizeof(local_ccb));
+			xpt_setup_ccb(&local_ccb.ccb_h, periph->path,
+			    CAM_PRIORITY_NORMAL);
+			local_ccb.ccb_h.ccb_state = ADA_CCB_DUMP;
+
+			cam_fill_ataio(&local_ccb, 0, NULL, CAM_DIR_NONE,
+			    0, NULL, 0, ada_default_timeout * 1000);
+			ata_28bit_cmd(&local_ccb, ATA_CHECK_POWER_MODE,
+			    0, 0, 0);
+			local_ccb.cmd.flags |= CAM_ATAIO_NEEDRESULT;
+
+			error = cam_periph_runccb((union ccb *)&local_ccb,
+			    adaerror, /*cam_flags*/0,
+			    /*sense_flags*/ SF_NO_RECOVERY | SF_NO_RETRY,
+			    softc->disk->d_devstat);
+			if (error != 0) {
+				xpt_print(periph->path,
+				    "Failed to read current power mode\n");
+			} else {
+				mode = local_ccb.res.sector_count;
+#ifdef DIAGNOSTIC
+				if (bootverbose) {
+					xpt_print(periph->path,
+					    "disk power mode 0x%02x\n", mode);
+				}
+#endif
+				switch (mode) {
+				case 0x00:
+				case 0x01:
+					if (bootverbose) {
+						xpt_print(periph->path,
+						    "already spun down\n");
+					}
+					cam_periph_unlock(periph);
+					continue;
+				default:
+					break;
+				}
+			}
 		}
 
 		if (bootverbose)

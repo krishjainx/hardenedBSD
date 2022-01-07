@@ -45,7 +45,7 @@
 #include <machine/frame.h>
 #include <machine/armreg.h>
 
-#define	TRAPF_PC(tfp)		((tfp)->tf_lr)
+#define	TRAPF_PC(tfp)		((tfp)->tf_elr)
 #define	TRAPF_USERMODE(tfp)	(((tfp)->tf_spsr & PSR_M_MASK) == PSR_M_EL0t)
 
 #define	cpu_getstack(td)	((td)->td_frame->tf_sp)
@@ -170,7 +170,6 @@ void	fork_trampoline(void);
 void	identify_cache(uint64_t);
 void	identify_cpu(u_int);
 void	install_cpu_errata(void);
-void	swi_vm(void *v);
 
 /* Functions to read the sanitised view of the special registers */
 void	update_special_regs(u_int);

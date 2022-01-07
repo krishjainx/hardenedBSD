@@ -465,9 +465,9 @@ device_unregister(struct device *dev)
 	dev->bsddev = NULL;
 
 	if (bsddev != NULL && dev->bsddev_attached_here) {
-		mtx_lock(&Giant);
+		bus_topo_lock();
 		device_delete_child(device_get_parent(bsddev), bsddev);
-		mtx_unlock(&Giant);
+		bus_topo_unlock();
 	}
 	put_device(dev);
 }
@@ -481,9 +481,9 @@ device_del(struct device *dev)
 	dev->bsddev = NULL;
 
 	if (bsddev != NULL && dev->bsddev_attached_here) {
-		mtx_lock(&Giant);
+		bus_topo_lock();
 		device_delete_child(device_get_parent(bsddev), bsddev);
-		mtx_unlock(&Giant);
+		bus_topo_unlock();
 	}
 }
 
@@ -506,15 +506,19 @@ static inline void
 device_release_driver(struct device *dev)
 {
 
+#if 0
+	/* This leads to panics. Disable temporarily. Keep to rework. */
+
 	/* We also need to cleanup LinuxKPI bits. What else? */
 	lkpi_devres_release_free_list(dev);
 	dev_set_drvdata(dev, NULL);
 	/* Do not call dev->release! */
 
-	mtx_lock(&Giant);
+	bus_topo_lock();
 	if (device_is_attached(dev->bsddev))
 		device_detach(dev->bsddev);
-	mtx_unlock(&Giant);
+	bus_topo_unlock();
+#endif
 }
 
 static inline int
@@ -523,9 +527,9 @@ device_reprobe(struct device *dev)
 	int error;
 
 	device_release_driver(dev);
-	mtx_lock(&Giant);
+	bus_topo_lock();
 	error = device_probe_and_attach(dev->bsddev);
-	mtx_unlock(&Giant);
+	bus_topo_unlock();
 
 	return (-error);
 }

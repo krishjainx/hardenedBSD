@@ -433,7 +433,7 @@ check_pubkey_validity() {
 
 	updatehash=$(${SHA256} -q ${tmpdir}/pubkey.pem)
 
-	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f); do
+	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f -print 2>/dev/null); do
 		filehash=$(${SHA256} -q ${f})
 		if [ "${filehash}" = "${updatehash}" ]; then
 			echo "[-] This update has been signed with a revoked key." >&2
@@ -789,6 +789,7 @@ apply_kernel() {
 
 	if [ ! -z "${backupkern}" ]; then
 		rm -rf ${mountpoint}/boot/${backupkern}
+		mkdir -p ${mountpoint}/boot/kernel
 		cp -pR ${mountpoint}/boot/kernel \
 			${mountpoint}/boot/${backupkern}
 		res=${?}
@@ -798,6 +799,7 @@ apply_kernel() {
 
 		if [ -d ${mountpoint}/usr/lib/debug/boot/kernel ]; then
 			rm -rf ${mountpoint}/usr/lib/debug/boot/${backupkern}
+			mkdir -p ${mountpoint}/usr/lib/debug/boot/kernel
 			cp -pR ${mountpoint}/usr/lib/debug/boot/kernel \
 				${mountpoint}/usr/lib/debug/boot/${backupkern}
 			res=${?}

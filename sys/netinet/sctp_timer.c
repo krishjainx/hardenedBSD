@@ -1344,18 +1344,18 @@ sctp_shutdownack_timer(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 }
 
 static void
-sctp_audit_stream_queues_for_size(struct sctp_inpcb *inp,
-    struct sctp_tcb *stcb)
+sctp_audit_stream_queues_for_size(struct sctp_inpcb *inp, struct sctp_tcb *stcb)
 {
 	struct sctp_stream_queue_pending *sp;
 	unsigned int i, chks_in_queue = 0;
 	int being_filled = 0;
 
-	/*
-	 * This function is ONLY called when the send/sent queues are empty.
-	 */
-	if ((stcb == NULL) || (inp == NULL))
-		return;
+	KASSERT(inp != NULL, ("inp is NULL"));
+	KASSERT(stcb != NULL, ("stcb is NULL"));
+
+	SCTP_TCB_SEND_LOCK(stcb);
+	KASSERT(TAILQ_EMPTY(&stcb->asoc.send_queue), ("send_queue not empty"));
+	KASSERT(TAILQ_EMPTY(&stcb->asoc.sent_queue), ("sent_queue not empty"));
 
 	if (stcb->asoc.sent_queue_retran_cnt) {
 		SCTP_PRINTF("Hmm, sent_queue_retran_cnt is non-zero %d\n",
@@ -1364,7 +1364,7 @@ sctp_audit_stream_queues_for_size(struct sctp_inpcb *inp,
 	}
 	if (stcb->asoc.ss_functions.sctp_ss_is_empty(stcb, &stcb->asoc)) {
 		/* No stream scheduler information, initialize scheduler */
-		stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc, 0);
+		stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc);
 		if (!stcb->asoc.ss_functions.sctp_ss_is_empty(stcb, &stcb->asoc)) {
 			/* yep, we lost a stream or two */
 			SCTP_PRINTF("Found additional streams NOT managed by scheduler, corrected\n");
@@ -1387,6 +1387,7 @@ sctp_audit_stream_queues_for_size(struct sctp_inpcb *inp,
 		SCTP_PRINTF("Hmm, stream queue cnt at %d I counted %d in stream out wheel\n",
 		    stcb->asoc.stream_queue_cnt, chks_in_queue);
 	}
+	SCTP_TCB_SEND_UNLOCK(stcb);
 	if (chks_in_queue) {
 		/* call the output queue function */
 		sctp_chunk_output(inp, stcb, SCTP_OUTPUT_FROM_T3, SCTP_SO_NOT_LOCKED);

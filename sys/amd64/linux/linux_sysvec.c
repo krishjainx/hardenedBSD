@@ -361,17 +361,12 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	size_t execpath_len;
 	struct proc *p;
 
-	/* Calculate string base and vector table pointers. */
-	if (imgp->execpath != NULL && imgp->auxargs != NULL)
-		execpath_len = strlen(imgp->execpath) + 1;
-	else
-		execpath_len = 0;
-
 	p = imgp->proc;
 	arginfo = (struct ps_strings *)p->p_psstrings;
 	destp = (uintptr_t)arginfo;
 
-	if (execpath_len != 0) {
+	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
+		execpath_len = strlen(imgp->execpath) + 1;
 		destp -= execpath_len;
 		destp = rounddown2(destp, sizeof(void *));
 		imgp->execpathp = (void *)destp;
@@ -558,10 +553,9 @@ linux_rt_sigreturn(struct thread *td, struct linux_rt_sigreturn_args *args)
 	 * Corruption of the PSL_RF bit at worst causes one more or
 	 * one less debugger trap, so allowing it is fairly harmless.
 	 */
-
-#define RFLAG_SECURE(ef, oef)     ((((ef) ^ (oef)) & ~PSL_USERCHANGE) == 0)
-	if (!RFLAG_SECURE(rflags & ~PSL_RF, regs->tf_rflags & ~PSL_RF)) {
-		printf("linux_rt_sigreturn: rflags = 0x%lx\n", rflags);
+	if (!EFL_SECURE(rflags & ~PSL_RF, regs->tf_rflags & ~PSL_RF)) {
+		uprintf("pid %d comm %s linux mangled rflags %#lx\n",
+		    p->p_pid, p->p_comm, rflags);
 		return (EINVAL);
 	}
 
@@ -570,9 +564,9 @@ linux_rt_sigreturn(struct thread *td, struct linux_rt_sigreturn_args *args)
 	 * hardware check for invalid selectors, excess privilege in
 	 * other selectors, invalid %eip's and invalid %esp's.
 	 */
-#define CS_SECURE(cs)           (ISPL(cs) == SEL_UPL)
 	if (!CS_SECURE(context->sc_cs)) {
-		printf("linux_rt_sigreturn: cs = 0x%x\n", context->sc_cs);
+		uprintf("pid %d comm %s linux mangled cs %#x\n",
+		    p->p_pid, p->p_comm, context->sc_cs);
 		ksiginfo_init_trap(&ksi);
 		ksi.ksi_signo = SIGBUS;
 		ksi.ksi_code = BUS_OBJERR;
@@ -679,10 +673,10 @@ linux_rt_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	/* Allocate space for the signal handler context. */
 	if ((td->td_pflags & TDP_ALTSTACK) != 0 && !oonstack &&
 	    SIGISMEMBER(psp->ps_sigonstack, sig)) {
-		sp = (caddr_t)td->td_sigstk.ss_sp + td->td_sigstk.ss_size -
-		    sizeof(struct l_rt_sigframe);
+		sp = (caddr_t)td->td_sigstk.ss_sp + td->td_sigstk.ss_size;
 	} else
-		sp = (caddr_t)regs->tf_rsp - sizeof(struct l_rt_sigframe) - 128;
+		sp = (caddr_t)regs->tf_rsp - 128;
+	sp -= sizeof(struct l_rt_sigframe);
 	/* Align to 16 bytes. */
 	sfp = (struct l_rt_sigframe *)((unsigned long)sp & ~0xFul);
 
@@ -704,6 +698,8 @@ linux_rt_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	/* Copy the sigframe out to the user's stack. */
 	if (copyout(&sf, sfp, sizeof(*sfp)) != 0) {
+		uprintf("pid %d comm %s has trashed its stack, killing\n",
+		    p->p_pid, p->p_comm);
 		PROC_LOCK(p);
 		sigexit(td, SIGILL);
 	}

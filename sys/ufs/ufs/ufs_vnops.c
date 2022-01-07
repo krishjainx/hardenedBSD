@@ -130,7 +130,6 @@ static vop_strategy_t	ufs_strategy;
 static vop_symlink_t	ufs_symlink;
 static vop_whiteout_t	ufs_whiteout;
 static vop_close_t	ufsfifo_close;
-static vop_kqfilter_t	ufsfifo_kqfilter;
 
 SYSCTL_NODE(_vfs, OID_AUTO, ufs, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
     "UFS filesystem");
@@ -1240,7 +1239,7 @@ ufs_rename(ap)
 	struct vnode *nvp;
 	struct componentname *tcnp = ap->a_tcnp;
 	struct componentname *fcnp = ap->a_fcnp;
-	struct thread *td = fcnp->cn_thread;
+	struct thread *td = curthread;
 	struct inode *fip, *tip, *tdp, *fdp;
 	struct direct newdir;
 	off_t endoff;
@@ -1450,7 +1449,7 @@ relock:
 	 * as to be able to change "..".
 	 */
 	if (doingdirectory && newparent) {
-		error = VOP_ACCESS(fvp, VWRITE, tcnp->cn_cred, tcnp->cn_thread);
+		error = VOP_ACCESS(fvp, VWRITE, tcnp->cn_cred, curthread);
 		if (error)
 			goto unlockout;
 
@@ -2092,12 +2091,12 @@ ufs_mkdir(ap)
 #ifdef UFS_ACL
 	if (dvp->v_mount->mnt_flag & MNT_ACLS) {
 		error = ufs_do_posix1e_acl_inheritance_dir(dvp, tvp, dmode,
-		    cnp->cn_cred, cnp->cn_thread);
+		    cnp->cn_cred, curthread);
 		if (error)
 			goto bad;
 	} else if (dvp->v_mount->mnt_flag & MNT_NFS4ACLS) {
 		error = ufs_do_nfs4_acl_inheritance(dvp, tvp, dmode,
-		    cnp->cn_cred, cnp->cn_thread);
+		    cnp->cn_cred, curthread);
 		if (error)
 			goto bad;
 	}
@@ -2312,7 +2311,7 @@ ufs_symlink(ap)
 	len = strlen(ap->a_target);
 	if (len < VFSTOUFS(vp->v_mount)->um_maxsymlinklen) {
 		ip = VTOI(vp);
-		bcopy(ap->a_target, SHORTLINK(ip), len);
+		bcopy(ap->a_target, DIP(ip, i_shortlink), len);
 		ip->i_size = len;
 		DIP_SET(ip, i_size, len);
 		UFS_INODE_SET_FLAG(ip, IN_SIZEMOD | IN_CHANGE | IN_UPDATE);
@@ -2337,7 +2336,7 @@ ufs_readdir(ap)
 		struct ucred *a_cred;
 		int *a_eofflag;
 		int *a_ncookies;
-		u_long **a_cookies;
+		uint64_t **a_cookies;
 	} */ *ap;
 {
 	struct vnode *vp = ap->a_vp;
@@ -2345,7 +2344,7 @@ ufs_readdir(ap)
 	struct buf *bp;
 	struct inode *ip;
 	struct direct *dp, *edp;
-	u_long *cookies;
+	uint64_t *cookies;
 	struct dirent dstdp;
 	off_t offset, startoffset;
 	size_t readcnt, skipcnt;
@@ -2482,7 +2481,7 @@ ufs_readlink(ap)
 
 	isize = ip->i_size;
 	if (isize < VFSTOUFS(vp->v_mount)->um_maxsymlinklen)
-		return (uiomove(SHORTLINK(ip), isize, ap->a_uio));
+		return (uiomove(DIP(ip, i_shortlink), isize, ap->a_uio));
 	return (VOP_READ(vp, ap->a_uio, 0, ap->a_cred));
 }
 
@@ -2576,23 +2575,6 @@ ufsfifo_close(ap)
 		ufs_itimes_locked(vp);
 	VI_UNLOCK(vp);
 	return (fifo_specops.vop_close(ap));
-}
-
-/*
- * Kqfilter wrapper for fifos.
- *
- * Fall through to ufs kqfilter routines if needed 
- */
-static int
-ufsfifo_kqfilter(ap)
-	struct vop_kqfilter_args *ap;
-{
-	int error;
-
-	error = fifo_specops.vop_kqfilter(ap);
-	if (error)
-		error = vfs_kqfilter(ap);
-	return (error);
 }
 
 /*
@@ -2876,12 +2858,12 @@ ufs_makeinode(mode, dvp, vpp, cnp, callfunc)
 #ifdef UFS_ACL
 	if (dvp->v_mount->mnt_flag & MNT_ACLS) {
 		error = ufs_do_posix1e_acl_inheritance_file(dvp, tvp, mode,
-		    cnp->cn_cred, cnp->cn_thread);
+		    cnp->cn_cred, curthread);
 		if (error)
 			goto bad;
 	} else if (dvp->v_mount->mnt_flag & MNT_NFS4ACLS) {
 		error = ufs_do_nfs4_acl_inheritance(dvp, tvp, mode,
-		    cnp->cn_cred, cnp->cn_thread);
+		    cnp->cn_cred, curthread);
 		if (error)
 			goto bad;
 	}
@@ -3013,7 +2995,6 @@ struct vop_vector ufs_fifoops = {
 	.vop_close =		ufsfifo_close,
 	.vop_getattr =		ufs_getattr,
 	.vop_inactive =		ufs_inactive,
-	.vop_kqfilter =		ufsfifo_kqfilter,
 	.vop_pathconf = 	ufs_pathconf,
 	.vop_print =		ufs_print,
 	.vop_read =		VOP_PANIC,

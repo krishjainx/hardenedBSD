@@ -1543,9 +1543,11 @@ mmc_host_timing(device_t dev, enum mmc_bus_timing timing)
 	case bus_timing_mmc_ddr52:
 		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_DDR52));
 	case bus_timing_mmc_hs200:
-		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS200));
+		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS200_120) ||
+			HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS200_180));
 	case bus_timing_mmc_hs400:
-		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS400));
+		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS400_120) ||
+			HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS400_180));
 	case bus_timing_mmc_hs400es:
 		return (HOST_TIMING_CAP(host_caps, MMC_CAP_MMC_HS400 |
 		    MMC_CAP_MMC_ENH_STROBE));
@@ -1920,7 +1922,7 @@ child_common:
 			if (child != NULL) {
 				device_set_ivars(child, ivar);
 				sc->child_list = realloc(sc->child_list,
-				    sizeof(device_t) * sc->child_count + 1,
+				    sizeof(device_t) * (sc->child_count + 1),
 				    M_DEVBUF, M_WAITOK);
 				sc->child_list[sc->child_count++] = child;
 			} else
@@ -2270,10 +2272,8 @@ mmc_switch_to_hs400(struct mmc_softc *sc, struct mmc_ivars *ivar,
 {
 	device_t dev;
 	int err;
-	uint16_t rca;
 
 	dev = sc->dev;
-	rca = ivar->rca;
 
 	/*
 	 * Both clock and timing must be set as appropriate for high speed
@@ -2313,10 +2313,8 @@ mmc_switch_to_hs200(struct mmc_softc *sc, struct mmc_ivars *ivar,
 {
 	device_t dev;
 	int err;
-	uint16_t rca;
 
 	dev = sc->dev;
-	rca = ivar->rca;
 
 	/*
 	 * Both clock and timing must initially be set as appropriate for

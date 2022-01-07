@@ -213,7 +213,7 @@ sctp_is_there_unsent_data(struct sctp_tcb *stcb, int so_locked)
 				}
 				atomic_subtract_int(&stcb->asoc.stream_queue_cnt, 1);
 				TAILQ_REMOVE(&stcb->asoc.strmout[i].outqueue, sp, next);
-				stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, &asoc->strmout[i], sp, 1);
+				stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, &asoc->strmout[i], sp);
 				if (sp->net) {
 					sctp_free_remote_addr(sp->net);
 					sp->net = NULL;
@@ -302,7 +302,7 @@ sctp_process_init(struct sctp_init_chunk *cp, struct sctp_tcb *stcb)
 				TAILQ_FOREACH_SAFE(sp, &outs->outqueue, next, nsp) {
 					atomic_subtract_int(&stcb->asoc.stream_queue_cnt, 1);
 					TAILQ_REMOVE(&outs->outqueue, sp, next);
-					stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, outs, sp, 1);
+					stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, outs, sp);
 					sctp_ulp_notify(SCTP_NOTIFY_SPECIAL_SP_FAIL,
 					    stcb, 0, sp, SCTP_SO_NOT_LOCKED);
 					if (sp->data) {
@@ -510,7 +510,7 @@ sctp_process_init_ack(struct mbuf *m, int iphlen, int offset,
 
 	/*
 	 * Cancel the INIT timer, We do this first before queueing the
-	 * cookie. We always cancel at the primary to assue that we are
+	 * cookie. We always cancel at the primary to assume that we are
 	 * canceling the timer started by the INIT which always goes to the
 	 * primary.
 	 */
@@ -1806,7 +1806,7 @@ sctp_process_cookie_existing(struct mbuf *m, int iphlen, int offset,
 		SCTP_INP_INFO_WLOCK();
 		SCTP_INP_WLOCK(stcb->sctp_ep);
 		SCTP_TCB_LOCK(stcb);
-		atomic_add_int(&stcb->asoc.refcnt, -1);
+		atomic_subtract_int(&stcb->asoc.refcnt, 1);
 		/* send up all the data */
 		SCTP_TCB_SEND_LOCK(stcb);
 
@@ -5291,7 +5291,7 @@ sctp_common_input_processing(struct mbuf **mm, int iphlen, int offset, int lengt
 					/* UDP encapsulation turned on. */
 					net->mtu -= sizeof(struct udphdr);
 					if (stcb->asoc.smallest_mtu > net->mtu) {
-						sctp_pathmtu_adjustment(stcb, net->mtu);
+						sctp_pathmtu_adjustment(stcb, net->mtu, true);
 					}
 				} else if (port == 0) {
 					/* UDP encapsulation turned off. */
@@ -5331,7 +5331,7 @@ sctp_common_input_processing(struct mbuf **mm, int iphlen, int offset, int lengt
 			/* UDP encapsulation turned on. */
 			net->mtu -= sizeof(struct udphdr);
 			if (stcb->asoc.smallest_mtu > net->mtu) {
-				sctp_pathmtu_adjustment(stcb, net->mtu);
+				sctp_pathmtu_adjustment(stcb, net->mtu, true);
 			}
 		} else if (port == 0) {
 			/* UDP encapsulation turned off. */
@@ -5352,12 +5352,14 @@ sctp_common_input_processing(struct mbuf **mm, int iphlen, int offset, int lengt
 			goto out;
 		}
 		if (ch->chunk_type == SCTP_SHUTDOWN_ACK) {
+			SCTP_STAT_INCR_COUNTER64(sctps_incontrolchunks);
 			sctp_send_shutdown_complete2(src, dst, sh,
 			    mflowtype, mflowid, fibnum,
 			    vrf_id, port);
 			goto out;
 		}
 		if (ch->chunk_type == SCTP_SHUTDOWN_COMPLETE) {
+			SCTP_STAT_INCR_COUNTER64(sctps_incontrolchunks);
 			goto out;
 		}
 		if (ch->chunk_type != SCTP_ABORT_ASSOCIATION) {
@@ -5426,7 +5428,7 @@ sctp_common_input_processing(struct mbuf **mm, int iphlen, int offset, int lengt
 					/* UDP encapsulation turned on. */
 					net->mtu -= sizeof(struct udphdr);
 					if (stcb->asoc.smallest_mtu > net->mtu) {
-						sctp_pathmtu_adjustment(stcb, net->mtu);
+						sctp_pathmtu_adjustment(stcb, net->mtu, true);
 					}
 				} else if (port == 0) {
 					/* UDP encapsulation turned off. */

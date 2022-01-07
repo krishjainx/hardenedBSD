@@ -223,7 +223,8 @@ int fuse_internal_access(struct vnode *vp, accmode_t mode,
 
 /* attributes */
 void fuse_internal_cache_attrs(struct vnode *vp, struct fuse_attr *attr,
-	uint64_t attr_valid, uint32_t attr_valid_nsec, struct vattr *vap);
+	uint64_t attr_valid, uint32_t attr_valid_nsec, struct vattr *vap,
+	bool from_server);
 
 /* fsync */
 
@@ -251,10 +252,10 @@ struct pseudo_dirent {
 };
 int fuse_internal_readdir(struct vnode *vp, struct uio *uio, off_t startoff,
     struct fuse_filehandle *fufh, struct fuse_iov *cookediov, int *ncookies,
-    u_long *cookies);
+    uint64_t *cookies);
 int fuse_internal_readdir_processdata(struct uio *uio, off_t startoff,
     int *fnd_start, size_t reqsize, void *buf, size_t bufsize,
-    struct fuse_iov *cookediov, int *ncookies, u_long **cookiesp);
+    struct fuse_iov *cookediov, int *ncookies, uint64_t **cookiesp);
 
 /* remove */
 

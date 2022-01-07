@@ -724,24 +724,30 @@ static int
 aio_fsync_vnode(struct thread *td, struct vnode *vp, int op)
 {
 	struct mount *mp;
+	vm_object_t obj;
 	int error;
 
-	if ((error = vn_start_write(vp, &mp, V_WAIT | PCATCH)) != 0)
-		goto drop;
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	if (vp->v_object != NULL) {
-		VM_OBJECT_WLOCK(vp->v_object);
-		vm_object_page_clean(vp->v_object, 0, 0, 0);
-		VM_OBJECT_WUNLOCK(vp->v_object);
-	}
-	if (op == LIO_DSYNC)
-		error = VOP_FDATASYNC(vp, td);
-	else
-		error = VOP_FSYNC(vp, MNT_WAIT, td);
+	for (;;) {
+		error = vn_start_write(vp, &mp, V_WAIT | PCATCH);
+		if (error != 0)
+			break;
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+		obj = vp->v_object;
+		if (obj != NULL) {
+			VM_OBJECT_WLOCK(obj);
+			vm_object_page_clean(obj, 0, 0, 0);
+			VM_OBJECT_WUNLOCK(obj);
+		}
+		if (op == LIO_DSYNC)
+			error = VOP_FDATASYNC(vp, td);
+		else
+			error = VOP_FSYNC(vp, MNT_WAIT, td);
 
-	VOP_UNLOCK(vp);
-	vn_finished_write(mp);
-drop:
+		VOP_UNLOCK(vp);
+		vn_finished_write(mp);
+		if (error != ERELOOKUP)
+			break;
+	}
 	return (error);
 }
 
@@ -758,7 +764,6 @@ aio_process_rw(struct kaiocb *job)
 {
 	struct ucred *td_savedcred;
 	struct thread *td;
-	struct aiocb *cb;
 	struct file *fp;
 	ssize_t cnt;
 	long msgsnd_st, msgsnd_end;
@@ -778,7 +783,6 @@ aio_process_rw(struct kaiocb *job)
 	td_savedcred = td->td_ucred;
 	td->td_ucred = job->cred;
 	job->uiop->uio_td = td;
-	cb = &job->uaiocb;
 	fp = job->fd_file;
 
 	opcode = job->uaiocb.aio_lio_opcode;
@@ -1707,7 +1711,7 @@ no_kqueue:
 	else
 		error = fo_aio_queue(fp, job);
 	if (error)
-		goto err3;
+		goto err4;
 
 	AIO_LOCK(ki);
 	job->jobflags &= ~KAIOCB_QUEUEING;
@@ -1728,6 +1732,8 @@ no_kqueue:
 	AIO_UNLOCK(ki);
 	return (0);
 
+err4:
+	crfree(job->cred);
 err3:
 	if (fp)
 		fdrop(fp, td);
@@ -2470,7 +2476,7 @@ aio_biowakeup(struct bio *bp)
 	size_t nbytes;
 	long bcount = bp->bio_bcount;
 	long resid = bp->bio_resid;
-	int error, opcode, nblks;
+	int opcode, nblks;
 	int bio_error = bp->bio_error;
 	uint16_t flags = bp->bio_flags;
 
@@ -2481,7 +2487,6 @@ aio_biowakeup(struct bio *bp)
 	nbytes =bcount - resid;
 	atomic_add_acq_long(&job->nbytes, nbytes);
 	nblks = btodb(nbytes);
-	error = 0;
 	/*
 	 * If multiple bios experienced an error, the job will reflect the
 	 * error of whichever failed bio completed last.

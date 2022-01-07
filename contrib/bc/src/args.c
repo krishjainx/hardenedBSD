@@ -91,6 +91,8 @@ static void bc_args_redefine(const char *keyword) {
 
 	size_t i;
 
+	BC_SIG_ASSERT_LOCKED;
+
 	for (i = 0; i < bc_lex_kws_len; ++i) {
 
 		const BcLexKeyword *kw = bc_lex_kws + i;
@@ -171,6 +173,18 @@ void bc_args(int argc, char *argv[], bool exit_exprs) {
 				break;
 			}
 
+			case 'z':
+			{
+				vm.flags |= BC_FLAG_Z;
+				break;
+			}
+
+			case 'L':
+			{
+				vm.line_len = 0;
+				break;
+			}
+
 			case 'P':
 			{
 				vm.flags &= ~(BC_FLAG_P);
@@ -201,7 +215,7 @@ void bc_args(int argc, char *argv[], bool exit_exprs) {
 			case 'q':
 			{
 				assert(BC_IS_BC);
-				// Do nothing.
+				vm.flags &= ~(BC_FLAG_Q);
 				break;
 			}
 

@@ -100,8 +100,8 @@ static int __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp);
 static bool __elfN(freebsd_trans_osrel)(const Elf_Note *note,
     int32_t *osrel);
 static bool kfreebsd_trans_osrel(const Elf_Note *note, int32_t *osrel);
-static boolean_t __elfN(check_note)(struct image_params *imgp,
-    Elf_Brandnote *checknote, int32_t *osrel, boolean_t *has_fctl0,
+static bool __elfN(check_note)(struct image_params *imgp,
+    Elf_Brandnote *checknote, int32_t *osrel, bool *has_fctl0,
     uint32_t *fctl0);
 static vm_prot_t __elfN(trans_prot)(Elf_Word);
 static Elf_Word __elfN(untrans_prot)(vm_prot_t);
@@ -128,9 +128,15 @@ int __elfN(nxstack) =
 #else
 	0;
 #endif
+
+#if defined(__amd64__)
+static int __elfN(vdso) = 1;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
-    nxstack, CTLFLAG_RW, &__elfN(nxstack), 0,
-    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable non-executable stack");
+    vdso, CTLFLAG_RWTUN, &__elfN(vdso), 0,
+    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable vdso preloading");
+#else
+static int __elfN(vdso) = 0;
+#endif
 
 static u_long __elfN(pie_base) = ET_DYN_LOAD_ADDR;
 static int
@@ -170,12 +176,12 @@ SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, pie_enable, CTLFLAG_RWTUN,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE))
     ": enable address map randomization for PIE binaries");
 
-static int __elfN(aslr_honor_sbrk) = 1;
+static int __elfN(aslr_honor_sbrk) = 0;
 SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, honor_sbrk, CTLFLAG_RW,
     &__elfN(aslr_honor_sbrk), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": assume sbrk is used");
 
-static int __elfN(aslr_stack_gap) = 3;
+static int __elfN(aslr_stack_gap) = 0;
 SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, stack_gap, CTLFLAG_RW,
     &__elfN(aslr_stack_gap), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE))
@@ -280,16 +286,16 @@ __elfN(remove_brand_entry)(Elf_Brandinfo *entry)
 	return (0);
 }
 
-int
+bool
 __elfN(brand_inuse)(Elf_Brandinfo *entry)
 {
 	struct proc *p;
-	int rval = FALSE;
+	bool rval = false;
 
 	sx_slock(&allproc_lock);
 	FOREACH_PROC_IN_SYSTEM(p) {
 		if (p->p_sysent == entry->sysvec) {
-			rval = TRUE;
+			rval = true;
 			break;
 		}
 	}
@@ -304,7 +310,7 @@ __elfN(get_brandinfo)(struct image_params *imgp, const char *interp,
 {
 	const Elf_Ehdr *hdr = (const Elf_Ehdr *)imgp->image_header;
 	Elf_Brandinfo *bi, *bi_m;
-	boolean_t ret, has_fctl0;
+	bool ret, has_fctl0;
 	int i, interp_name_len;
 
 	interp_name_len = interp != NULL ? strlen(interp) + 1 : 0;
@@ -784,7 +790,7 @@ __elfN(load_file)(struct proc *p, const char *file, u_long *addr,
 	imgp->attr = attr;
 
 	NDINIT(nd, LOOKUP, ISOPEN | FOLLOW | LOCKSHARED | LOCKLEAF,
-	    UIO_SYSSPACE, file, curthread);
+	    UIO_SYSSPACE, file);
 	if ((error = namei(nd)) != 0) {
 		nd->ni_vp = NULL;
 		goto fail;
@@ -850,28 +856,44 @@ fail:
 	return (error);
 }
 
-static u_long
-__CONCAT(rnd_, __elfN(base))(vm_map_t map __unused, u_long minv, u_long maxv,
-    u_int align)
+/*
+ * Select randomized valid address in the map map, between minv and
+ * maxv, with specified alignment.  The [minv, maxv) range must belong
+ * to the map.  Note that function only allocates the address, it is
+ * up to caller to clamp maxv in a way that the final allocation
+ * length fit into the map.
+ *
+ * Result is returned in *resp, error code indicates that arguments
+ * did not pass sanity checks for overflow and range correctness.
+ */
+static int
+__CONCAT(rnd_, __elfN(base))(vm_map_t map, u_long minv, u_long maxv,
+    u_int align, u_long *resp)
 {
 	u_long rbase, res;
 
 	MPASS(vm_map_min(map) <= minv);
-	MPASS(maxv <= vm_map_max(map));
-	MPASS(minv < maxv);
-	MPASS(minv + align < maxv);
+
+	if (minv >= maxv || minv + align >= maxv || maxv > vm_map_max(map)) {
+		uprintf("Invalid ELF segments layout\n");
+		return (ENOEXEC);
+	}
+
 	arc4rand(&rbase, sizeof(rbase), 0);
 	res = roundup(minv, (u_long)align) + rbase % (maxv - minv);
 	res &= ~((u_long)align - 1);
 	if (res >= maxv)
 		res -= align;
+
 	KASSERT(res >= minv,
 	    ("res %#lx < minv %#lx, maxv %#lx rbase %#lx",
 	    res, minv, maxv, rbase));
 	KASSERT(res < maxv,
 	    ("res %#lx > maxv %#lx, minv %#lx rbase %#lx",
 	    res, maxv, minv, rbase));
-	return (res);
+
+	*resp = res;
+	return (0);
 }
 
 static int
@@ -1065,7 +1087,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	Elf_Brandinfo *brand_info;
 	struct sysentvec *sv;
 	u_long addr, baddr, et_dyn_addr, entry, proghdr;
-	u_long maxalign, mapsz, maxv, maxv1;
+	u_long maxalign, maxsalign, mapsz, maxv, maxv1, anon_loc;
 	uint32_t fctl0;
 	int32_t osrel;
 	bool free_interp;
@@ -1107,7 +1129,20 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	interp = NULL;
 	free_interp = false;
 	td = curthread;
+
+	/*
+	 * Somewhat arbitrary, limit accepted max alignment for the
+	 * loadable segment to the max supported superpage size. Too
+	 * large alignment requests are not useful and are indicators
+	 * of corrupted or outright malicious binary.
+	 */
 	maxalign = PAGE_SIZE;
+	maxsalign = PAGE_SIZE * 1024;
+	for (i = MAXPAGESIZES - 1; i > 0; i--) {
+		if (pagesizes[i] > maxsalign)
+			maxsalign = pagesizes[i];
+	}
+
 	mapsz = 0;
 
 	for (i = 0; i < hdr->e_phnum; i++) {
@@ -1115,8 +1150,19 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		case PT_LOAD:
 			if (n == 0)
 				baddr = phdr[i].p_vaddr;
+			if (!powerof2(phdr[i].p_align) ||
+			    phdr[i].p_align > maxsalign) {
+				uprintf("Invalid segment alignment\n");
+				error = ENOEXEC;
+				goto ret;
+			}
 			if (phdr[i].p_align > maxalign)
 				maxalign = phdr[i].p_align;
+			if (mapsz + phdr[i].p_memsz < mapsz) {
+				uprintf("Mapsize overflow\n");
+				error = ENOEXEC;
+				goto ret;
+			}
 			mapsz += phdr[i].p_memsz;
 			n++;
 
@@ -1127,8 +1173,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			 * a PT_PHDR entry.
 			 */
 			if (phdr[i].p_offset == 0 &&
-			    hdr->e_phoff + hdr->e_phnum * hdr->e_phentsize
-				<= phdr[i].p_filesz)
+			    hdr->e_phoff + hdr->e_phnum * hdr->e_phentsize <=
+			    phdr[i].p_filesz)
 				proghdr = phdr[i].p_vaddr + hdr->e_phoff;
 			break;
 		case PT_INTERP:
@@ -1245,13 +1291,18 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	}
 #endif
 
+	if (mapsz >= maxv - vm_map_min(map)) {
+		uprintf("Excessive mapping size\n");
+		error = ENOEXEC;
+	}
+
 	if (do_asr) {
 		KASSERT((map->flags & MAP_ASLR) != 0,
 		    ("do_asr but !MAP_ASLR"));
-		et_dyn_addr = __CONCAT(rnd_, __elfN(base))(map,
+		error = __CONCAT(rnd_, __elfN(base))(map,
 		    vm_map_min(map) + mapsz + lim_max(td, RLIMIT_DATA),
 		    /* reserve half of the address space to interpreter */
-		    maxv / 2, 1UL << flsl(maxalign));
+		    maxv / 2, maxalign, &et_dyn_addr);
 	}
 
 	vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
@@ -1280,10 +1331,12 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	    RLIMIT_DATA));
 	if ((map->flags & MAP_ASLR) != 0) {
 		maxv1 = maxv / 2 + addr / 2;
-		MPASS(maxv1 >= addr);	/* No overflow */
-		map->anon_loc = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
+		error = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
 		    (MAXPAGESIZES > 1 && pagesizes[1] != 0) ?
-		    pagesizes[1] : pagesizes[0]);
+		    pagesizes[1] : pagesizes[0], &anon_loc);
+		if (error != 0)
+			goto ret;
+		map->anon_loc = anon_loc;
 	} else {
 #ifdef PAX_ASLR
 		pax_aslr_rtld(imgp->proc, &addr);
@@ -1301,12 +1354,13 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		if ((map->flags & MAP_ASLR) != 0) {
 			/* Assume that interpreter fits into 1/4 of AS */
 			maxv1 = maxv / 2 + addr / 2;
-			MPASS(maxv1 >= addr);	/* No overflow */
-			addr = __CONCAT(rnd_, __elfN(base))(map, addr,
-			    maxv1, PAGE_SIZE);
+			error = __CONCAT(rnd_, __elfN(base))(map, addr,
+			    maxv1, PAGE_SIZE, &addr);
 		}
-		error = __elfN(load_interp)(imgp, brand_info, interp, &addr,
-		    &imgp->entry_addr);
+		if (error == 0) {
+			error = __elfN(load_interp)(imgp, brand_info, interp,
+			    &addr, &imgp->entry_addr);
+		}
 		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
 		if (error != 0)
 			goto ret;
@@ -1341,6 +1395,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	imgp->proc->p_elf_flags = hdr->e_flags;
 
 ret:
+	ASSERT_VOP_LOCKED(imgp->vp, "skipped relock");
 	if (free_interp)
 		free(interp, M_TEMP);
 	return (error);
@@ -1402,6 +1457,8 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintptr_t base)
 	AUXARGS_ENTRY_PTR(pos, AT_PS_STRINGS, imgp->ps_strings);
 	if (imgp->sysent->sv_fxrng_gen_base != 0)
 		AUXARGS_ENTRY(pos, AT_FXRNG, imgp->sysent->sv_fxrng_gen_base);
+	if (imgp->proc->p_vdso_base != 0 && __elfN(vdso) != 0)
+		AUXARGS_ENTRY(pos, AT_KPRELOAD, imgp->proc->p_vdso_base);
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 
 	free(imgp->auxargs, M_TEMP);
@@ -2487,20 +2544,20 @@ __elfN(note_procstat_auxv)(void *arg, struct sbuf *sb, size_t *sizep)
 	}
 }
 
-static boolean_t
+static bool
 __elfN(parse_notes)(struct image_params *imgp, Elf_Note *checknote,
     const char *note_vendor, const Elf_Phdr *pnote,
-    boolean_t (*cb)(const Elf_Note *, void *, boolean_t *), void *cb_arg)
+    bool (*cb)(const Elf_Note *, void *, bool *), void *cb_arg)
 {
 	const Elf_Note *note, *note0, *note_end;
 	const char *note_name;
 	char *buf;
 	int i, error;
-	boolean_t res;
+	bool res;
 
 	/* We need some limit, might as well use PAGE_SIZE. */
 	if (pnote == NULL || pnote->p_filesz > PAGE_SIZE)
-		return (FALSE);
+		return (false);
 	ASSERT_VOP_LOCKED(imgp->vp, "parse_notes");
 	if (pnote->p_offset > PAGE_SIZE ||
 	    pnote->p_filesz > PAGE_SIZE - pnote->p_offset) {
@@ -2549,7 +2606,7 @@ nextnote:
 		    roundup2(note->n_descsz, ELF_NOTE_ROUNDSIZE));
 	}
 retf:
-	res = FALSE;
+	res = false;
 ret:
 	free(buf, M_TEMP);
 	return (res);
@@ -2560,8 +2617,8 @@ struct brandnote_cb_arg {
 	int32_t *osrel;
 };
 
-static boolean_t
-brandnote_cb(const Elf_Note *note, void *arg0, boolean_t *res)
+static bool
+brandnote_cb(const Elf_Note *note, void *arg0, bool *res)
 {
 	struct brandnote_cb_arg *arg;
 
@@ -2573,9 +2630,9 @@ brandnote_cb(const Elf_Note *note, void *arg0, boolean_t *res)
 	 */
 	*res = (arg->brandnote->flags & BN_TRANSLATE_OSREL) != 0 &&
 	    arg->brandnote->trans_osrel != NULL ?
-	    arg->brandnote->trans_osrel(note, arg->osrel) : TRUE;
+	    arg->brandnote->trans_osrel(note, arg->osrel) : true;
 
-	return (TRUE);
+	return (true);
 }
 
 static Elf_Note fctl_note = {
@@ -2585,12 +2642,12 @@ static Elf_Note fctl_note = {
 };
 
 struct fctl_cb_arg {
-	boolean_t *has_fctl0;
+	bool *has_fctl0;
 	uint32_t *fctl0;
 };
 
-static boolean_t
-note_fctl_cb(const Elf_Note *note, void *arg0, boolean_t *res)
+static bool
+note_fctl_cb(const Elf_Note *note, void *arg0, bool *res)
 {
 	struct fctl_cb_arg *arg;
 	const Elf32_Word *desc;
@@ -2600,10 +2657,10 @@ note_fctl_cb(const Elf_Note *note, void *arg0, boolean_t *res)
 	p = (uintptr_t)(note + 1);
 	p += roundup2(note->n_namesz, ELF_NOTE_ROUNDSIZE);
 	desc = (const Elf32_Word *)p;
-	*arg->has_fctl0 = TRUE;
+	*arg->has_fctl0 = true;
 	*arg->fctl0 = desc[0];
-	*res = TRUE;
-	return (TRUE);
+	*res = true;
+	return (true);
 }
 
 /*
@@ -2612,9 +2669,9 @@ note_fctl_cb(const Elf_Note *note, void *arg0, boolean_t *res)
  * OSABI-note.  Only the first page of the image is searched, the same
  * as for headers.
  */
-static boolean_t
+static bool
 __elfN(check_note)(struct image_params *imgp, Elf_Brandnote *brandnote,
-    int32_t *osrel, boolean_t *has_fctl0, uint32_t *fctl0)
+    int32_t *osrel, bool *has_fctl0, uint32_t *fctl0)
 {
 	const Elf_Phdr *phdr;
 	const Elf_Ehdr *hdr;
@@ -2640,10 +2697,10 @@ __elfN(check_note)(struct image_params *imgp, Elf_Brandnote *brandnote,
 				    note_fctl_cb, &f_arg))
 					break;
 			}
-			return (TRUE);
+			return (true);
 		}
 	}
-	return (FALSE);
+	return (false);
 
 }
 
@@ -2686,7 +2743,7 @@ __elfN(untrans_prot)(vm_prot_t prot)
 	return (flags);
 }
 
-void
+vm_size_t
 __elfN(stackgap)(struct image_params *imgp, uintptr_t *stack_base)
 {
 	uintptr_t range, rbase, gap;
@@ -2694,7 +2751,7 @@ __elfN(stackgap)(struct image_params *imgp, uintptr_t *stack_base)
 
 	pct = __elfN(aslr_stack_gap);
 	if (pct == 0)
-		return;
+		return (0);
 	if (pct > 50)
 		pct = 50;
 	range = imgp->eff_stack_sz * pct / 100;
@@ -2702,4 +2759,5 @@ __elfN(stackgap)(struct image_params *imgp, uintptr_t *stack_base)
 	gap = rbase % range;
 	gap &= ~(sizeof(u_long) - 1);
 	*stack_base -= gap;
+	return (gap);
 }

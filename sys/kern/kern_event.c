@@ -798,13 +798,13 @@ filt_timervalidate(struct knote *kn, sbintime_t *to)
 		return (EINVAL);
 
 	*to = timer2sbintime(kn->kn_sdata, kn->kn_sfflags);
+	if (*to < 0)
+		return (EINVAL);
 	if ((kn->kn_sfflags & NOTE_ABSTIME) != 0) {
 		getboottimebin(&bt);
 		sbt = bttosbt(bt);
-		*to -= sbt;
+		*to = MAX(0, *to - sbt);
 	}
-	if (*to < 0)
-		return (EINVAL);
 	return (0);
 }
 
@@ -815,9 +815,15 @@ filt_timerattach(struct knote *kn)
 	sbintime_t to;
 	int error;
 
+	to = -1;
 	error = filt_timervalidate(kn, &to);
 	if (error != 0)
 		return (error);
+	KASSERT(to > 0 || (kn->kn_flags & EV_ONESHOT) != 0 ||
+	    (kn->kn_sfflags & NOTE_ABSTIME) != 0,
+	    ("%s: periodic timer has a calculated zero timeout", __func__));
+	KASSERT(to >= 0,
+	    ("%s: timer has a calculated negative timeout", __func__));
 
 	if (atomic_fetchadd_int(&kq_ncallouts, 1) + 1 > kq_calloutmax) {
 		atomic_subtract_int(&kq_ncallouts, 1);
@@ -1101,7 +1107,7 @@ kern_kqueue(struct thread *td, int flags, struct filecaps *fcaps)
 
 struct g_kevent_args {
 	int	fd;
-	void	*changelist;
+	const void *changelist;
 	int	nchanges;
 	void	*eventlist;
 	int	nevents;
@@ -1206,7 +1212,7 @@ static int
 kevent11_copyout(void *arg, struct kevent *kevp, int count)
 {
 	struct freebsd11_kevent_args *uap;
-	struct kevent_freebsd11 kev11;
+	struct freebsd11_kevent kev11;
 	int error, i;
 
 	KASSERT(count <= KQ_NEVENTS, ("count (%d) > KQ_NEVENTS", count));
@@ -1235,7 +1241,7 @@ static int
 kevent11_copyin(void *arg, struct kevent *kevp, int count)
 {
 	struct freebsd11_kevent_args *uap;
-	struct kevent_freebsd11 kev11;
+	struct freebsd11_kevent kev11;
 	int error, i;
 
 	KASSERT(count <= KQ_NEVENTS, ("count (%d) > KQ_NEVENTS", count));
@@ -1265,7 +1271,7 @@ freebsd11_kevent(struct thread *td, struct freebsd11_kevent_args *uap)
 		.arg = uap,
 		.k_copyout = kevent11_copyout,
 		.k_copyin = kevent11_copyin,
-		.kevent_size = sizeof(struct kevent_freebsd11),
+		.kevent_size = sizeof(struct freebsd11_kevent),
 	};
 	struct g_kevent_args gk_args = {
 		.fd = uap->fd,
@@ -1276,7 +1282,7 @@ freebsd11_kevent(struct thread *td, struct freebsd11_kevent_args *uap)
 		.timeout = uap->timeout,
 	};
 
-	return (kern_kevent_generic(td, &gk_args, &k_ops, "kevent_freebsd11"));
+	return (kern_kevent_generic(td, &gk_args, &k_ops, "freebsd11_kevent"));
 }
 #endif
 
@@ -1496,6 +1502,13 @@ kqueue_register(struct kqueue *kq, struct kevent *kev, struct thread *td,
 		return EINVAL;
 
 	if (kev->flags & EV_ADD) {
+		/* Reject an invalid flag pair early */
+		if (kev->flags & EV_KEEPUDATA) {
+			tkn = NULL;
+			error = EINVAL;
+			goto done;
+		}
+
 		/*
 		 * Prevent waiting with locks.  Non-sleepable
 		 * allocation failures are handled in the loop, only
@@ -1684,7 +1697,8 @@ findkn:
 	kn_enter_flux(kn);
 	KQ_UNLOCK(kq);
 	knl = kn_list_lock(kn);
-	kn->kn_kevent.udata = kev->udata;
+	if ((kev->flags & EV_KEEPUDATA) == 0)
+		kn->kn_kevent.udata = kev->udata;
 	if (!fops->f_isfd && fops->f_touch != NULL) {
 		fops->f_touch(kn, kev, EVENT_REGISTER);
 	} else {
@@ -2173,8 +2187,7 @@ kqueue_poll(struct file *fp, int events, struct ucred *active_cred,
 
 /*ARGSUSED*/
 static int
-kqueue_stat(struct file *fp, struct stat *st, struct ucred *active_cred,
-	struct thread *td)
+kqueue_stat(struct file *fp, struct stat *st, struct ucred *active_cred)
 {
 
 	bzero((void *)st, sizeof *st);

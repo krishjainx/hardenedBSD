@@ -199,12 +199,12 @@ g_clone_bio(struct bio *bp)
 		/*
 		 *  BIO_ORDERED flag may be used by disk drivers to enforce
 		 *  ordering restrictions, so this flag needs to be cloned.
-		 *  BIO_UNMAPPED and BIO_VLIST should be inherited, to properly
-		 *  indicate which way the buffer is passed.
+		 *  BIO_UNMAPPED, BIO_VLIST, and BIO_SWAP should be inherited,
+		 *  to properly indicate which way the buffer is passed.
 		 *  Other bio flags are not suitable for cloning.
 		 */
 		bp2->bio_flags = bp->bio_flags &
-		    (BIO_ORDERED | BIO_UNMAPPED | BIO_VLIST);
+		    (BIO_ORDERED | BIO_UNMAPPED | BIO_VLIST | BIO_SWAP);
 		bp2->bio_length = bp->bio_length;
 		bp2->bio_offset = bp->bio_offset;
 		bp2->bio_data = bp->bio_data;
@@ -238,7 +238,7 @@ g_duplicate_bio(struct bio *bp)
 	struct bio *bp2;
 
 	bp2 = uma_zalloc(biozone, M_WAITOK | M_ZERO);
-	bp2->bio_flags = bp->bio_flags & (BIO_UNMAPPED | BIO_VLIST);
+	bp2->bio_flags = bp->bio_flags & (BIO_UNMAPPED | BIO_VLIST | BIO_SWAP);
 	bp2->bio_parent = bp;
 	bp2->bio_cmd = bp->bio_cmd;
 	bp2->bio_length = bp->bio_length;
@@ -559,7 +559,6 @@ g_io_request(struct bio *bp, struct g_consumer *cp)
 	atomic_add_int(&cp->nstart, 1);
 #endif
 
-#ifdef GET_STACK_USAGE
 	direct = (cp->flags & G_CF_DIRECT_SEND) != 0 &&
 	    (pp->flags & G_PF_DIRECT_RECEIVE) != 0 &&
 	    !g_is_geom_thread(curthread) &&
@@ -573,9 +572,6 @@ g_io_request(struct bio *bp, struct g_consumer *cp)
 		if (su * 2 > st)
 			direct = 0;
 	}
-#else
-	direct = 0;
-#endif
 
 	if (direct) {
 		error = g_io_check(bp);
@@ -655,7 +651,6 @@ g_io_deliver(struct bio *bp, int error)
 	bp->bio_bcount = bp->bio_length;
 	bp->bio_resid = bp->bio_bcount - bp->bio_completed;
 
-#ifdef GET_STACK_USAGE
 	direct = (pp->flags & G_PF_DIRECT_SEND) &&
 		 (cp->flags & G_CF_DIRECT_RECEIVE) &&
 		 !g_is_geom_thread(curthread);
@@ -666,9 +661,6 @@ g_io_deliver(struct bio *bp, int error)
 		if (su * 2 > st)
 			direct = 0;
 	}
-#else
-	direct = 0;
-#endif
 
 	/*
 	 * The statistics collection is lockless, as such, but we
@@ -678,7 +670,7 @@ g_io_deliver(struct bio *bp, int error)
 	if ((g_collectstats & G_STATS_CONSUMERS) != 0 ||
 	    ((g_collectstats & G_STATS_PROVIDERS) != 0 && pp->stat != NULL))
 		binuptime(&now);
-	mtxp = mtx_pool_find(mtxpool_sleep, cp);
+	mtxp = mtx_pool_find(mtxpool_sleep, pp);
 	mtx_lock(mtxp);
 	if (g_collectstats & G_STATS_PROVIDERS)
 		devstat_end_transaction_bio_bt(pp->stat, bp, &now);

@@ -42,7 +42,7 @@ static int nfsrv_acemasktoperm(u_int32_t acetype, u_int32_t mask, int owner,
  */
 int
 nfsrv_dissectace(struct nfsrv_descript *nd, struct acl_entry *acep,
-    int *aceerrp, int *acesizep, NFSPROC_T *p)
+    bool dacl, int *aceerrp, int *acesizep, NFSPROC_T *p)
 {
 	u_int32_t *tl;
 	int len, gotid = 0, owner = 0, error = 0, aceerr = 0;
@@ -58,7 +58,11 @@ nfsrv_dissectace(struct nfsrv_descript *nd, struct acl_entry *acep,
 	flag = fxdr_unsigned(u_int32_t, *tl++);
 	mask = fxdr_unsigned(u_int32_t, *tl++);
 	len = fxdr_unsigned(int, *tl);
-	if (len < 0) {
+	/*
+	 * The RFCs do not specify a limit to the length of the "who", but
+	 * NFSV4_OPAQUELIMIT (1024) should be sufficient.
+	 */
+	if (len < 0 || len > NFSV4_OPAQUELIMIT) {
 		error = NFSERR_BADXDR;
 		goto nfsmout;
 	} else if (len == 0) {
@@ -143,6 +147,10 @@ nfsrv_dissectace(struct nfsrv_descript *nd, struct acl_entry *acep,
 			flag &= ~NFSV4ACE_FAILEDACCESS;
 			acep->ae_flags |= ACL_ENTRY_FAILED_ACCESS;
 		}
+		if (dacl && (flag & NFSV4ACE_INHERITED)) {
+			flag &= ~NFSV4ACE_INHERITED;
+			acep->ae_flags |= ACL_ENTRY_INHERITED;
+		}
 		/*
 		 * Set ae_entry_type.
 		 */
@@ -150,10 +158,13 @@ nfsrv_dissectace(struct nfsrv_descript *nd, struct acl_entry *acep,
 			acep->ae_entry_type = ACL_ENTRY_TYPE_ALLOW;
 		else if (acetype == NFSV4ACE_DENIEDTYPE)
 			acep->ae_entry_type = ACL_ENTRY_TYPE_DENY;
+#ifdef notnow
+		/* FreeBSD does not support Audit/Alarm ACEs at this time. */
 		else if (acetype == NFSV4ACE_AUDITTYPE)
 			acep->ae_entry_type = ACL_ENTRY_TYPE_AUDIT;
 		else if (acetype == NFSV4ACE_ALARMTYPE)
 			acep->ae_entry_type = ACL_ENTRY_TYPE_ALARM;
+#endif
 		else
 			aceerr = NFSERR_ATTRNOTSUPP;
 	}
@@ -274,14 +285,14 @@ out:
 
 /* local functions */
 static int nfsrv_buildace(struct nfsrv_descript *, u_char *, int,
-    enum vtype, int, int, struct acl_entry *);
+    enum vtype, int, int, bool, struct acl_entry *);
 
 /*
  * This function builds an NFS ace.
  */
 static int
 nfsrv_buildace(struct nfsrv_descript *nd, u_char *name, int namelen,
-    enum vtype type, int group, int owner, struct acl_entry *ace)
+    enum vtype type, int group, int owner, bool dacl, struct acl_entry *ace)
 {
 	u_int32_t *tl, aceflag = 0x0, acemask = 0x0, acetype;
 	int full_len;
@@ -317,6 +328,8 @@ nfsrv_buildace(struct nfsrv_descript *nd, u_char *name, int namelen,
 		aceflag |= NFSV4ACE_SUCCESSFULACCESS;
 	if (ace->ae_flags & ACL_ENTRY_FAILED_ACCESS)
 		aceflag |= NFSV4ACE_FAILEDACCESS;
+	if (dacl && (ace->ae_flags & ACL_ENTRY_INHERITED))
+		aceflag |= NFSV4ACE_INHERITED;
 	if (group)
 		aceflag |= NFSV4ACE_IDENTIFIERGROUP;
 	*tl++ = txdr_unsigned(aceflag);
@@ -390,7 +403,7 @@ nfsrv_buildace(struct nfsrv_descript *nd, u_char *name, int namelen,
  */
 int
 nfsrv_buildacl(struct nfsrv_descript *nd, NFSACL_T *aclp, enum vtype type,
-    NFSPROC_T *p)
+    bool dacl, NFSPROC_T *p)
 {
 	int i, entrycnt = 0, retlen;
 	u_int32_t *entrycntp;
@@ -438,7 +451,7 @@ nfsrv_buildacl(struct nfsrv_descript *nd, NFSACL_T *aclp, enum vtype type,
 			continue;
 		}
 		retlen += nfsrv_buildace(nd, name, namelen, type, isgroup,
-		    isowner, &aclp->acl_entry[i]);
+		    isowner, dacl, &aclp->acl_entry[i]);
 		entrycnt++;
 		if (malloced)
 			free(name, M_NFSSTRING);

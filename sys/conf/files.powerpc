@@ -216,6 +216,7 @@ powerpc/powermac/pswitch.c	optional	powermac pswitch
 powerpc/powermac/pmu.c		optional	powermac pmu 
 powerpc/powermac/smu.c		optional	powermac smu 
 powerpc/powermac/smusat.c	optional	powermac smu
+powerpc/powermac/tbgpio.c	optional	powermac pci smp
 powerpc/powermac/uninorth.c	optional	powermac
 powerpc/powermac/uninorthpci.c	optional	powermac pci
 powerpc/powermac/vcoregpio.c	optional	powermac 
@@ -254,7 +255,6 @@ powerpc/powerpc/elf64_machdep.c	optional	powerpc64 | powerpc64le
 powerpc/powerpc/exec_machdep.c	standard
 powerpc/powerpc/fpu.c		standard
 powerpc/powerpc/gdb_machdep.c	optional	gdb
-powerpc/powerpc/in_cksum.c	optional	inet | inet6
 powerpc/powerpc/interrupt.c	standard
 powerpc/powerpc/intr_machdep.c	standard
 powerpc/powerpc/iommu_if.m	standard

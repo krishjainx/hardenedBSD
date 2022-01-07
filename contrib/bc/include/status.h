@@ -53,6 +53,10 @@
 #define DC_ENABLED (1)
 #endif // DC_ENABLED
 
+#ifndef BC_ENABLE_LIBRARY
+#define BC_ENABLE_LIBRARY (0)
+#endif // BC_ENABLE_LIBRARY
+
 // This is error checking for fuzz builds.
 #if BC_ENABLE_AFL
 #ifndef __AFL_HAVE_MANUAL_CONTROL
@@ -264,6 +268,10 @@
 #define BC_DEFAULT_PROMPT BC_DEFAULT_TTY_MODE
 #endif // BC_DEFAULT_PROMPT
 
+#ifndef BC_DEFAULT_EXPR_EXIT
+#define BC_DEFAULT_EXPR_EXIT (1)
+#endif // BC_DEFAULT_EXPR_EXIT
+
 // All of these set defaults for settings.
 #ifndef DC_DEFAULT_SIGINT_RESET
 #define DC_DEFAULT_SIGINT_RESET (1)
@@ -280,6 +288,10 @@
 #ifndef DC_DEFAULT_PROMPT
 #define DC_DEFAULT_PROMPT DC_DEFAULT_TTY_MODE
 #endif // DC_DEFAULT_PROMPT
+
+#ifndef DC_DEFAULT_EXPR_EXIT
+#define DC_DEFAULT_EXPR_EXIT (1)
+#endif // DC_DEFAULT_EXPR_EXIT
 
 /// Statuses, which mark either which category of error happened, or some other
 /// status that matters.
@@ -467,6 +479,10 @@ typedef enum BcErr {
 
 	/// Empty statements in POSIX for loop error.
 	BC_ERR_POSIX_FOR,
+
+	/// POSIX's grammar does not allow a function definition right after a
+	/// semicolon.
+	BC_ERR_POSIX_FUNC_AFTER_SEMICOLON,
 
 	/// Non-POSIX exponential (scientific or engineering) number used error.
 	BC_ERR_POSIX_EXP_NUM,

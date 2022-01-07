@@ -52,14 +52,21 @@ __FBSDID("$FreeBSD$");
 #include <machine/fpu.h>
 #include <machine/md_var.h>
 
+#include "vdso_offsets.h"
+
+extern const char _binary_elf_vdso_so_1_start[];
+extern const char _binary_elf_vdso_so_1_end[];
+extern char _binary_elf_vdso_so_1_size;
+
 struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_size	= SYS_MAXSYSCALL,
 	.sv_table	= sysent,
 	.sv_transtrap	= NULL,
 	.sv_fixup	= __elfN(freebsd_fixup),
 	.sv_sendsig	= sendsig,
-	.sv_sigcode	= sigcode,
-	.sv_szsigcode	= &szsigcode,
+	.sv_sigcode	= _binary_elf_vdso_so_1_start,
+	.sv_szsigcode	= (int *)&_binary_elf_vdso_so_1_size,
+	.sv_sigcodeoff	= VDSO_SIGCODE_OFFSET,
 	.sv_name	= "FreeBSD ELF64",
 	.sv_coredump	= __elfN(coredump),
 	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
@@ -78,7 +85,7 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
 	.sv_flags	= SV_ABI_FREEBSD | SV_LP64 | SV_SHP |
-			    SV_TIMEKEEP | SV_RNG_SEED_VER,
+			    SV_TIMEKEEP | SV_RNG_SEED_VER | SV_DSO_SIG,
 	.sv_set_syscall_retval = cpu_set_syscall_retval,
 	.sv_fetch_syscall_args = cpu_fetch_syscall_args,
 	.sv_syscallnames = syscallnames,
@@ -102,8 +109,9 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_transtrap	= NULL,
 	.sv_fixup	= __elfN(freebsd_fixup),
 	.sv_sendsig	= sendsig,
-	.sv_sigcode	= sigcode,
-	.sv_szsigcode	= &szsigcode,
+	.sv_sigcode	= _binary_elf_vdso_so_1_start,
+	.sv_szsigcode	= (int *)&_binary_elf_vdso_so_1_size,
+	.sv_sigcodeoff	= VDSO_SIGCODE_OFFSET,
 	.sv_name	= "FreeBSD ELF64",
 	.sv_coredump	= __elfN(coredump),
 	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
@@ -122,7 +130,7 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
 	.sv_flags	= SV_ABI_FREEBSD | SV_LP64 | SV_SHP |
-			    SV_TIMEKEEP | SV_RNG_SEED_VER,
+			    SV_TIMEKEEP | SV_RNG_SEED_VER | SV_DSO_SIG,
 	.sv_set_syscall_retval = cpu_set_syscall_retval,
 	.sv_fetch_syscall_args = cpu_fetch_syscall_args,
 	.sv_syscallnames = syscallnames,

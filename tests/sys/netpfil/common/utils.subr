@@ -111,11 +111,18 @@ dummynet_init()
 		atf_skip "This test requires dummynet"
 	fi
 
-	if [ ${firewall} == "ipfw" ]; then
-		# Nothing. This is okay.
-	else
-		atf_skip "${firewall} does not support dummynet"
+	if [ "$(atf_config_get ci false)" = "true" ]; then
+		atf_skip "Skip to avoid dummynet_send() panic. See https://reviews.freebsd.org/D33064"
 	fi
+
+	case $firewall in
+	ipfw|pf)
+		# Nothing. This is okay.
+		;;
+	*)
+		atf_skip "${firewall} does not support dummynet"
+		;;
+	esac
 }
 
 nat_init()

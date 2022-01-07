@@ -499,6 +499,7 @@ void	*pmap_mapdev_pciecfg(vm_paddr_t pa, vm_size_t size);
 bool	pmap_not_in_di(void);
 boolean_t pmap_page_is_mapped(vm_page_t m);
 void	pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);
+void	pmap_page_set_memattr_noflush(vm_page_t m, vm_memattr_t ma);
 void	pmap_pinit_pml4(vm_page_t);
 void	pmap_pinit_pml5(vm_page_t);
 bool	pmap_ps_enabled(pmap_t pmap);
@@ -527,12 +528,20 @@ int	pmap_vmspace_copy(pmap_t dst_pmap, pmap_t src_pmap);
 void	pmap_page_array_startup(long count);
 vm_page_t pmap_page_alloc_below_4g(bool zeroed);
 
-#ifdef KASAN
-void	pmap_kasan_enter(vm_offset_t);
+#if defined(KASAN) || defined(KMSAN)
+void	pmap_san_enter(vm_offset_t);
 #endif
-#ifdef KMSAN
-void	pmap_kmsan_enter(vm_offset_t);
-#endif
+
+/*
+ * Returns a pointer to a set of CPUs on which the pmap is currently active.
+ * Note that the set can be modified without any mutual exclusion, so a copy
+ * must be made if a stable value is required.
+ */
+static __inline volatile cpuset_t *
+pmap_invalidate_cpu_mask(pmap_t pmap)
+{
+	return (&pmap->pm_active);
+}
 
 #endif /* _KERNEL */
 

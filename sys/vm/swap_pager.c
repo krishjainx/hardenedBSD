@@ -100,6 +100,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysproto.h>
 #include <sys/systm.h>
 #include <sys/sx.h>
+#include <sys/unistd.h>
 #include <sys/user.h>
 #include <sys/vmmeter.h>
 #include <sys/vnode.h>
@@ -383,7 +384,7 @@ static int swap_pager_almost_full = 1; /* swap space exhaustion (w/hysteresis)*/
 static struct mtx swbuf_mtx;	/* to sync nsw_wcount_async */
 static int nsw_wcount_async;	/* limit async write buffers */
 static int nsw_wcount_async_max;/* assigned maximum			*/
-static int nsw_cluster_max;	/* maximum VOP I/O allowed		*/
+int nsw_cluster_max; 		/* maximum VOP I/O allowed		*/
 
 static int sysctl_swap_async_max(SYSCTL_HANDLER_ARGS);
 SYSCTL_PROC(_vm, OID_AUTO, swap_async_max, CTLTYPE_INT | CTLFLAG_RW |
@@ -469,7 +470,8 @@ static bool	swp_pager_swblk_empty(struct swblk *sb, int start, int limit);
 static void	swp_pager_free_empty_swblk(vm_object_t, struct swblk *sb);
 static int	swapongeom(struct vnode *);
 static int	swaponvp(struct thread *, struct vnode *, u_long);
-static int	swapoff_one(struct swdevt *sp, struct ucred *cred);
+static int	swapoff_one(struct swdevt *sp, struct ucred *cred,
+		    u_int flags);
 
 /*
  * Swap bitmap functions
@@ -572,6 +574,16 @@ swap_pager_init(void)
 	mtx_init(&sw_dev_mtx, "swapdev", NULL, MTX_DEF);
 	sx_init(&sw_alloc_sx, "swspsx");
 	sx_init(&swdev_syscall_lock, "swsysc");
+
+	/*
+	 * The nsw_cluster_max is constrained by the bp->b_pages[]
+	 * array, which has maxphys / PAGE_SIZE entries, and our locally
+	 * defined MAX_PAGEOUT_CLUSTER.   Also be aware that swap ops are
+	 * constrained by the swap device interleave stripe size.
+	 *
+	 * Initialized early so that GEOM_ELI can see it.
+	 */
+	nsw_cluster_max = min(maxphys / PAGE_SIZE, MAX_PAGEOUT_CLUSTER);
 }
 
 /*
@@ -591,11 +603,6 @@ swap_pager_swap_init(void)
 	 * initialize workable values (0 will work for hysteresis
 	 * but it isn't very efficient).
 	 *
-	 * The nsw_cluster_max is constrained by the bp->b_pages[]
-	 * array, which has maxphys / PAGE_SIZE entries, and our locally
-	 * defined MAX_PAGEOUT_CLUSTER.   Also be aware that swap ops are
-	 * constrained by the swap device interleave stripe size.
-	 *
 	 * Currently we hardwire nsw_wcount_async to 4.  This limit is
 	 * designed to prevent other I/O from having high latencies due to
 	 * our pageout I/O.  The value 4 works well for one or two active swap
@@ -606,8 +613,9 @@ swap_pager_swap_init(void)
 	 * at least 2 per swap devices, and 4 is a pretty good value if you
 	 * have one NFS swap device due to the command/ack latency over NFS.
 	 * So it all works out pretty well.
+	 *
+	 * nsw_cluster_max is initialized in swap_pager_init().
 	 */
-	nsw_cluster_max = min(maxphys / PAGE_SIZE, MAX_PAGEOUT_CLUSTER);
 
 	nsw_wcount_async = 4;
 	nsw_wcount_async_max = nsw_wcount_async;
@@ -2333,10 +2341,6 @@ struct swapon_args {
 };
 #endif
 
-/*
- * MPSAFE
- */
-/* ARGSUSED */
 int
 sys_swapon(struct thread *td, struct swapon_args *uap)
 {
@@ -2360,8 +2364,8 @@ sys_swapon(struct thread *td, struct swapon_args *uap)
 		goto done;
 	}
 
-	NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | AUDITVNODE1, UIO_USERSPACE,
-	    uap->name, td);
+	NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | LOCKLEAF | AUDITVNODE1,
+	    UIO_USERSPACE, uap->name);
 	error = namei(&nd);
 	if (error)
 		goto done;
@@ -2381,8 +2385,10 @@ sys_swapon(struct thread *td, struct swapon_args *uap)
 		error = swaponvp(td, vp, attr.va_size / DEV_BSIZE);
 	}
 
-	if (error)
-		vrele(vp);
+	if (error != 0)
+		vput(vp);
+	else
+		VOP_UNLOCK(vp);
 done:
 	sx_xunlock(&swdev_syscall_lock);
 	return (error);
@@ -2474,18 +2480,9 @@ swaponsomething(struct vnode *vp, void *id, u_long nblks,
  * rather than filename as specification.  We keep sw_vp around
  * only to make this work.
  */
-#ifndef _SYS_SYSPROTO_H_
-struct swapoff_args {
-	char *name;
-};
-#endif
-
-/*
- * MPSAFE
- */
-/* ARGSUSED */
-int
-sys_swapoff(struct thread *td, struct swapoff_args *uap)
+static int
+kern_swapoff(struct thread *td, const char *name, enum uio_seg name_seg,
+    u_int flags)
 {
 	struct vnode *vp;
 	struct nameidata nd;
@@ -2493,13 +2490,14 @@ sys_swapoff(struct thread *td, struct swapoff_args *uap)
 	int error;
 
 	error = priv_check(td, PRIV_SWAPOFF);
-	if (error)
+	if (error != 0)
 		return (error);
+	if ((flags & ~(SWAPOFF_FORCE)) != 0)
+		return (EINVAL);
 
 	sx_xlock(&swdev_syscall_lock);
 
-	NDINIT(&nd, LOOKUP, FOLLOW | AUDITVNODE1, UIO_USERSPACE, uap->name,
-	    td);
+	NDINIT(&nd, LOOKUP, FOLLOW | AUDITVNODE1, name_seg, name);
 	error = namei(&nd);
 	if (error)
 		goto done;
@@ -2516,14 +2514,29 @@ sys_swapoff(struct thread *td, struct swapoff_args *uap)
 		error = EINVAL;
 		goto done;
 	}
-	error = swapoff_one(sp, td->td_ucred);
+	error = swapoff_one(sp, td->td_ucred, flags);
 done:
 	sx_xunlock(&swdev_syscall_lock);
 	return (error);
 }
 
+
+#ifdef COMPAT_FREEBSD13
+int
+freebsd13_swapoff(struct thread *td, struct freebsd13_swapoff_args *uap)
+{
+	return (kern_swapoff(td, uap->name, UIO_USERSPACE, 0));
+}
+#endif
+
+int
+sys_swapoff(struct thread *td, struct swapoff_args *uap)
+{
+	return (kern_swapoff(td, uap->name, UIO_USERSPACE, uap->flags));
+}
+
 static int
-swapoff_one(struct swdevt *sp, struct ucred *cred)
+swapoff_one(struct swdevt *sp, struct ucred *cred, u_int flags)
 {
 	u_long nblks;
 #ifdef MAC
@@ -2545,8 +2558,16 @@ swapoff_one(struct swdevt *sp, struct ucred *cred)
 	 * available virtual memory in the system will fit the amount
 	 * of data we will have to page back in, plus an epsilon so
 	 * the system doesn't become critically low on swap space.
+	 * The vm_free_count() part does not account e.g. for clean
+	 * pages that can be immediately reclaimed without paging, so
+	 * this is a very rough estimation.
+	 *
+	 * On the other hand, not turning swap off on swapoff_all()
+	 * means that we can lose swap data when filesystems go away,
+	 * which is arguably worse.
 	 */
-	if (vm_free_count() + swap_pager_avail < nblks + nswap_lowat)
+	if ((flags & SWAPOFF_FORCE) == 0 &&
+	    vm_free_count() + swap_pager_avail < nblks + nswap_lowat)
 		return (ENOMEM);
 
 	/*
@@ -2596,7 +2617,7 @@ swapoff_all(void)
 			devname = devtoname(sp->sw_vp->v_rdev);
 		else
 			devname = "[file]";
-		error = swapoff_one(sp, thread0.td_ucred);
+		error = swapoff_one(sp, thread0.td_ucred, SWAPOFF_FORCE);
 		if (error != 0) {
 			printf("Cannot remove swap device %s (error=%d), "
 			    "skipping.\n", devname, error);
@@ -2893,6 +2914,7 @@ swapgeom_strategy(struct buf *bp, struct swdevt *sp)
 	bio->bio_offset = (bp->b_blkno - sp->sw_first) * PAGE_SIZE;
 	bio->bio_length = bp->b_bcount;
 	bio->bio_done = swapgeom_done;
+	bio->bio_flags |= BIO_SWAP;
 	if (!buf_mapped(bp)) {
 		bio->bio_ma = bp->b_pages;
 		bio->bio_data = unmapped_buf;
@@ -3005,7 +3027,7 @@ swapongeom(struct vnode *vp)
 {
 	int error;
 
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	ASSERT_VOP_ELOCKED(vp, "swapongeom");
 	if (vp->v_type != VCHR || VN_IS_DOOMED(vp)) {
 		error = ENOENT;
 	} else {
@@ -3013,7 +3035,6 @@ swapongeom(struct vnode *vp)
 		error = swapongeom_locked(vp->v_rdev, vp);
 		g_topology_unlock();
 	}
-	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -3035,24 +3056,30 @@ swapdev_strategy(struct buf *bp, struct swdevt *sp)
 	vp2 = sp->sw_id;
 	vhold(vp2);
 	if (bp->b_iocmd == BIO_WRITE) {
+		vn_lock(vp2, LK_EXCLUSIVE | LK_RETRY);
 		if (bp->b_bufobj)
 			bufobj_wdrop(bp->b_bufobj);
 		bufobj_wref(&vp2->v_bufobj);
+	} else {
+		vn_lock(vp2, LK_SHARED | LK_RETRY);
 	}
 	if (bp->b_bufobj != &vp2->v_bufobj)
 		bp->b_bufobj = &vp2->v_bufobj;
 	bp->b_vp = vp2;
 	bp->b_iooffset = dbtob(bp->b_blkno);
 	bstrategy(bp);
-	return;
+	VOP_UNLOCK(vp2);
 }
 
 static void
 swapdev_close(struct thread *td, struct swdevt *sp)
 {
+	struct vnode *vp;
 
-	VOP_CLOSE(sp->sw_vp, FREAD | FWRITE, td->td_ucred, td);
-	vrele(sp->sw_vp);
+	vp = sp->sw_vp;
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	VOP_CLOSE(vp, FREAD | FWRITE, td->td_ucred, td);
+	vput(vp);
 }
 
 static int
@@ -3061,6 +3088,7 @@ swaponvp(struct thread *td, struct vnode *vp, u_long nblks)
 	struct swdevt *sp;
 	int error;
 
+	ASSERT_VOP_ELOCKED(vp, "swaponvp");
 	if (nblks == 0)
 		return (ENXIO);
 	mtx_lock(&sw_dev_mtx);
@@ -3072,14 +3100,12 @@ swaponvp(struct thread *td, struct vnode *vp, u_long nblks)
 	}
 	mtx_unlock(&sw_dev_mtx);
 
-	(void) vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 #ifdef MAC
 	error = mac_system_check_swapon(td->td_ucred, vp);
 	if (error == 0)
 #endif
 		error = VOP_OPEN(vp, FREAD | FWRITE, td->td_ucred, td, NULL);
-	(void) VOP_UNLOCK(vp);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	swaponsomething(vp, vp, nblks, swapdev_strategy, swapdev_close,
