@@ -3342,31 +3342,10 @@ freebsd32_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	size_t execpath_len;
 	int error, szsigcode;
 
-<<<<<<< HEAD
-	/*
-	 * Calculate string base and vector table pointers.
-	 * Also deal with signal trampoline code for this exec type.
-	 */
-	if (imgp->execpath != NULL && imgp->auxargs != NULL)
-		execpath_len = strlen(imgp->execpath) + 1;
-	else
-		execpath_len = 0;
-	arginfo = (struct freebsd32_ps_strings *)curproc->p_psstrings;
-	imgp->ps_strings = arginfo;
-	if (imgp->proc->p_sigcode_base == 0)
-		szsigcode = *(imgp->proc->p_sysent->sv_szsigcode);
-#ifdef PAX_ASLR
-		pax_aslr_vdso(imgp->proc, &(imgp->proc->p_sigcode_base));
-#endif
-	else {
-		szsigcode = 0;
-	}
-=======
 	sysent = imgp->sysent;
 
-	arginfo = (struct freebsd32_ps_strings *)sysent->sv_psstrings;
+	arginfo = (struct freebsd32_ps_strings *)curproc->p_psstrings;
 	imgp->ps_strings = arginfo;
->>>>>>> origin/freebsd/13-stable/main
 	destp =	(uintptr_t)arginfo;
 
 	/*
@@ -3381,6 +3360,11 @@ freebsd32_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 		if (error != 0)
 			return (error);
 	}
+#ifdef PAX_ASLR
+	else {
+		pax_aslr_vdso(imgp->proc, &(imgp->proc->p_sigcode_base));
+	}
+#endif
 
 	/*
 	 * Copy the image path for the rtld.

@@ -280,15 +280,7 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	struct proc *p;
 
 	p = imgp->proc;
-<<<<<<< HEAD
-	if (imgp->execpath != NULL && imgp->auxargs != NULL)
-		execpath_len = strlen(imgp->execpath) + 1;
-	else
-		execpath_len = 0;
 	arginfo = (struct ps_strings *)p->p_psstrings;
-=======
-	arginfo = (struct ps_strings *)p->p_sysent->sv_psstrings;
->>>>>>> origin/freebsd/13-stable/main
 	destp = (uintptr_t)arginfo;
 
 	/* Install LINUX_PLATFORM. */

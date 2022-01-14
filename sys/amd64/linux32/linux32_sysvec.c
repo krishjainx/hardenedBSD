@@ -742,17 +742,7 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	char canary[LINUX_AT_RANDOM_LEN];
 	size_t execpath_len;
 
-<<<<<<< HEAD
-	/* Calculate string base and vector table pointers. */
-	if (imgp->execpath != NULL && imgp->auxargs != NULL)
-		execpath_len = strlen(imgp->execpath) + 1;
-	else
-		execpath_len = 0;
-
 	arginfo = (struct linux32_ps_strings *)(imgp->proc->p_psstrings);
-=======
-	arginfo = (struct linux32_ps_strings *)LINUX32_PS_STRINGS;
->>>>>>> origin/freebsd/13-stable/main
 	destp = (uintptr_t)arginfo;
 
 	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
