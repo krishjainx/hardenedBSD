@@ -1094,7 +1094,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	Elf_Brandinfo *brand_info;
 	struct sysentvec *sv;
 	u_long addr, baddr, et_dyn_addr, entry, proghdr;
-	u_long maxalign, maxsalign, mapsz, maxv;
+	u_long maxalign, maxsalign, mapsz, maxv, maxv1, anon_loc;
 	uint32_t fctl0;
 	int32_t osrel;
 	bool free_interp;
@@ -1129,7 +1129,6 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	}
 
 	n = error = 0;
-	addr = 0;
 	baddr = 0;
 	osrel = 0;
 	fctl0 = 0;
@@ -1334,20 +1333,37 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	vmspace = imgp->proc->p_vmspace;
 	addr = round_page((vm_offset_t)vmspace->vm_daddr + lim_max(td,
 	    RLIMIT_DATA));
+	if ((map->flags & MAP_ASLR) != 0) {
+		maxv1 = maxv / 2 + addr / 2;
+		error = __CONCAT(rnd_, __elfN(base))(map, addr, maxv1,
+		    (MAXPAGESIZES > 1 && pagesizes[1] != 0) ?
+		    pagesizes[1] : pagesizes[0], &anon_loc);
+		if (error != 0)
+			goto ret;
+		map->anon_loc = anon_loc;
+	} else {
+#ifdef PAX_ASLR
+		pax_aslr_rtld(imgp->proc, &addr);
+#endif
+		map->anon_loc = addr;
+	}
 	map->anon_loc = addr;
 	PROC_UNLOCK(imgp->proc);
 
 	imgp->entry_addr = entry;
 
 	if (interp != NULL) {
-#ifdef PAX_ASLR
-		PROC_LOCK(imgp->proc);
-		pax_aslr_rtld(imgp->proc, &addr);
-		PROC_UNLOCK(imgp->proc);
-#endif
 		VOP_UNLOCK(imgp->vp);
-		error = __elfN(load_interp)(imgp, brand_info, interp, &addr,
-		    &imgp->entry_addr);
+		if ((map->flags & MAP_ASLR) != 0) {
+			/* Assume that interpreter fits into 1/4 of AS */
+			maxv1 = maxv / 2 + addr / 2;
+			error = __CONCAT(rnd_, __elfN(base))(map, addr,
+			    maxv1, PAGE_SIZE, &addr);
+		}
+		if (error == 0) {
+			error = __elfN(load_interp)(imgp, brand_info, interp,
+			    &addr, &imgp->entry_addr);
+		}
 		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
 		if (error != 0)
 			goto ret;

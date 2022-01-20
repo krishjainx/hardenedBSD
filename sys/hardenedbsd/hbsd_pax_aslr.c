@@ -84,10 +84,6 @@ __FBSDID("$FreeBSD$");
 #define PAX_ASLR_DELTA_MMAP_LSB		PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_MMAP_LSB */
 
-#ifndef PAX_ASLR_DELTA_RTLD_LSB
-#define PAX_ASLR_DELTA_RTLD_LSB		PAGE_SHIFT
-#endif /* PAX_ASLR_DELTA_RTLD_LSB */
-
 #ifndef PAX_ASLR_DELTA_STACK_LSB
 #define	PAX_ASLR_DELTA_STACK_LSB	PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_STACK_LSB */
@@ -123,10 +119,6 @@ __FBSDID("$FreeBSD$");
 #define	PAX_ASLR_DELTA_MMAP_DEF_LEN	30
 #endif /* PAX_ASLR_DELTA_MMAP_DEF_LEN */
 
-#ifndef PAX_ASLR_DELTA_RTLD_DEF_LEN
-#define	PAX_ASLR_DELTA_RTLD_DEF_LEN	30
-#endif /* PAX_ASLR_DELTA_MMAP_DEF_LEN */
-
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
 #define	PAX_ASLR_DELTA_STACK_DEF_LEN	42
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
@@ -155,10 +147,6 @@ __FBSDID("$FreeBSD$");
 #define	PAX_ASLR_DELTA_MMAP_DEF_LEN	14
 #endif /* PAX_ASLR_DELTA_MMAP_DEF_LEN */
 
-#ifndef PAX_ASLR_DELTA_RTLD_DEF_LEN
-#define	PAX_ASLR_DELTA_RTLD_DEF_LEN	14
-#endif /* PAX_ASLR_DELTA_RTLD_DEF_LEN */
-
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
 #define	PAX_ASLR_DELTA_STACK_DEF_LEN	14
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
@@ -180,10 +168,6 @@ __FBSDID("$FreeBSD$");
 #ifndef PAX_ASLR_COMPAT_DELTA_MMAP_LSB
 #define PAX_ASLR_COMPAT_DELTA_MMAP_LSB		PAGE_SHIFT
 #endif /* PAX_ASLR_COMPAT_DELTA_MMAP_LSB */
-
-#ifndef PAX_ASLR_COMPAT_DELTA_RTLD_LSB
-#define PAX_ASLR_COMPAT_DELTA_RTLD_LSB		PAGE_SHIFT
-#endif /* PAX_ASLR_COMPAT_DELTA_RTLD_LSB */
 
 #ifndef PAX_ASLR_COMPAT_DELTA_STACK_LSB
 #define PAX_ASLR_COMPAT_DELTA_STACK_LSB		3
@@ -219,7 +203,6 @@ FEATURE(hbsd_aslr, "Address Space Layout Randomization.");
 
 static int pax_aslr_status = PAX_FEATURE_OPTOUT;
 static int pax_aslr_mmap_len = PAX_ASLR_DELTA_MMAP_DEF_LEN;
-static int pax_aslr_rtld_len = PAX_ASLR_DELTA_RTLD_DEF_LEN;
 static int pax_aslr_stack_len = PAX_ASLR_DELTA_STACK_DEF_LEN;
 static int pax_aslr_thr_stack_len = PAX_ASLR_DELTA_THR_STACK_DEF_LEN;
 static int pax_aslr_exec_len = PAX_ASLR_DELTA_EXEC_DEF_LEN;
@@ -236,7 +219,6 @@ static int pax_disallow_map32bit_status_global = PAX_FEATURE_OPTIN;
 #ifdef COMPAT_FREEBSD32
 static int pax_aslr_compat_status = PAX_FEATURE_OPTOUT;
 static int pax_aslr_compat_mmap_len = PAX_ASLR_COMPAT_DELTA_MMAP_DEF_LEN;
-static int pax_aslr_compat_rtld_len = PAX_ASLR_COMPAT_DELTA_RTLD_DEF_LEN;
 static int pax_aslr_compat_stack_len = PAX_ASLR_COMPAT_DELTA_STACK_DEF_LEN;
 static int pax_aslr_compat_exec_len = PAX_ASLR_COMPAT_DELTA_EXEC_DEF_LEN;
 static int pax_aslr_compat_vdso_len = PAX_ASLR_COMPAT_DELTA_VDSO_DEF_LEN;
@@ -244,7 +226,6 @@ static int pax_aslr_compat_vdso_len = PAX_ASLR_COMPAT_DELTA_VDSO_DEF_LEN;
 
 TUNABLE_INT("hardening.pax.aslr.status", &pax_aslr_status);
 TUNABLE_INT("hardening.pax.aslr.mmap_len", &pax_aslr_mmap_len);
-TUNABLE_INT("hardening.pax.aslr.rtld_len", &pax_aslr_rtld_len);
 TUNABLE_INT("hardening.pax.aslr.stack_len", &pax_aslr_stack_len);
 TUNABLE_INT("hardening.pax.aslr.exec_len", &pax_aslr_exec_len);
 TUNABLE_INT("hardening.pax.aslr.vdso_len", &pax_aslr_vdso_len);
@@ -255,7 +236,6 @@ TUNABLE_INT("hardening.pax.disallow_map32bit.status", &pax_disallow_map32bit_sta
 #ifdef COMPAT_FREEBSD32
 TUNABLE_INT("hardening.pax.aslr.compat.status", &pax_aslr_compat_status);
 TUNABLE_INT("hardening.pax.aslr.compat.mmap_len", &pax_aslr_compat_mmap_len);
-TUNABLE_INT("hardening.pax.aslr.compat.rtld_len", &pax_aslr_compat_rtld_len);
 TUNABLE_INT("hardening.pax.aslr.compat.stack_len", &pax_aslr_compat_stack_len);
 TUNABLE_INT("hardening.pax.aslr.compat.exec_len", &pax_aslr_compat_exec_len);
 TUNABLE_INT("hardening.pax.aslr.compat.vdso_len", &pax_aslr_compat_vdso_len);
@@ -387,11 +367,6 @@ pax_aslr_init_vmspace(struct proc *p)
 	    pax_aslr_mmap_len);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
-	vm->vm_aslr_delta_rtld = PAX_ASLR_DELTA(rand_buf,
-	    PAX_ASLR_DELTA_RTLD_LSB,
-	    pax_aslr_rtld_len);
-
-	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	vm->vm_aslr_delta_exec = PAX_ASLR_DELTA(rand_buf,
 	    PAX_ASLR_DELTA_EXEC_LSB,
 	    pax_aslr_exec_len);
@@ -498,11 +473,6 @@ pax_aslr_init_vmspace32(struct proc *p)
 	vm->vm_aslr_delta_mmap = PAX_ASLR_DELTA(rand_buf,
 	    PAX_ASLR_COMPAT_DELTA_MMAP_LSB,
 	    pax_aslr_compat_mmap_len);
-
-	arc4rand(&rand_buf, sizeof(rand_buf), 0);
-	vm->vm_aslr_delta_rtld = PAX_ASLR_DELTA(rand_buf,
-	    PAX_ASLR_COMPAT_DELTA_RTLD_LSB,
-	    pax_aslr_compat_rtld_len);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	vm->vm_aslr_delta_stack = PAX_ASLR_DELTA(rand_buf,
@@ -650,7 +620,7 @@ pax_aslr_rtld(struct proc *p, u_long *addr)
 	if (!pax_aslr_active(p))
 		return;
 
-	*addr += p->p_vmspace->vm_aslr_delta_rtld;
+	*addr += p->p_vmspace->vm_aslr_delta_mmap;
 }
 
 void
