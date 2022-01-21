@@ -1765,7 +1765,7 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	destp =	(uintptr_t)arginfo;
 
 #ifdef PAX_ASLR
-	if (p->p_sigcode_base == 0) {
+	if (p->p_sigcode_base != 0) {
 		pax_aslr_vdso(p, &(p->p_sigcode_base));
 	}
 #endif
