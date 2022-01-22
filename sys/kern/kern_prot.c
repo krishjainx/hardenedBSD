@@ -1471,12 +1471,10 @@ cr_cansee(struct ucred *u1, struct ucred *u2)
 int
 p_cansee(struct thread *td, struct proc *p)
 {
+
 	/* Wrap cr_cansee() for all functionality. */
 	KASSERT(td == curthread, ("%s: td not curthread", __func__));
 	PROC_LOCK_ASSERT(p, MA_OWNED);
-
-	if (td->td_proc == p)
-		return (0);
 	return (cr_cansee(td->td_ucred, p->p_ucred));
 }
 
@@ -1694,10 +1692,10 @@ p_candebug(struct thread *td, struct proc *p)
 
 	KASSERT(td == curthread, ("%s: td not curthread", __func__));
 	PROC_LOCK_ASSERT(p, MA_OWNED);
-	if (td->td_proc == p)
-		return (0);
 	if ((error = priv_check(td, PRIV_DEBUG_UNPRIV)))
 		return (error);
+	if (td->td_proc == p)
+		return (0);
 	if ((error = prison_check(td->td_ucred, p->p_ucred)))
 		return (error);
 #ifdef MAC
