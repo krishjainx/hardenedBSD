@@ -2497,7 +2497,11 @@ change_svgid(struct ucred *newcred, gid_t svgid)
 	newcred->cr_svgid = svgid;
 }
 
+#ifdef PAX_HARDENING
+bool allow_ptrace = false;
+#else
 bool allow_ptrace = true;
+#endif
 SYSCTL_BOOL(_security_bsd, OID_AUTO, allow_ptrace, CTLFLAG_RWTUN,
     &allow_ptrace, 0,
     "Deny ptrace(2) use by returning ENOSYS");
