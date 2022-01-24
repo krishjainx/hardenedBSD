@@ -121,7 +121,6 @@ SYSCTL_INT(_kern, OID_AUTO, coredump_pack_vmmapinfo, CTLFLAG_RWTUN,
 
 static int sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS);
-static int sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_stackprot(SYSCTL_HANDLER_ARGS);
 static int do_execve(struct thread *td, struct image_args *args,
     struct mac *mac_p, struct vmspace *oldvmspace);
@@ -135,10 +134,6 @@ SYSCTL_PROC(_kern, KERN_PS_STRINGS, ps_strings, CTLTYPE_ULONG|CTLFLAG_RD|
 SYSCTL_PROC(_kern, KERN_USRSTACK, usrstack, CTLTYPE_ULONG|CTLFLAG_RD|
     CTLFLAG_CAPRD|CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_usrstack, "LU",
     "Top of process stack");
-
-SYSCTL_PROC(_kern, KERN_STACKTOP, stacktop, CTLTYPE_ULONG | CTLFLAG_RD |
-    CTLFLAG_CAPRD | CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_stacktop, "LU",
-    "Top of process stack with stack gap.");
 
 SYSCTL_PROC(_kern, OID_AUTO, stackprot, CTLTYPE_INT|CTLFLAG_RD|CTLFLAG_MPSAFE,
     NULL, 0, sysctl_kern_stackprot, "I",
@@ -192,6 +187,7 @@ sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 		error = SYSCTL_OUT(req, &val, sizeof(val));
 	} else
 #endif
+<<<<<<< HEAD
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
 	return (error);
@@ -215,6 +211,11 @@ sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
 	return (error);
+=======
+		error = SYSCTL_OUT(req, &p->p_sysent->sv_usrstack,
+		    sizeof(p->p_sysent->sv_usrstack));
+	return error;
+>>>>>>> origin/freebsd/13-stable/main
 }
 
 static int
