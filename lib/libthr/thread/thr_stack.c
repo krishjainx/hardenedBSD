@@ -262,13 +262,8 @@ _thr_stack_alloc(struct pthread_attr *attr)
 		 * Allocate a stack from or below usrstack, depending
 		 * on the LIBPTHREAD_BIGSTACK_MAIN env variable.
 		 */
-<<<<<<< HEAD
-		if (last_stack == NULL) {
-			last_stack = _stacktop - _thr_stack_initial -
-=======
 		if (last_stack == NULL)
 			last_stack = _usrstack - _thr_stack_initial -
->>>>>>> origin/freebsd/13-stable/main
 			    _thr_guard_default;
 		}
 

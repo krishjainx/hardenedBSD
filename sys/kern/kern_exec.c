@@ -187,35 +187,9 @@ sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 		error = SYSCTL_OUT(req, &val, sizeof(val));
 	} else
 #endif
-<<<<<<< HEAD
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
-	return (error);
-}
-
-static int
-sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
-{
-	struct proc *p;
-	int error;
-
-	p = curproc;
-#ifdef SCTL_MASK32
-	if (req->flags & SCTL_MASK32) {
-		unsigned int val;
-
-		val = (unsigned int)(p->p_usrstack);
-		error = SYSCTL_OUT(req, &val, sizeof(val));
-	} else
-#endif
-		error = SYSCTL_OUT(req, &p->p_usrstack,
-		    sizeof(p->p_usrstack));
-	return (error);
-=======
-		error = SYSCTL_OUT(req, &p->p_sysent->sv_usrstack,
-		    sizeof(p->p_sysent->sv_usrstack));
 	return error;
->>>>>>> origin/freebsd/13-stable/main
 }
 
 static int
