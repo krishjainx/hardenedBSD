@@ -470,12 +470,8 @@ LDADD_${_l}?=	${LDADD_${_l}_L} -l${_l}
 # NO_SHARED back to yes despite only building static versions of bootstrap
 # libraries (see tools/build/mk/Makefile.boot.pre).
 .if defined(_DP_${_l}) && (${_INTERNALLIBS:M${_l}} || \
-<<<<<<< HEAD
-    (defined(NO_SHARED) && (${NO_SHARED} != "no" && ${NO_SHARED} != "NO")))
-=======
     (defined(NO_SHARED) && ${NO_SHARED:tl} != "no") || \
     (defined(BOOTSTRAPPING) && ${.MAKE.OS} != "FreeBSD"))
->>>>>>> origin/freebsd/13-stable/main
 .for _d in ${_DP_${_l}}
 DPADD_${_l}+=	${DPADD_${_d}}
 LDADD_${_l}+=	${LDADD_${_d}}
