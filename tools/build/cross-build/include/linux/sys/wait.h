@@ -1,16 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright 2018-2020 Alex Richardson <arichardson@FreeBSD.org>
- *
- * This software was developed by SRI International and the University of
- * Cambridge Computer Laboratory (Department of Computer Science and
- * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
- * DARPA SSITH research programme.
- *
- * This software was developed by SRI International and the University of
- * Cambridge Computer Laboratory under DARPA/AFRL contract (FA8750-10-C-0237)
- * ("CTSRD"), as part of the DARPA CRASH research programme.
+ * Copyright 2021 Jessica Clarke <jrtc27@FreeBSD.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,33 +23,25 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
+
 #pragma once
 
-#include_next <pwd.h>
-
-#define user_from_uid __nbcompat_user_from_uid
-
-#ifndef _PASSWORD_EFMT1
-#define	_PASSWORD_EFMT1		'_'	/* extended encryption format */
-#endif
-
-int pwcache_userdb(int (*a_setpassent)(int), void (*a_endpwent)(void),
-    struct passwd *(*a_getpwnam)(const char *),
-    struct passwd *(*a_getpwuid)(uid_t));
-
-int uid_from_user(const char *name, uid_t *uid);
-
-int uid_from_user(const char *name, uid_t *uid);
-const char *user_from_uid(uid_t uid, int noname);
-
-#ifdef __linux__
-static inline int
-setpassent(int stayopen __unused)
-{
-	setpwent();
-	return (1);
-}
-#endif
+/*
+ * glibc's sys/wait.h and stdlib.h both define various wait-related constants,
+ * depending on __USE_XOPEN(2K8) and if the other header has been included.
+ * Since they each probe the other's include guard to determine that, there is
+ * a window between a header defining its include guard and checking for the
+ * other's within which, if the other is included for the first time, they both
+ * believe the other has already defined the relevant macros etc, and so
+ * neither ends up doing so. This was not previously hit, and is still not hit
+ * when using glibc normally (though seems extremely fragile). However, as of
+ * glibc 2.34, signal.h, included by sys/wait, includes a new bits/sigstksz,
+ * which in turn includes unistd.h (when _SC_SIGSTKSZ_SOURCE is defined, which
+ * is implied by _GNU_SOURCE), which we wrap and include stdlib.h from,
+ * creating the exact aforementioned situation that breaks. Thus, forcefully
+ * include stdlib.h first whenever sys/wait.h is as a workaround, since that
+ * way round still works.
+ */
+#include <stdlib.h>
+#include_next <sys/wait.h>

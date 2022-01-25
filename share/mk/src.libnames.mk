@@ -262,17 +262,24 @@ LIBVERIEXEC?=	${LIBVERIEXECDIR}/libveriexec.a
 # 2nd+ order consumers.  Auto-generating this would be better.
 _DP_80211=	sbuf bsdxml
 _DP_9p=		sbuf
+# XXX: Not bootstrapped so uses host version on non-FreeBSD, so don't use a
+# FreeBSD-specific dependency list
+.if ${.MAKE.OS} == "FreeBSD" || !defined(BOOTSTRAPPING)
 _DP_archive=	z bz2 lzma bsdxml zstd
+.endif
 _DP_avl=	spl
 _DP_zstd=	pthread
 .if ${MK_BLACKLIST} != "no"
 _DP_blacklist+=	pthread
 .endif
 _DP_crypto=	pthread
+# See comment by _DP_archive above
+.if ${.MAKE.OS} == "FreeBSD" || !defined(BOOTSTRAPPING)
 .if ${MK_OPENSSL} != "no"
 _DP_archive+=	crypto
 .else
 _DP_archive+=	md
+.endif
 .endif
 _DP_sqlite3=	pthread
 _DP_ssl=	crypto
@@ -459,8 +466,16 @@ LDADD_${_l}?=	-lprivate${_l}
 LDADD_${_l}?=	${LDADD_${_l}_L} -l${_l}
 .endif
 # Add in all dependencies for static linkage.
+# Bootstrapping from non-FreeBSD needs special handling, since it overrides
+# NO_SHARED back to yes despite only building static versions of bootstrap
+# libraries (see tools/build/mk/Makefile.boot.pre).
 .if defined(_DP_${_l}) && (${_INTERNALLIBS:M${_l}} || \
+<<<<<<< HEAD
     (defined(NO_SHARED) && (${NO_SHARED} != "no" && ${NO_SHARED} != "NO")))
+=======
+    (defined(NO_SHARED) && ${NO_SHARED:tl} != "no") || \
+    (defined(BOOTSTRAPPING) && ${.MAKE.OS} != "FreeBSD"))
+>>>>>>> origin/freebsd/13-stable/main
 .for _d in ${_DP_${_l}}
 DPADD_${_l}+=	${DPADD_${_d}}
 LDADD_${_l}+=	${LDADD_${_d}}
