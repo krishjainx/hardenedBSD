@@ -2801,13 +2801,7 @@ OLD_FILES+=usr/lib/clang/7.0.1/lib/freebsd/libclang_rt.ubsan_standalone_cxx-x86_
 OLD_DIRS+=usr/lib/clang/7.0.1/lib/freebsd
 OLD_DIRS+=usr/lib/clang/7.0.1/lib
 OLD_DIRS+=usr/lib/clang/7.0.1
-<<<<<<< HEAD
-# 20190311: libexecinfo move to /lib
-OLD_LIBS+=usr/lib/libexecinfo.so.1
-# 20190216: new clang import which bumps version from 6.0.1 to 7.0.1.
-=======
 # 20190216: new clang import which bumps version from 6.0.1 to 7.0.1
->>>>>>> origin/freebsd/12-stable/main
 OLD_FILES+=usr/lib/clang/6.0.1/include/sanitizer/allocator_interface.h
 OLD_FILES+=usr/lib/clang/6.0.1/include/sanitizer/asan_interface.h
 OLD_FILES+=usr/lib/clang/6.0.1/include/sanitizer/common_interface_defs.h
