@@ -59,11 +59,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/loginclass.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
-<<<<<<< HEAD
 #include <sys/pax.h>
-=======
 #include <sys/ptrace.h>
->>>>>>> origin/freebsd/13-stable/main
 #include <sys/refcount.h>
 #include <sys/sx.h>
 #include <sys/priv.h>
