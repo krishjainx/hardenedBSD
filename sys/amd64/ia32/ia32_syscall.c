@@ -266,7 +266,11 @@ setup_lcall_gate(void)
 	bzero(&uap, sizeof(uap));
 	uap.start = 0;
 	uap.num = 1;
+<<<<<<< HEAD
 	lcall_addr = curproc->p_psstrings -
+=======
+	lcall_addr = PROC_PS_STRINGS(curproc) -
+>>>>>>> origin/freebsd/13-stable/main
 	    (_binary_elf_vdso32_so_1_end - _binary_elf_vdso32_so_1_start) +
 	    VDSO_LCALL_TRAMP_OFFSET;
 	bzero(&desc, sizeof(desc));

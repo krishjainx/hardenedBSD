@@ -3348,7 +3348,11 @@ freebsd32_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 
 	sysent = imgp->sysent;
 
+<<<<<<< HEAD
 	arginfo = (struct freebsd32_ps_strings *)curproc->p_psstrings;
+=======
+	arginfo = (struct freebsd32_ps_strings *)PROC_PS_STRINGS(imgp->proc);
+>>>>>>> origin/freebsd/13-stable/main
 	imgp->ps_strings = arginfo;
 	destp =	(uintptr_t)arginfo;
 
@@ -3412,8 +3416,6 @@ freebsd32_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	destp -= ARG_MAX - imgp->args->stringspace;
 	destp = rounddown2(destp, sizeof(uint32_t));
 	ustringp = destp;
-
-	exec_stackgap(imgp, &destp);
 
 	if (imgp->auxargs) {
 		/*

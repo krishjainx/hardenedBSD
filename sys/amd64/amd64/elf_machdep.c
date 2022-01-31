@@ -75,7 +75,12 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS_LA48,
 	.sv_usrstack	= USRSTACK_LA48,
 	.sv_psstrings	= PS_STRINGS_LA48,
+<<<<<<< HEAD
 	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
+=======
+	.sv_psstringssz	= sizeof(struct ps_strings),
+	.sv_stackprot	= VM_PROT_ALL,
+>>>>>>> origin/freebsd/13-stable/main
 	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
 	.sv_copyout_strings	= exec_copyout_strings,
 	.sv_setregs	= exec_setregs,
@@ -91,10 +96,13 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_schedtail	= NULL,
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
+<<<<<<< HEAD
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 #if !defined(PAX_ASLR)
 	.sv_stackgap	= elf64_stackgap,
 #endif
+=======
+>>>>>>> origin/freebsd/13-stable/main
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
 };
@@ -116,6 +124,7 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS_LA57,
 	.sv_usrstack	= USRSTACK_LA57,
 	.sv_psstrings	= PS_STRINGS_LA57,
+	.sv_psstringssz	= sizeof(struct ps_strings),
 	.sv_stackprot	= VM_PROT_ALL,
 	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
 	.sv_copyout_strings	= exec_copyout_strings,
@@ -132,7 +141,6 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_schedtail	= NULL,
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
-	.sv_stackgap	= elf64_stackgap,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
 };

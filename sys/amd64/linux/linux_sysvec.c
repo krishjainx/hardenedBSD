@@ -331,7 +331,11 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	struct proc *p;
 
 	p = imgp->proc;
+<<<<<<< HEAD
 	arginfo = (struct ps_strings *)p->p_psstrings;
+=======
+	arginfo = (struct ps_strings *)PROC_PS_STRINGS(p);
+>>>>>>> origin/freebsd/13-stable/main
 	destp = (uintptr_t)arginfo;
 
 	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
@@ -742,7 +746,12 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS_LA48,
 	.sv_usrstack	= USRSTACK_LA48,
 	.sv_psstrings	= PS_STRINGS_LA48,
+<<<<<<< HEAD
 	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
+=======
+	.sv_psstringssz	= sizeof(struct ps_strings),
+	.sv_stackprot	= VM_PROT_ALL,
+>>>>>>> origin/freebsd/13-stable/main
 	.sv_copyout_auxargs = linux_copyout_auxargs,
 	.sv_copyout_strings = linux_copyout_strings,
 	.sv_setregs	= linux_exec_setregs,
