@@ -2650,15 +2650,9 @@ __elfN(note_procstat_psstrings)(void *arg, struct sbuf *sb, size_t *sizep)
 		KASSERT(*sizep == size, ("invalid size"));
 		structsize = sizeof(ps_strings);
 #if defined(COMPAT_FREEBSD32) && __ELF_WORD_SIZE == 32
-<<<<<<< HEAD
-		ps_strings = PTROUT(p->p_psstrings);
-#else
-		ps_strings = p->p_psstrings;
-=======
 		ps_strings = PTROUT(PROC_PS_STRINGS(p));
 #else
 		ps_strings = PROC_PS_STRINGS(p);
->>>>>>> origin/freebsd/13-stable/main
 #endif
 		sbuf_bcat(sb, &structsize, sizeof(structsize));
 		sbuf_bcat(sb, &ps_strings, sizeof(ps_strings));

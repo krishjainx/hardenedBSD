@@ -164,22 +164,12 @@ sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS)
 #ifdef SCTL_MASK32
 	if (req->flags & SCTL_MASK32) {
 		unsigned int val;
-<<<<<<< HEAD
-		val = (unsigned int)p->p_psstrings;
-		error = SYSCTL_OUT(req, &val, sizeof(val));
-	} else
-#endif
-		error = SYSCTL_OUT(req, &p->p_psstrings,
-		   sizeof(p->p_psstrings));
-	return error;
-=======
 		val = (unsigned int)PROC_PS_STRINGS(p);
 		return (SYSCTL_OUT(req, &val, sizeof(val)));
 	}
 #endif
 	ps_strings = PROC_PS_STRINGS(p);
 	return (SYSCTL_OUT(req, &ps_strings, sizeof(ps_strings)));
->>>>>>> origin/freebsd/13-stable/main
 }
 
 static int
@@ -1276,34 +1266,31 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	} else {
 		ssiz = maxssiz;
 	}
-<<<<<<< HEAD
 
 	stack_addr = sv->sv_usrstack;
 #ifdef PAX_ASLR
 	/* Randomize the stack top. */
+	PROC_LOCK(p);
 	pax_aslr_stack(p, &stack_addr);
+	PROC_UNLOCK(p);
 #endif
 	/* Save the process specific randomized stack top. */
 	p->p_usrstack = stack_addr;
 	/* Calculate the stack's mapping address.  */
 	stack_addr -= ssiz;
-	stackprot = obj != NULL && imgp->stack_prot != 0 ? imgp->stack_prot : sv->sv_stackprot;
+	stackprot = obj != NULL && imgp->stack_prot != 0 ?
+	    imgp->stack_prot : sv->sv_stackprot;
 	stackmaxprot = VM_PROT_ALL;
 #ifdef PAX_NOEXEC
+	PROC_LOCK(p);
 	pax_noexec_nx(p, &stackprot, &stackmaxprot);
+	PROC_UNLOCK(p);
 #endif
-	imgp->eff_stack_sz = lim_cur(curthread, RLIMIT_STACK);
-	if (ssiz < imgp->eff_stack_sz)
-		imgp->eff_stack_sz = ssiz;
+	imgp->stack_sz = lim_cur(curthread, RLIMIT_STACK);
+	if (ssiz < imgp->stack_sz)
+		imgp->stack_sz = ssiz;
 	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz,
 	    stackprot, stackmaxprot, MAP_STACK_GROWS_DOWN);
-=======
-	stack_addr = sv->sv_usrstack - ssiz;
-	stack_prot = obj != NULL && imgp->stack_prot != 0 ?
-	    imgp->stack_prot : sv->sv_stackprot;
-	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz, stack_prot,
-	    VM_PROT_ALL, MAP_STACK_GROWS_DOWN);
->>>>>>> origin/freebsd/13-stable/main
 	if (error != KERN_SUCCESS) {
 #ifdef PAX_ASLR
 		pax_log_aslr(p, PAX_LOG_DEFAULT,
@@ -1312,7 +1299,6 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 		return (vm_mmap_to_errno(error));
 	}
-	vmspace->vm_stkgap = 0;
 
 	/*
 	 * vm_ssize and vm_maxsaddr are somewhat antiquated concepts, but they
@@ -1741,9 +1727,8 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 
 	p = imgp->proc;
 	sysent = p->p_sysent;
-<<<<<<< HEAD
 	szsigcode = 0;
-	arginfo = (struct ps_strings *)p->p_psstrings;
+	arginfo = (struct ps_strings *)PROC_PS_STRINGS(p);
 	p->p_sigcode_base = p->p_sysent->sv_sigcode_base;
 	imgp->ps_strings = arginfo;
 	destp =	(uintptr_t)arginfo;
@@ -1753,11 +1738,6 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 		pax_aslr_vdso(p, &(p->p_sigcode_base));
 	}
 #endif
-=======
-
-	destp =	PROC_PS_STRINGS(p);
-	arginfo = imgp->ps_strings = (void *)destp;
->>>>>>> origin/freebsd/13-stable/main
 
 	/*
 	 * Install sigcode.

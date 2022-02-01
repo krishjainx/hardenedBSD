@@ -601,16 +601,7 @@ sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	tf->tf_elr = (register_t)catcher;
 	tf->tf_sp = (register_t)fp;
-<<<<<<< HEAD
-	sysent = p->p_sysent;
-	if (sysent->sv_sigcode_base != 0)
-		tf->tf_lr = (register_t)(p->p_sigcode_base);
-	else
-		tf->tf_lr = (register_t)(p->p_psstrings -
-		    *(sysent->sv_szsigcode));
-=======
-	tf->tf_lr = (register_t)p->p_sysent->sv_sigcode_base;
->>>>>>> origin/freebsd/13-stable/main
+	tf->tf_lr = (register_t)p->p_sigcode_base;
 
 	CTR3(KTR_SIG, "sendsig: return td=%p pc=%#x sp=%#x", td, tf->tf_elr,
 	    tf->tf_sp);

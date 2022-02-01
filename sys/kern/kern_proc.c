@@ -1838,13 +1838,8 @@ get_proc_vector32(struct thread *td, struct proc *p, char ***proc_vectorp,
 	int i, error;
 
 	error = 0;
-<<<<<<< HEAD
-	if (proc_readmem(td, p, (vm_offset_t)p->p_psstrings, &pss,
-	    sizeof(pss)) != sizeof(pss))
-=======
 	if (proc_readmem(td, p, PROC_PS_STRINGS(p), &pss, sizeof(pss)) !=
 	    sizeof(pss))
->>>>>>> origin/freebsd/13-stable/main
 		return (ENOMEM);
 	switch (type) {
 	case PROC_ARG:
@@ -1919,13 +1914,8 @@ get_proc_vector(struct thread *td, struct proc *p, char ***proc_vectorp,
 	if (SV_PROC_FLAG(p, SV_ILP32) != 0)
 		return (get_proc_vector32(td, p, proc_vectorp, vsizep, type));
 #endif
-<<<<<<< HEAD
-	if (proc_readmem(td, p, (vm_offset_t)p->p_psstrings, &pss,
-	    sizeof(pss)) != sizeof(pss))
-=======
 	if (proc_readmem(td, p, PROC_PS_STRINGS(p), &pss, sizeof(pss)) !=
 	    sizeof(pss))
->>>>>>> origin/freebsd/13-stable/main
 		return (ENOMEM);
 	switch (type) {
 	case PROC_ARG:
@@ -2991,21 +2981,13 @@ sysctl_kern_proc_ps_strings(SYSCTL_HANDLER_ARGS)
 		 * process.
 		 */
 		ps_strings32 = SV_PROC_FLAG(p, SV_ILP32) != 0 ?
-<<<<<<< HEAD
-		    PTROUT(p->p_psstrings) : 0;
-=======
 		    PTROUT(PROC_PS_STRINGS(p)) : 0;
->>>>>>> origin/freebsd/13-stable/main
 		PROC_UNLOCK(p);
 		error = SYSCTL_OUT(req, &ps_strings32, sizeof(ps_strings32));
 		return (error);
 	}
 #endif
-<<<<<<< HEAD
-	ps_strings = p->p_psstrings;
-=======
 	ps_strings = PROC_PS_STRINGS(p);
->>>>>>> origin/freebsd/13-stable/main
 	PROC_UNLOCK(p);
 	error = SYSCTL_OUT(req, &ps_strings, sizeof(ps_strings));
 	return (error);
@@ -3122,15 +3104,9 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
 				    *sv->sv_szsigcode :
 				    (uintptr_t)sv->sv_szsigcode);
 			} else {
-<<<<<<< HEAD
-				kst32.ksigtramp_start = p->p_psstrings -
-				    *sv->sv_szsigcode;
-				kst32.ksigtramp_end = p->p_psstrings;
-=======
 				kst32.ksigtramp_start = PROC_PS_STRINGS(p) -
 				    *sv->sv_szsigcode;
 				kst32.ksigtramp_end = PROC_PS_STRINGS(p);
->>>>>>> origin/freebsd/13-stable/main
 			}
 		}
 		PROC_UNLOCK(p);
@@ -3145,15 +3121,9 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
 		    ((sv->sv_flags & SV_DSO_SIG) == 0 ? *sv->sv_szsigcode :
 		    (uintptr_t)sv->sv_szsigcode);
 	} else {
-<<<<<<< HEAD
-		kst.ksigtramp_start = (char *)p->p_psstrings -
-		    *sv->sv_szsigcode;
-		kst.ksigtramp_end = (char *)p->p_psstrings;
-=======
 		kst.ksigtramp_start = (char *)PROC_PS_STRINGS(p) -
 		    *sv->sv_szsigcode;
 		kst.ksigtramp_end = (char *)PROC_PS_STRINGS(p);
->>>>>>> origin/freebsd/13-stable/main
 	}
 	PROC_UNLOCK(p);
 	error = SYSCTL_OUT(req, &kst, sizeof(kst));

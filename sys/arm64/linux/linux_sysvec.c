@@ -235,11 +235,7 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	int argc, envc, error;
 
 	p = imgp->proc;
-<<<<<<< HEAD
-	arginfo = (struct ps_strings *)p->p_psstrings;
-=======
 	arginfo = (struct ps_strings *)PROC_PS_STRINGS(p);
->>>>>>> origin/freebsd/13-stable/main
 	destp = (uintptr_t)arginfo;
 
 	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
