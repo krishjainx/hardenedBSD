@@ -414,10 +414,7 @@ SRCS+=		Plugins/LanguageRuntime/ObjC/AppleObjCRuntime/AppleThreadPlanStepThrough
 SRCS+=		Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.cpp
 SRCS+=		Plugins/LanguageRuntime/RenderScript/RenderScriptRuntime/RenderScriptScriptGroup.cpp
 SRCS+=		Plugins/LanguageRuntime/RenderScript/RenderScriptRuntime/RenderScriptRuntime.cpp
-<<<<<<< HEAD
 SRCS+=		Plugins/LanguageRuntime/RenderScript/RenderScriptRuntime/RenderScriptExpressionOpts.cpp
-=======
->>>>>>> origin/freebsd/13-stable/main
 SRCS+=		Plugins/LanguageRuntime/RenderScript/RenderScriptRuntime/RenderScriptx86ABIFixups.cpp
 SRCS+=		Plugins/MemoryHistory/asan/MemoryHistoryASan.cpp
 SRCS+=		Plugins/ObjectContainer/BSD-Archive/ObjectContainerBSDArchive.cpp
