@@ -178,6 +178,30 @@ static struct mlx5_profile profiles[] = {
 	},
 };
 
+static void mlx5_set_driver_version(struct mlx5_core_dev *dev)
+{
+	const size_t driver_ver_sz =
+	    MLX5_FLD_SZ_BYTES(set_driver_version_in, driver_version);
+	u8 in[MLX5_ST_SZ_BYTES(set_driver_version_in)] = {};
+	u8 out[MLX5_ST_SZ_BYTES(set_driver_version_out)] = {};
+	char *string;
+
+	if (!MLX5_CAP_GEN(dev, driver_version))
+		return;
+
+	string = MLX5_ADDR_OF(set_driver_version_in, in, driver_version);
+
+	snprintf(string, driver_ver_sz, "FreeBSD,mlx5_core,%u.%u.%u," DRIVER_VERSION,
+	    __FreeBSD_version / 100000, (__FreeBSD_version / 1000) % 100,
+	    __FreeBSD_version % 1000);
+
+	/* Send the command */
+	MLX5_SET(set_driver_version_in, in, opcode,
+	    MLX5_CMD_OP_SET_DRIVER_VERSION);
+
+	mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
+}
+
 #ifdef PCI_IOV
 static const char iov_mac_addr_name[] = "mac-addr";
 static const char iov_node_guid_name[] = "node-guid";
@@ -530,6 +554,17 @@ static int set_hca_ctrl(struct mlx5_core_dev *dev)
 					&he_out, sizeof(he_out),
 					MLX5_REG_HOST_ENDIANNESS, 0, 1);
 	return err;
+}
+
+static int mlx5_core_set_hca_defaults(struct mlx5_core_dev *dev)
+{
+	int ret = 0;
+
+	/* Disable local_lb by default */
+	if (MLX5_CAP_GEN(dev, port_type) == MLX5_CAP_PORT_TYPE_ETH)
+		ret = mlx5_nic_vport_update_local_lb(dev, false);
+
+       return ret;
 }
 
 static int mlx5_core_enable_hca(struct mlx5_core_dev *dev, u16 func_id)
@@ -1097,6 +1132,8 @@ static int mlx5_load_one(struct mlx5_core_dev *dev, struct mlx5_priv *priv,
 		goto reclaim_boot_pages;
 	}
 
+	mlx5_set_driver_version(dev);
+
 	mlx5_start_health_poll(dev);
 
 	if (boot && (err = mlx5_init_once(dev, priv))) {
@@ -1132,6 +1169,12 @@ static int mlx5_load_one(struct mlx5_core_dev *dev, struct mlx5_priv *priv,
 	err = mlx5_init_fs(dev);
 	if (err) {
 		mlx5_core_err(dev, "flow steering init %d\n", err);
+		goto err_free_comp_eqs;
+	}
+
+	err = mlx5_core_set_hca_defaults(dev);
+	if (err) {
+		mlx5_core_err(dev, "Failed to set HCA defaults %d\n", err);
 		goto err_free_comp_eqs;
 	}
 

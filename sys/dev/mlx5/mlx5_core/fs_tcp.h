@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2019-2021, Mellanox Technologies, Ltd.  All rights reserved.
+ * Copyright (c) 2020-2021, Mellanox Technologies, Ltd.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -21,21 +21,21 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-#ifndef __MLX5_TLS_H__
-#define	__MLX5_TLS_H__
+#ifndef __MLX5E_ACCEL_FS_TCP_H__
+#define	__MLX5E_ACCEL_FS_TCP_H__
 
-struct mlx5_core_dev;
+struct inpcb;
+struct mlx5_flow_rule;
+struct mlx5e_priv;
 
-int mlx5_encryption_key_create(struct mlx5_core_dev *mdev, u32 pdn,
-    const void *p_key, u32 key_len, u32 * p_obj_id);
-int mlx5_encryption_key_destroy(struct mlx5_core_dev *mdev, u32 oid);
-int mlx5_tls_open_tis(struct mlx5_core_dev *mdev, int tc, int tdn, int pdn, u32 *p_tisn);
-void mlx5_tls_close_tis(struct mlx5_core_dev *mdev, u32 tisn);
-int mlx5_tls_open_tir(struct mlx5_core_dev *mdev, int tdn, int rqtn, u32 *p_tirn);
-void mlx5_tls_close_tir(struct mlx5_core_dev *mdev, u32 tirn);
+int	mlx5e_accel_fs_tcp_create(struct mlx5e_priv *);
+void	mlx5e_accel_fs_tcp_destroy(struct mlx5e_priv *);
+struct mlx5_flow_rule *
+mlx5e_accel_fs_add_inpcb(struct mlx5e_priv *,
+    struct inpcb *, uint32_t tirn, uint32_t flow_tag, uint16_t vlan_id);
+#define	MLX5E_ACCEL_FS_ADD_INPCB_NO_VLAN 0xFFFF
+void	mlx5e_accel_fs_del_inpcb(struct mlx5_flow_rule *);
 
-#endif					/* __MLX5_TLS_H__ */
+#endif					/* __MLX5E_ACCEL_FS_TCP_H__ */
