@@ -26,8 +26,10 @@
  */
 
 #include "opt_kern_tls.h"
+#include "opt_rss.h"
+#include "opt_ratelimit.h"
 
-#include "en.h"
+#include <dev/mlx5/mlx5_en/en.h>
 
 #include <sys/eventhandler.h>
 #include <sys/sockio.h>

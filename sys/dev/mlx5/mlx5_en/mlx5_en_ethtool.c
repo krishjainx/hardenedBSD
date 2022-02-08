@@ -25,8 +25,11 @@
  * $FreeBSD$
  */
 
-#include "en.h"
-#include "port_buffer.h"
+#include "opt_rss.h"
+#include "opt_ratelimit.h"
+
+#include <dev/mlx5/mlx5_en/en.h>
+#include <dev/mlx5/mlx5_en/port_buffer.h>
 
 void
 mlx5e_create_stats(struct sysctl_ctx_list *ctx,

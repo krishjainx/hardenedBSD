@@ -25,10 +25,13 @@
  * $FreeBSD$
  */
 
+#include "opt_rss.h"
+#include "opt_ratelimit.h"
+
 #include <linux/module.h>
 #include <dev/mlx5/driver.h>
-#include "mlx5_core.h"
-#include "fs_core.h"
+#include <dev/mlx5/mlx5_core/mlx5_core.h>
+#include <dev/mlx5/mlx5_core/fs_core.h>
 #include <linux/string.h>
 #include <linux/compiler.h>
 
