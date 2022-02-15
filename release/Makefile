@@ -24,6 +24,8 @@
 #  NOPKG:    if set, do not distribute third-party packages
 #  NOPORTS:  if set, do not distribute ports tree
 #  NOSRC:    if set, do not distribute source tree
+#  NODOC:    if set, do not generate release documentation
+#  WITH_PKGBASE:  if set, produce a pkgbase release image
 #  WITH_DVD: if set, generate dvd1.iso
 #  WITH_COMPRESSED_IMAGES: if set, compress installation images with xz(1)
 #		(uncompressed images are not removed)
@@ -38,6 +40,8 @@ WORLDDIR?=	${.CURDIR}/..
 PORTSDIR?=	/usr/ports
 RELNOTES_LANG?= en_US.ISO8859-1
 KERNCONF?=	HARDENEDBSD
+REPODIR?=	${OBJROOT}repo
+VENDORNAME=	HardenedBSD
 
 .if !defined(TARGET) || empty(TARGET)
 TARGET=		${MACHINE}
@@ -54,7 +58,7 @@ DISTDIR=	dist
 
 # Define OSRELEASE by using newvers.sh
 .if !defined(OSRELEASE) || empty(OSRELEASE)
-.for _V in TYPE BRANCH REVISION
+.for _V in TYPE BRANCH REVISION VENDOR_VERSION
 ${_V}!=	eval $$(awk '/^${_V}=/{print}' ${.CURDIR}/../sys/conf/newvers.sh); echo $$${_V}
 .endfor
 .for _V in ${TARGET_ARCH}
@@ -131,8 +135,7 @@ base.txz:
 
 kernel.txz:
 	mkdir -p ${DISTDIR}
-	cd ${WORLDDIR} && ${IMAKE} distributekernel packagekernel \
-		DISTDIR=${.OBJDIR}/${DISTDIR} KERNCONF=${KERNCONF}
+	cd ${WORLDDIR} && ${IMAKE} distributekernel packagekernel DISTDIR=${.OBJDIR}/${DISTDIR} KERNCONF=${KERNCONF}
 	mv ${DISTDIR}/kernel*.txz .
 
 src.txz:
@@ -151,38 +154,107 @@ ports.txz:
 	    --exclude 'usr/ports/INDEX*' --exclude work usr/ports | \
 	    ${XZ_CMD} > ${.OBJDIR}/ports.txz
 
+reldoc:
+	cd ${DOCDIR}/en_US.ISO8859-1/htdocs/releases/${REVISION}R && \
+	    env MAN4DIR=${WORLDDIR}/share/man/man4 \
+	    SVN=${SVN} \
+	    _BRANCH=${BRANCH} \
+	    ${MAKE} all install clean "FORMATS=html txt" \
+	    INSTALL_COMPRESSED='' URLS_ABSOLUTE=YES DOCDIR=${.OBJDIR}/rdoc \
+	    WEBDIR=${DOCDIR} DESTDIR=${.OBJDIR}/rdoc
+	mkdir -p reldoc
+.for i in hardware readme relnotes errata
+	ln -f ${.OBJDIR}/rdoc/${i:tl}.txt \
+		reldoc/${i:tu}.TXT
+	ln -f ${.OBJDIR}/rdoc/${i:tl}.html \
+		reldoc/${i:tu}.HTML
+.endfor
+	cp ${.OBJDIR}/rdoc/docbook.css \
+		reldoc/
+
+REPONAME!=${PKG_CMD} -o ABI_FILE=${OBJROOT}${TARGET}.${TARGET_ARCH}/usr.bin/uname/uname config abi
+
 disc1: packagesystem
 # Install system
 	mkdir -p ${.TARGET}
-	cd ${WORLDDIR} && ${IMAKE} installworld installkernel distribution \
+.if defined(WITH_PKGBASE)
+# TODO : We need to switch to create the installer data from the pkgs
+	cd ${WORLDDIR} && ${IMAKE} installkernel installworld distribution \
+	    DESTDIR=${.OBJDIR}/${.TARGET} INSTKERNNAME=kernel.${KERNCONF} MK_AMD=no MK_AT=no \
+	    MK_INSTALLLIB=no MK_LIB32=no MK_MAIL=no \
+	    MK_TOOLCHAIN=no MK_PROFILE=no \
+	    MK_RESCUE=no MK_DICT=no \
+	    MK_KERNEL_SYMBOLS=no MK_TESTS=no MK_DEBUG_FILES=no \
+	    -DDB_FROM_SRC
+.else
+	cd ${WORLDDIR} && ${IMAKE} installkernel installworld distribution \
+	    KERNCONF=${KERNCONF} \
 	    DESTDIR=${.OBJDIR}/${.TARGET} MK_AT=no \
 	    MK_INSTALLLIB=no MK_LIB32=no MK_MAIL=no \
 	    MK_TOOLCHAIN=no MK_PROFILE=no \
 	    MK_RESCUE=no MK_DICT=no \
 	    MK_KERNEL_SYMBOLS=no MK_TESTS=no MK_DEBUG_FILES=no \
 	    -DDB_FROM_SRC
+.endif
 # Copy distfiles
 	mkdir -p ${.TARGET}/usr/freebsd-dist
+.if defined(WITH_PKGBASE)
+	mkdir ${.TARGET}/usr/freebsd-dist/${REPONAME}/
+	cp -RH ${REPODIR}/${REPONAME}/latest ${.TARGET}/usr/freebsd-dist/${REPONAME}/
+	rm ${.TARGET}/usr/freebsd-dist/${REPONAME}/latest/*-dev*
+	pkg repo ${.TARGET}/usr/freebsd-dist/${REPONAME}/latest/
+	mkdir -p ${.TARGET}/usr/freebsd-dist/${VENDORNAME}/All
+	echo "${VENDOR_PORTS_LIST}" | xargs -I@ sh -c "cp -RH ${VENDOR_REPODIR}/@ ${.TARGET}/usr/freebsd-dist/${VENDORNAME}/All"
+	cp -RH "${VENDOR_REPODIR}/Latest" "${.TARGET}/usr/freebsd-dist/${VENDORNAME}/"
+	pkg repo ${.TARGET}/usr/freebsd-dist/${VENDORNAME}/
+# Install pkg, we need to set SRCCONF to /dev/null in case it contain WITHOUT_NLS
+# the ports tree doesn't like that
+# HACK: lately pkg fails to compile in weird way, do a hack version of extracting in
+# and replace /usr/sbin/pkg with a link
+	tar xzf ${.TARGET}/usr/freebsd-dist/${VENDORNAME}/Latest/pkg.txz -C $$(realpath ${.TARGET})
+	rm $$(realpath ${.TARGET})/usr/sbin/pkg
+	ln -s /usr/local/sbin/pkg $$(realpath ${.TARGET})/usr/sbin/pkg
+.else
 	for dist in MANIFEST $$(ls *.txz | grep -vE -- '(base|lib32)-dbg'); \
 	    do cp $${dist} ${.TARGET}/usr/freebsd-dist; \
 	done
+.endif
+# Copy documentation, if generated
+.if !defined(NODOC)
+	cp reldoc/* ${.TARGET}
+.endif
 # Set up installation environment
 	ln -fs /tmp/bsdinstall_etc/resolv.conf ${.TARGET}/etc/resolv.conf
 	echo sendmail_enable=\"NONE\" > ${.TARGET}/etc/rc.conf
 	echo hostid_enable=\"NO\" >> ${.TARGET}/etc/rc.conf
+	echo devmatch_enable=\"NO\" >> ${.TARGET}/etc/rc.conf
+	echo debug.witness.trace=0 >> ${.TARGET}/etc/sysctl.conf
 	echo vfs.mountroot.timeout=\"10\" >> ${.TARGET}/boot/loader.conf
 	echo kernels_autodetect=\"NO\" >> ${.TARGET}/boot/loader.conf
 	cp ${.CURDIR}/rc.local ${.TARGET}/etc
-	# XXXOP - try to work around installer lockup on random dev in a virtual machine
-	dd if=/dev/random of=${.TARGET}/boot/entropy bs=4k count=1
-	chown 0:0 ${.TARGET}/boot/entropy
-	chmod 0600 ${.TARGET}/boot/entropy
+.if defined(WITH_PKGBASE)
+	mkdir ${.TARGET}/conf
+.if defined(WITH_SERIAL)
+	cp ${.CURDIR}/config_serial.xml ${.TARGET}/conf/config.xml
+.else
+	cp ${.CURDIR}/config_vga.xml ${.TARGET}/conf/config.xml
+.endif
+	echo 'kernel="kernel.HARDENEDBSD"' >> ${.TARGET}/boot/loader.conf.local
+	echo 'module_path="kernel.HARDENEDBSD"' >> ${.TARGET}/boot/loader.conf
+	echo 'boot_multicons="YES"' >> ${.TARGET}/boot/loader.conf.local
+	echo 'kern.cam.boot_delay="10000"' >> ${.TARGET}/boot/loader.conf.local
+.if defined(WITH_SERIAL)
+	echo 'boot_serial="YES"' >> ${.TARGET}/boot/loader.conf.local
+	echo 'comconsole_speed=115200' >> ${.TARGET}/boot/loader.conf.local
+	echo 'console=comconsole' >> ${.TARGET}/boot/loader.conf.local
+.endif
+.endif
 	touch ${.TARGET}
 
 bootonly: packagesystem
 # Install system
 	mkdir -p ${.TARGET}
-	cd ${WORLDDIR} && ${IMAKE} installworld installkernel distribution \
+	cd ${WORLDDIR} && ${IMAKE} installkernel installworld distribution \
 	    DESTDIR=${.OBJDIR}/${.TARGET} MK_AT=no \
 	    MK_GAMES=no \
 	    MK_INSTALLLIB=no MK_LIB32=no MK_MAIL=no \
@@ -200,15 +272,11 @@ bootonly: packagesystem
 	echo vfs.mountroot.timeout=\"10\" >> ${.TARGET}/boot/loader.conf
 	echo kernels_autodetect=\"NO\" >> ${.TARGET}/boot/loader.conf
 	cp ${.CURDIR}/rc.local ${.TARGET}/etc
-	# XXXOP - try to work around installer lockup on random dev in a virtual machine
-	dd if=/dev/random of=${.TARGET}/boot/entropy bs=4k count=1
-	chown 0:0 ${.TARGET}/boot/entropy
-	chmod 0600 ${.TARGET}/boot/entropy
 
 dvd: packagesystem
 # Install system
 	mkdir -p ${.TARGET}
-	cd ${WORLDDIR} && ${IMAKE} installworld installkernel distribution \
+	cd ${WORLDDIR} && ${IMAKE} installkernel installworld distribution \
 		DESTDIR=${.OBJDIR}/${.TARGET} MK_RESCUE=no MK_KERNEL_SYMBOLS=no \
 		MK_TESTS=no MK_DEBUG_FILES=no \
 		-DDB_FROM_SRC
@@ -224,10 +292,6 @@ dvd: packagesystem
 	echo vfs.mountroot.timeout=\"10\" >> ${.TARGET}/boot/loader.conf
 	echo kernels_autodetect=\"NO\" >> ${.TARGET}/boot/loader.conf
 	cp ${.CURDIR}/rc.local ${.TARGET}/etc
-	# XXXOP - try to work around installer lockup on random dev in a virtual machine
-	dd if=/dev/random of=${.TARGET}/boot/entropy bs=4k count=1
-	chown 0:0 ${.TARGET}/boot/entropy
-	chmod 0600 ${.TARGET}/boot/entropy
 	touch ${.TARGET}
 
 release.iso: disc1.iso
@@ -248,8 +312,12 @@ mini-memstick: mini-memstick.img
 mini-memstick.img: bootonly
 	sh ${.CURDIR}/${TARGET}/make-memstick.sh bootonly ${.TARGET}
 
+.if defined(WITH_PKGBASE)
+packagesystem:
+.else
 packagesystem: base.txz kernel.txz ${EXTRA_PACKAGES}
 	sh ${.CURDIR}/scripts/make-manifest.sh *.txz > MANIFEST
+.endif
 	touch ${.TARGET}
 
 pkg-stage:

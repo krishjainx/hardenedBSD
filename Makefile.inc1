@@ -530,7 +530,7 @@ OSRELDATE=	0
 .endif
 
 # Set VERSION for CTFMERGE to use via the default CTFFLAGS=-L VERSION.
-.for _V in BRANCH REVISION
+.for _V in BRANCH REVISION VENDOR_VERSION
 .if !defined(_${_V})
 _${_V}!=	eval $$(awk '/^${_V}=/{print}' ${SRCTOP}/sys/conf/newvers.sh); echo $$${_V}
 .export _${_V}
@@ -550,7 +550,11 @@ VERSION=	FreeBSD ${_REVISION}-${_BRANCH:C/-p[0-9]+$//} ${TARGET_ARCH} ${SRCRELDA
 _STRTIMENOW=	%Y%m%d%H%M%S
 _TIMENOW=	${_STRTIMENOW:gmtime}
 .if ${_BRANCH:MCURRENT*} || ${_BRANCH:MSTABLE*} || ${_BRANCH:MPRERELEASE*}
+.if defined(VENDOR_VERSION)
+_REVISION:=	${_VENDOR_VERSION:R}
+.else
 _REVISION:=	${_REVISION:R}
+.endif
 EXTRA_REVISION=	.snap${_TIMENOW}
 .elif ${_BRANCH:MALPHA*}
 EXTRA_REVISION=	.a${_BRANCH:C/ALPHA([0-9]+).*/\1/}.${_TIMENOW}
@@ -1870,7 +1874,11 @@ packagekernel: .PHONY
 .endif
 
 stagekernel: .PHONY
+.if ${BUILDKERNELS:[#]} == 1
+	${_+_}${MAKE} -C ${.CURDIR} ${.MAKEFLAGS} distributekernel INSTKERNNAME=kernel.${KERNCONF}
+.else
 	${_+_}${MAKE} -C ${.CURDIR} ${.MAKEFLAGS} distributekernel
+.endif
 
 PORTSDIR?=	/usr/ports
 WSTAGEDIR?=	${OBJTOP}/worldstage
@@ -1931,6 +1939,9 @@ real-update-packages: stage-packages .PHONY
 .else
 	@echo "==> Checking for new packages (comparing ${PKG_VERSION} to ${PKG_VERSION_FROM})"
 	@for pkg in ${PKG_VERSION_FROM_DIR}/${PKG_NAME_PREFIX}-*; do \
+	  if [ "${PKG_VERSION}" == "${PKG_VERSION_FROM}" ]; then \
+	    continue; \
+	  fi ; \
 	  pkgname=$$(pkg query -F $${pkg} '%n' | sed 's/${PKG_NAME_PREFIX}-\(.*\)/\1/') ; \
 	  newpkgname=${PKG_NAME_PREFIX}-$${pkgname}-${PKG_VERSION}.pkg ; \
 	  oldsum=$$(pkg query -F $${pkg} '%X') ; \
@@ -2035,7 +2046,7 @@ create-kernel-packages-flavor${flavor:C,^""$,${_default_flavor},}: _pkgbootstrap
 		-v kernel=yes -v _kernconf=${INSTALLKERNEL} ; \
 	sed -e "s/%VERSION%/${PKG_VERSION}/" \
 		-e "s/%PKGNAME%/kernel-${INSTALLKERNEL:tl}${flavor}/" \
-		-e "s/%KERNELDIR%/kernel/" \
+		-e "s/%KERNELDIR%/kernel.${INSTALLKERNEL}/" \
 		-e "s/%COMMENT%/FreeBSD ${INSTALLKERNEL} kernel ${flavor}/" \
 		-e "s/%DESC%/FreeBSD ${INSTALLKERNEL} kernel ${flavor}/" \
 		-e "s/ %VCS_REVISION%/${VCS_REVISION}/" \

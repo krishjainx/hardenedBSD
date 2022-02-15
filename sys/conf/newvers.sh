@@ -48,7 +48,8 @@
 #
 #	-V var	Print ${var}="${val-of-var}" and exit
 #
-#	-v	Print TYPE REVISION BRANCH RELEASE VERSION RELDATE variables
+#	-v	Print TYPE REVISION BRANCH RELEASE VERSION RELDATE
+#		VENDOR_VERSION variables
 #		like the -V command
 #
 
@@ -61,6 +62,7 @@ fi
 BRANCH="${BRANCH}-HBSD"
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
+VENDOR_VERSION=""
 
 if [ -z "${SYSDIR}" ]; then
     SYSDIR=$(dirname $0)/..
@@ -118,7 +120,7 @@ while getopts crRvV: opt; do
 		;;
 	v)
 		# Only put variables that are single lines here.
-		for v in TYPE REVISION BRANCH RELEASE VERSION RELDATE; do
+		for v in TYPE REVISION BRANCH RELEASE VERSION RELDATE VENDOR_VERSION; do
 			eval val=\$${v}
 			echo ${v}=\"${val}\"
 		done

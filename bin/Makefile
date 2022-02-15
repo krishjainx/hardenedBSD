@@ -38,7 +38,8 @@ SUBDIR= cat \
 	stty \
 	sync \
 	test \
-	uuidgen
+	uuidgen \
+	vendor-version
 
 SUBDIR.${MK_SENDMAIL}+=	rmail
 SUBDIR.${MK_TCSH}+=	csh

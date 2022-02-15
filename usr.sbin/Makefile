@@ -157,6 +157,8 @@ SUBDIR.${MK_ISCSI}+=	ctladm ctld iscsid
 SUBDIR.${MK_JAIL}+=	jail
 SUBDIR.${MK_JAIL}+=	jexec
 SUBDIR.${MK_JAIL}+=	jls
+SUBDIR.${MK_KERNEL_SELECT}+=	kernel-select
+SUBDIR.${MK_KERNEL_SELECT}+=	vendor-update
 # XXX MK_SYSCONS
 SUBDIR.${MK_LEGACY_CONSOLE}+=	kbdcontrol
 SUBDIR.${MK_LEGACY_CONSOLE}+=	kbdmap
