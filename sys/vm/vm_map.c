@@ -349,6 +349,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 	vm->vm_taddr = 0;
 	vm->vm_daddr = 0;
 	vm->vm_maxsaddr = 0;
+<<<<<<< HEAD
 #ifdef PAX_ASLR
 	vm->vm_aslr_delta_mmap = 0;
 	vm->vm_aslr_delta_rtld = 0;
@@ -362,6 +363,8 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #endif
 
 	vm->vm_stkgap = 0;
+=======
+>>>>>>> origin/freebsd/13-stable/main
 	return (vm);
 }
 
@@ -4277,6 +4280,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_taddr = vm1->vm_taddr;
 	vm2->vm_daddr = vm1->vm_daddr;
 	vm2->vm_maxsaddr = vm1->vm_maxsaddr;
+<<<<<<< HEAD
 #ifdef PAX_ASLR
 	vm2->vm_aslr_delta_exec = vm1->vm_aslr_delta_exec;
 	vm2->vm_aslr_delta_mmap = vm1->vm_aslr_delta_mmap;
@@ -4289,6 +4293,9 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 #endif
 #endif
 	vm2->vm_stkgap = vm1->vm_stkgap;
+=======
+	vm2->vm_stacktop = vm1->vm_stacktop;
+>>>>>>> origin/freebsd/13-stable/main
 	vm_map_lock(old_map);
 	if (old_map->busy)
 		vm_map_wait_busy(old_map);
@@ -4306,7 +4313,12 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	}
 
 	new_map->anon_loc = old_map->anon_loc;
+<<<<<<< HEAD
 	new_map->flags |= old_map->flags & (MAP_ASLR | MAP_ASLR_IGNSTART);
+=======
+	new_map->flags |= old_map->flags & (MAP_ASLR | MAP_ASLR_IGNSTART |
+	    MAP_ASLR_STACK | MAP_WXORX);
+>>>>>>> origin/freebsd/13-stable/main
 
 	VM_MAP_ENTRY_FOREACH(old_entry, old_map) {
 		if ((old_entry->eflags & MAP_ENTRY_IS_SUB_MAP) != 0)
@@ -4726,7 +4738,11 @@ retry:
 	 * limit.
 	 */
 	is_procstack = addr >= (vm_offset_t)vm->vm_maxsaddr &&
+<<<<<<< HEAD
 	    addr < (vm_offset_t)p->p_usrstack;
+=======
+	    addr < (vm_offset_t)vm->vm_stacktop;
+>>>>>>> origin/freebsd/13-stable/main
 	if (is_procstack && (ctob(vm->vm_ssize) + grow_amount > stacklim))
 		return (KERN_NO_SPACE);
 

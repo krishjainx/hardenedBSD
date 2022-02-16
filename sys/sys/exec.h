@@ -77,7 +77,12 @@ struct execsw {
  * Prefer the kern.ps_strings or kern.proc.ps_strings sysctls to this constant.
  */
 #define	PS_STRINGS	(USRSTACK - sizeof(struct ps_strings))
+<<<<<<< HEAD
 #define	PROC_PS_STRINGS(p)	((p)->p_psstrings)
+=======
+#define	PROC_PS_STRINGS(p)	\
+	((p)->p_vmspace->vm_stacktop - (p)->p_sysent->sv_psstringssz)
+>>>>>>> origin/freebsd/13-stable/main
 
 int exec_map_first_page(struct image_params *);        
 void exec_unmap_first_page(struct image_params *);       
