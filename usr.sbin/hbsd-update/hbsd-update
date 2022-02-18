@@ -661,6 +661,7 @@ apply_base() {
 	${TAR} -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		--exclude ./boot \
+		--exclude ./boot/efi \
 		-C ${mountpoint}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -669,7 +670,7 @@ apply_base() {
 
 	boottmp=$(env TMPDIR=${tmpdir} ${MKTEMP} -d)
 	[ ! -d ${mountpoint}/boot ] && mkdir ${mountpoint}/boot
-	${TAR} -xpf ${tmpdir}/base.txz --include ./boot -C ${boottmp}
+	${TAR} -xpf ${tmpdir}/base.txz --include ./boot --exclude ./boot/efi -C ${boottmp}
 	${TAR} -c -C ${boottmp}/boot -f - . | \
 		(cd ${mountpoint}/boot; ${TAR} -xpf -)
 	res=${?}
