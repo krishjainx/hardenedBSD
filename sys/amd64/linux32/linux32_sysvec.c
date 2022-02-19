@@ -203,12 +203,7 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	issetugid = imgp->proc->p_flag & P_SUGID ? 1 : 0;
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, linux32_vsyscall);
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
-<<<<<<< HEAD
 	    imgp->proc->p_shared_page_base);
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, linux32_vsyscall);
-=======
-	    imgp->proc->p_sysent->sv_shared_page_base);
->>>>>>> origin/freebsd/13-stable/main
 	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, cpu_feature);
 	AUXARGS_ENTRY(pos, AT_PAGESZ, args->pagesz);
 
