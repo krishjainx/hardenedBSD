@@ -763,7 +763,6 @@ kern_proc_setrlimit(struct thread *td, struct proc *p, u_int which,
 			if (limp->rlim_cur > oldssiz.rlim_cur) {
 				prot = p->p_sysent->sv_stackprot;
 				size = limp->rlim_cur - oldssiz.rlim_cur;
-<<<<<<< HEAD
 				addr = p->p_usrstack - limp->rlim_cur;
 #ifdef PAX_NOEXEC
 				if ((prot & (VM_PROT_WRITE|VM_PROT_EXECUTE)) != VM_PROT_EXECUTE) {
@@ -776,15 +775,6 @@ kern_proc_setrlimit(struct thread *td, struct proc *p, u_int which,
 				prot = VM_PROT_NONE;
 				size = oldssiz.rlim_cur - limp->rlim_cur;
 				addr = p->p_usrstack - oldssiz.rlim_cur;
-=======
-				addr = round_page(p->p_vmspace->vm_stacktop) -
-				    limp->rlim_cur;
-			} else {
-				prot = VM_PROT_NONE;
-				size = oldssiz.rlim_cur - limp->rlim_cur;
-				addr = round_page(p->p_vmspace->vm_stacktop) -
-				    oldssiz.rlim_cur;
->>>>>>> origin/freebsd/13-stable/main
 			}
 			addr = trunc_page(addr);
 			size = round_page(size);

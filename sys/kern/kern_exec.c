@@ -176,12 +176,11 @@ static int
 sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 {
 	struct proc *p;
-	vm_offset_t val;
+	int error;
 
 	p = curproc;
 #ifdef SCTL_MASK32
 	if (req->flags & SCTL_MASK32) {
-<<<<<<< HEAD
 		unsigned int val;
 		val = (unsigned int)p->p_usrstack;
 		error = SYSCTL_OUT(req, &val, sizeof(val));
@@ -190,16 +189,6 @@ sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
 		error = SYSCTL_OUT(req, &p->p_usrstack,
 		    sizeof(p->p_usrstack));
 	return error;
-=======
-		unsigned int val32;
-
-		val32 = round_page((unsigned int)p->p_vmspace->vm_stacktop);
-		return (SYSCTL_OUT(req, &val32, sizeof(val32)));
-	}
-#endif
-	val = round_page(p->p_vmspace->vm_stacktop);
-	return (SYSCTL_OUT(req, &val, sizeof(val)));
->>>>>>> origin/freebsd/13-stable/main
 }
 
 static int
@@ -1177,12 +1166,6 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	vm_object_t obj;
 	vm_offset_t sv_minuser;
 	vm_map_t map;
-<<<<<<< HEAD
-	u_long ssiz;
-	vm_prot_t stackprot;
-	vm_prot_t stackmaxprot;
-=======
->>>>>>> origin/freebsd/13-stable/main
 
 	imgp->vmspace_destroyed = true;
 	imgp->sysent = sv;
@@ -1215,12 +1198,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 		 * must be re-evaluated.
 		 */
 		vm_map_lock(map);
-		vm_map_modflags(map, 0, MAP_WIREFUTURE | MAP_ASLR |
-<<<<<<< HEAD
-		    MAP_ASLR_IGNSTART);
-=======
-		    MAP_ASLR_IGNSTART | MAP_ASLR_STACK | MAP_WXORX);
->>>>>>> origin/freebsd/13-stable/main
+		vm_map_modflags(map, 0, MAP_WIREFUTURE);
 		vm_map_unlock(map);
 	} else {
 		error = vmspace_exec(p, sv_minuser, sv->sv_maxuser);
@@ -1285,12 +1263,14 @@ exec_map_stack(struct image_params *imgp)
 	struct proc *p;
 	vm_map_t map;
 	struct vmspace *vmspace;
-	vm_offset_t stack_addr, stack_top;
+	vm_offset_t stack_addr;
 	u_long ssiz;
-	int error, find_space, stack_off;
-	vm_prot_t stack_prot;
+	int error;
+	vm_prot_t stack_prot, stackmaxprot;
 
 	p = imgp->proc;
+	vmspace = p->p_vmspace;
+	map = &(vmspace->vm_map);
 	sv = p->p_sysent;
 
 	if (imgp->stack_sz != 0) {
@@ -1310,7 +1290,6 @@ exec_map_stack(struct image_params *imgp)
 		ssiz = maxssiz;
 	}
 
-<<<<<<< HEAD
 	stack_addr = sv->sv_usrstack;
 #ifdef PAX_ASLR
 	/* Randomize the stack top. */
@@ -1322,19 +1301,19 @@ exec_map_stack(struct image_params *imgp)
 	p->p_usrstack = stack_addr;
 	/* Calculate the stack's mapping address.  */
 	stack_addr -= ssiz;
-	stackprot = obj != NULL && imgp->stack_prot != 0 ?
+	stack_prot = sv->sv_shared_page_obj != NULL && imgp->stack_prot != 0 ?
 	    imgp->stack_prot : sv->sv_stackprot;
 	stackmaxprot = VM_PROT_ALL;
 #ifdef PAX_NOEXEC
 	PROC_LOCK(p);
-	pax_noexec_nx(p, &stackprot, &stackmaxprot);
+	pax_noexec_nx(p, &stack_prot, &stackmaxprot);
 	PROC_UNLOCK(p);
 #endif
 	imgp->stack_sz = lim_cur(curthread, RLIMIT_STACK);
 	if (ssiz < imgp->stack_sz)
 		imgp->stack_sz = ssiz;
 	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz,
-	    stackprot, stackmaxprot, MAP_STACK_GROWS_DOWN);
+	    stack_prot, stackmaxprot, MAP_STACK_GROWS_DOWN);
 	if (error != KERN_SUCCESS) {
 #ifdef PAX_ASLR
 		pax_log_aslr(p, PAX_LOG_DEFAULT,
@@ -1343,44 +1322,12 @@ exec_map_stack(struct image_params *imgp)
 #endif
 		return (vm_mmap_to_errno(error));
 	}
-=======
-	vmspace = p->p_vmspace;
-	map = &vmspace->vm_map;
-
-	stack_prot = sv->sv_shared_page_obj != NULL && imgp->stack_prot != 0 ?
-	    imgp->stack_prot : sv->sv_stackprot;
-	if ((map->flags & MAP_ASLR_STACK) != 0) {
-		stack_addr = round_page((vm_offset_t)p->p_vmspace->vm_daddr +
-		    lim_max(curthread, RLIMIT_DATA));
-		find_space = VMFS_ANY_SPACE;
-	} else {
-		stack_addr = sv->sv_usrstack - ssiz;
-		find_space = VMFS_NO_SPACE;
-	}
-	error = vm_map_find(map, NULL, 0, &stack_addr, (vm_size_t)ssiz,
-	    sv->sv_usrstack, find_space, stack_prot, VM_PROT_ALL,
-	    MAP_STACK_GROWS_DOWN);
-	if (error != KERN_SUCCESS) {
-		uprintf("exec_new_vmspace: mapping stack size %#jx prot %#x "
-		    "failed, mach error %d errno %d\n", (uintmax_t)ssiz,
-		    stack_prot, error, vm_mmap_to_errno(error));
-		return (vm_mmap_to_errno(error));
-	}
-
-	stack_top = stack_addr + ssiz;
-	if ((map->flags & MAP_ASLR_STACK) != 0) {
-		/* Randomize within the first page of the stack. */
-		arc4rand(&stack_off, sizeof(stack_off), 0);
-		stack_top -= rounddown2(stack_off & PAGE_MASK, sizeof(void *));
-	}
->>>>>>> origin/freebsd/13-stable/main
 
 	/*
 	 * vm_ssize and vm_maxsaddr are somewhat antiquated concepts, but they
 	 * are still used to enforce the stack rlimit on the process stack.
 	 */
 	vmspace->vm_maxsaddr = (char *)stack_addr;
-	vmspace->vm_stacktop = stack_top;
 	vmspace->vm_ssize = sgrowsiz >> PAGE_SHIFT;
 
 	return (0);

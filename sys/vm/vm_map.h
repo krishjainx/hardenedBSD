@@ -226,15 +226,8 @@ struct vm_map {
 #define	MAP_BUSY_WAKEUP		0x02	/* thread(s) waiting on busy state */
 #define	MAP_IS_SUB_MAP		0x04	/* has parent */
 #define	MAP_ASLR		0x08	/* enabled ASLR */
-<<<<<<< HEAD
 #define	MAP_ASLR_IGNSTART	0x10
 #define	MAP_REPLENISH		0x20
-=======
-#define	MAP_ASLR_IGNSTART	0x10	/* ASLR ignores data segment */
-#define	MAP_REPLENISH		0x20	/* kmapent zone needs to be refilled */
-#define	MAP_WXORX		0x40	/* enforce W^X */
-#define	MAP_ASLR_STACK		0x80	/* stack location is randomized */
->>>>>>> origin/freebsd/13-stable/main
 
 #ifdef	_KERNEL
 #if defined(KLD_MODULE) && !defined(KLD_TIED)
@@ -299,7 +292,6 @@ struct vmspace {
 	caddr_t vm_taddr;	/* (c) user virtual address of text */
 	caddr_t vm_daddr;	/* (c) user virtual address of data */
 	caddr_t vm_maxsaddr;	/* user VA at max stack growth */
-<<<<<<< HEAD
 	vm_offset_t vm_aslr_delta_mmap;	/* mmap() random delta for ASLR */
 	vm_offset_t vm_aslr_delta_rtld;	/* RTLD random delta for ASLR */
 	vm_offset_t vm_aslr_delta_stack;	/* stack random delta for ASLR */
@@ -310,9 +302,6 @@ struct vmspace {
 	vm_offset_t vm_aslr_delta_map32bit; /* random for MAP_32BIT mappings */
 #endif
 	vm_size_t vm_stkgap;	/* stack gap size in bytes */
-=======
-	vm_offset_t vm_stacktop; /* top of the stack, may not be page-aligned */
->>>>>>> origin/freebsd/13-stable/main
 	u_int vm_refcnt;	/* number of references */
 	/*
 	 * Keep the PMAP last, so that CPU-specific variations of that

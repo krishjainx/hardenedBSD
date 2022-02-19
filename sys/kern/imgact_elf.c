@@ -185,18 +185,6 @@ SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, honor_sbrk, CTLFLAG_RW,
     &__elfN(aslr_honor_sbrk), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": assume sbrk is used");
 
-<<<<<<< HEAD
-static int __elfN(aslr_stack_gap) = 0;
-SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, stack_gap, CTLFLAG_RW,
-    &__elfN(aslr_stack_gap), 0,
-=======
-static int __elfN(aslr_stack) = 1;
-SYSCTL_INT(ASLR_NODE_OID, OID_AUTO, stack, CTLFLAG_RWTUN,
-    &__elfN(aslr_stack), 0,
->>>>>>> origin/freebsd/13-stable/main
-    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE))
-    ": enable stack address randomization");
-
 static int __elfN(sigfastblock) = 1;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO, sigfastblock,
     CTLFLAG_RWTUN, &__elfN(sigfastblock), 0,
@@ -1104,10 +1092,9 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	uint32_t fctl0;
 	int32_t osrel;
 	bool free_interp;
-	int do_asr, error, i, n;
+	int error, i, n;
 
 	hdr = (const Elf_Ehdr *)imgp->image_header;
-	do_asr = 0;
 
 	/*
 	 * Do we have a valid ELF header ?
@@ -1235,11 +1222,6 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		 * non-zero for some reason.
 		 */
 		if (baddr == 0) {
-			if ((__elfN(pie_aslr_enabled) &&
-			    (imgp->proc->p_flag2 & P2_ASLR_DISABLE) == 0) ||
-			    (imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0)
-				do_asr = 1;
-
 			et_dyn_addr = ET_DYN_LOAD_ADDR;
 		}
 	}
@@ -1271,59 +1253,22 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		PROC_UNLOCK(imgp->proc);
 	}
 
-	if (((imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0 ||
-	    (__elfN(aslr_enabled) && hdr->e_type == ET_EXEC)) ||
-	    do_asr) {
-		imgp->map_flags |= MAP_ASLR;
-		/*
-		 * If user does not care about sbrk, utilize the bss
-		 * grow region for mappings as well.  We can select
-		 * the base for the image anywere and still not suffer
-		 * from the fragmentation.
-		 */
-		if (!__elfN(aslr_honor_sbrk) ||
-		    (imgp->proc->p_flag2 & P2_ASLR_IGNSTART) != 0)
-			imgp->map_flags |= MAP_ASLR_IGNSTART;
-		if (__elfN(aslr_stack))
-			imgp->map_flags |= MAP_ASLR_STACK;
-	}
-
 	error = exec_new_vmspace(imgp, sv);
+	vmspace = imgp->proc->p_vmspace;
+	map = &(vmspace->vm_map);
 
 	imgp->proc->p_sysent = sv;
-<<<<<<< HEAD
 	maxv = vm_map_max(map) - lim_max(td, RLIMIT_STACK);
 
 #ifdef PAX_ASLR
-	/*
-	 * Only use HardenedBSD's PaX ASLR implementation when
-	 * FreeBSD's ASR is disabled.
-	 */
-	if (!do_asr && (hdr->e_type == ET_DYN && baddr == 0)) {
+	if ((hdr->e_type == ET_DYN && baddr == 0)) {
 		pax_aslr_execbase(imgp->proc, &et_dyn_addr);
 	}
 #endif
-	if (mapsz >= maxv - vm_map_min(map)) {
-=======
 
-	vmspace = imgp->proc->p_vmspace;
-	map = &vmspace->vm_map;
-	maxv = sv->sv_usrstack;
-	if ((imgp->map_flags & MAP_ASLR_STACK) == 0)
-		maxv -= lim_max(td, RLIMIT_STACK);
-	if (error == 0 && mapsz >= maxv - vm_map_min(map)) {
->>>>>>> origin/freebsd/13-stable/main
+	if (mapsz >= maxv - vm_map_min(map)) {
 		uprintf("Excessive mapping size\n");
 		error = ENOEXEC;
-	}
-
-	if (do_asr) {
-		KASSERT((map->flags & MAP_ASLR) != 0,
-		    ("do_asr but !MAP_ASLR"));
-		error = __CONCAT(rnd_, __elfN(base))(map,
-		    vm_map_min(map) + mapsz + lim_max(td, RLIMIT_DATA),
-		    /* reserve half of the address space to interpreter */
-		    maxv / 2, maxalign, &et_dyn_addr);
 	}
 
 	vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
