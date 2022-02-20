@@ -1,10 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2021 The FreeBSD Foundation
- *
- * This software was developed by Björn Zeeb under sponsorship from
- * the FreeBSD Foundation.
+ * Copyright (c) 2022 Bjoern A. Zeeb
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,33 +27,27 @@
  * $FreeBSD$
  */
 
-#ifndef	_LINUXKPI_LINUX_UUID_H
-#define	_LINUXKPI_LINUX_UUID_H
+#ifndef	_LINUXKPI_LINUX_PM_QOS_H
+#define	_LINUXKPI_LINUX_PM_QOS_H
 
-#define	UUID_STRING_LEN	36
+#define	PM_QOS_DEFAULT_VALUE	(-1)
 
-#define	GUID_INIT(x0_3, x4_5, x6_7, x8, x9, x10, x11, x12, x13, x14, x15) \
-	((guid_t) { .x = { 						\
-		[0]  =  (x0_3)        & 0xff,				\
-		[1]  = ((x0_3) >> 8)  & 0xff,				\
-		[2]  = ((x0_3) >> 16) & 0xff,				\
-		[3]  = ((x0_3) >> 24) & 0xff,				\
-		[4]  =  (x4_5)        & 0xff,				\
-		[5]  = ((x4_5) >> 8)  & 0xff,				\
-		[6]  =  (x6_7)        & 0xff,				\
-		[7]  = ((x6_7) >> 8)  & 0xff,				\
-		[8]  =  (x8),						\
-		[9]  =  (x9),						\
-		[10] =  (x10),						\
-		[11] =  (x11),						\
-		[12] =  (x12),						\
-		[13] =  (x13),						\
-		[14] =  (x14),						\
-		[15] =  (x15)						\
-}})
+struct pm_qos_request {
+};
 
-typedef struct {
-	char	x[16];
-} guid_t;
+static inline void
+cpu_latency_qos_add_request(struct pm_qos_request *qos, int x)
+{
+}
 
-#endif	/* _LINUXKPI_LINUX_UUID_H */
+static inline void
+cpu_latency_qos_update_request(struct pm_qos_request *qos, int x)
+{
+}
+
+static inline void
+cpu_latency_qos_remove_request(struct pm_qos_request *qos)
+{
+}
+
+#endif	/* _LINUXKPI_LINUX_PM_QOS_H */

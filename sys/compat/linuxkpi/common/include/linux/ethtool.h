@@ -1,10 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2021 The FreeBSD Foundation
- *
- * This software was developed by Björn Zeeb under sponsorship from
- * the FreeBSD Foundation.
+ * Copyright (c) 2022 Bjoern A. Zeeb
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,33 +27,15 @@
  * $FreeBSD$
  */
 
-#ifndef	_LINUXKPI_LINUX_UUID_H
-#define	_LINUXKPI_LINUX_UUID_H
+#ifndef _LINUXKPI_LINUX_ETHTOOL_H_
+#define	_LINUXKPI_LINUX_ETHTOOL_H_
 
-#define	UUID_STRING_LEN	36
+#include <linux/types.h>
 
-#define	GUID_INIT(x0_3, x4_5, x6_7, x8, x9, x10, x11, x12, x13, x14, x15) \
-	((guid_t) { .x = { 						\
-		[0]  =  (x0_3)        & 0xff,				\
-		[1]  = ((x0_3) >> 8)  & 0xff,				\
-		[2]  = ((x0_3) >> 16) & 0xff,				\
-		[3]  = ((x0_3) >> 24) & 0xff,				\
-		[4]  =  (x4_5)        & 0xff,				\
-		[5]  = ((x4_5) >> 8)  & 0xff,				\
-		[6]  =  (x6_7)        & 0xff,				\
-		[7]  = ((x6_7) >> 8)  & 0xff,				\
-		[8]  =  (x8),						\
-		[9]  =  (x9),						\
-		[10] =  (x10),						\
-		[11] =  (x11),						\
-		[12] =  (x12),						\
-		[13] =  (x13),						\
-		[14] =  (x14),						\
-		[15] =  (x15)						\
-}})
+#define	ETHTOOL_FWVERS_LEN	64
 
-typedef struct {
-	char	x[16];
-} guid_t;
+struct ethtool_stats {
+	uint8_t __dummy[0];
+};
 
-#endif	/* _LINUXKPI_LINUX_UUID_H */
+#endif	/* _LINUXKPI_LINUX_ETHTOOL_H_ */
