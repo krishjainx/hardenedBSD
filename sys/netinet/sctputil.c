@@ -1288,6 +1288,7 @@ sctp_init_asoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 		SCTP_LTRACE_ERR_RET(NULL, stcb, NULL, SCTP_FROM_SCTPUTIL, ENOMEM);
 		return (ENOMEM);
 	}
+	SCTP_TCB_SEND_LOCK(stcb);
 	for (i = 0; i < asoc->streamoutcnt; i++) {
 		/*
 		 * inbound side must be set to 0xffff, also NOTE when we get
@@ -1315,7 +1316,8 @@ sctp_init_asoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 		asoc->strmout[i].last_msg_incomplete = 0;
 		asoc->strmout[i].state = SCTP_STREAM_OPENING;
 	}
-	asoc->ss_functions.sctp_ss_init(stcb, asoc, 0);
+	asoc->ss_functions.sctp_ss_init(stcb, asoc);
+	SCTP_TCB_SEND_UNLOCK(stcb);
 
 	/* Now the mapping array */
 	asoc->mapping_array_size = SCTP_INITIAL_MAPPING_ARRAY;
@@ -1936,7 +1938,7 @@ sctp_timeout_handler(void *t)
 		    type, inp, stcb, net));
 		SCTP_STAT_INCR(sctps_timosecret);
 		(void)SCTP_GETTIME_TIMEVAL(&tv);
-		inp->sctp_ep.time_of_secret_change = tv.tv_sec;
+		inp->sctp_ep.time_of_secret_change = (unsigned int)tv.tv_sec;
 		inp->sctp_ep.last_secret_number =
 		    inp->sctp_ep.current_secret_number;
 		inp->sctp_ep.current_secret_number++;
@@ -4323,7 +4325,7 @@ sctp_report_all_outbound(struct sctp_tcb *stcb, uint16_t error, int so_locked)
 		TAILQ_FOREACH_SAFE(sp, &outs->outqueue, next, nsp) {
 			atomic_subtract_int(&asoc->stream_queue_cnt, 1);
 			TAILQ_REMOVE(&outs->outqueue, sp, next);
-			stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, outs, sp, 1);
+			stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, outs, sp);
 			sctp_free_spbufspace(stcb, asoc, sp);
 			if (sp->data) {
 				sctp_ulp_notify(SCTP_NOTIFY_SPECIAL_SP_FAIL, stcb,
@@ -6081,7 +6083,7 @@ get_more_data:
 					copied_so_far += cp_len;
 					freed_so_far += (uint32_t)cp_len;
 					freed_so_far += MSIZE;
-					atomic_subtract_int(&control->length, cp_len);
+					atomic_subtract_int(&control->length, (int)cp_len);
 					control->data = sctp_m_free(m);
 					m = control->data;
 					/*
@@ -6123,10 +6125,10 @@ get_more_data:
 					if (SCTP_BASE_SYSCTL(sctp_logging_level) & SCTP_SB_LOGGING_ENABLE) {
 						sctp_sblog(&so->so_rcv, control->do_not_ref_stcb ? NULL : stcb, SCTP_LOG_SBFREE, (int)cp_len);
 					}
-					atomic_subtract_int(&so->so_rcv.sb_cc, cp_len);
+					atomic_subtract_int(&so->so_rcv.sb_cc, (int)cp_len);
 					if ((control->do_not_ref_stcb == 0) &&
 					    stcb) {
-						atomic_subtract_int(&stcb->asoc.sb_cc, cp_len);
+						atomic_subtract_int(&stcb->asoc.sb_cc, (int)cp_len);
 					}
 					copied_so_far += cp_len;
 					freed_so_far += (uint32_t)cp_len;
@@ -6135,7 +6137,7 @@ get_more_data:
 						sctp_sblog(&so->so_rcv, control->do_not_ref_stcb ? NULL : stcb,
 						    SCTP_LOG_SBRESULT, 0);
 					}
-					atomic_subtract_int(&control->length, cp_len);
+					atomic_subtract_int(&control->length, (int)cp_len);
 				} else {
 					copied_so_far += cp_len;
 				}
@@ -6233,9 +6235,9 @@ get_more_data:
 		}
 		/*
 		 * We need to wait for more data a few things: - We don't
-		 * release the I/O lock so we don't get someone else reading.
-		 * - We must be sure to account for the case where what is added
-		 * is NOT to our control when we wakeup.
+		 * release the I/O lock so we don't get someone else
+		 * reading. - We must be sure to account for the case where
+		 * what is added is NOT to our control when we wakeup.
 		 */
 
 		/*
@@ -6715,13 +6717,13 @@ sctp_connectx_helper_find(struct sctp_inpcb *inp, struct sockaddr *addr,
 			{
 				struct sockaddr_in6 *sin6;
 
+				incr = (unsigned int)sizeof(struct sockaddr_in6);
+				if (sa->sa_len != incr) {
+					return (EINVAL);
+				}
 				sin6 = (struct sockaddr_in6 *)sa;
 				if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
 					/* Must be non-mapped for connectx */
-					return (EINVAL);
-				}
-				incr = (unsigned int)sizeof(struct sockaddr_in6);
-				if (sa->sa_len != incr) {
 					return (EINVAL);
 				}
 				(*num_v6) += 1;

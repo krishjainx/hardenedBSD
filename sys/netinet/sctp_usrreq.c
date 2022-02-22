@@ -1417,7 +1417,7 @@ sctp_do_connect_x(struct socket *so, struct sctp_inpcb *inp, void *optval,
 	vrf_id = inp->def_vrf_id;
 
 	/* We are GOOD to go */
-	stcb = sctp_aloc_assoc(inp, sa, &error, 0, 0, vrf_id,
+	stcb = sctp_aloc_assoc_connected(inp, sa, &error, 0, 0, vrf_id,
 	    inp->sctp_ep.pre_open_stream_count,
 	    inp->sctp_ep.port,
 	    (struct thread *)p,
@@ -1425,11 +1425,6 @@ sctp_do_connect_x(struct socket *so, struct sctp_inpcb *inp, void *optval,
 	if (stcb == NULL) {
 		/* Gak! no memory */
 		goto out_now;
-	}
-	if (stcb->sctp_ep->sctp_flags & SCTP_PCB_FLAGS_TCPTYPE) {
-		stcb->sctp_ep->sctp_flags |= SCTP_PCB_FLAGS_CONNECTED;
-		/* Set the connected flag so we can queue data */
-		soisconnecting(so);
 	}
 	SCTP_SET_STATE(stcb, SCTP_STATE_COOKIE_WAIT);
 	/* move to second address */
@@ -2755,7 +2750,7 @@ flags_out:
 					sasoc->sasoc_asocmaxrxt = inp->sctp_ep.max_send_times;
 					sasoc->sasoc_number_peer_destinations = 0;
 					sasoc->sasoc_peer_rwnd = 0;
-					sasoc->sasoc_local_rwnd = sbspace(&inp->sctp_socket->so_rcv);
+					sasoc->sasoc_local_rwnd = (uint32_t)sbspace(&inp->sctp_socket->so_rcv);
 					SCTP_INP_RUNLOCK(inp);
 				} else {
 					SCTP_LTRACE_ERR_RET(inp, NULL, NULL, SCTP_FROM_SCTP_USRREQ, EINVAL);
@@ -2856,7 +2851,7 @@ flags_out:
 		{
 			struct sctp_hmacalgo *shmac;
 			sctp_hmaclist_t *hmaclist;
-			uint32_t size;
+			size_t size;
 			int i;
 
 			SCTP_CHECK_AND_CAST(shmac, optval, struct sctp_hmacalgo, *optsize);
@@ -2872,7 +2867,7 @@ flags_out:
 			/* is there room for all of the hmac ids? */
 			size = sizeof(*shmac) + (hmaclist->num_algo *
 			    sizeof(shmac->shmac_idents[0]));
-			if ((size_t)(*optsize) < size) {
+			if (*optsize < size) {
 				SCTP_LTRACE_ERR_RET(inp, NULL, NULL, SCTP_FROM_SCTP_USRREQ, EINVAL);
 				error = EINVAL;
 				SCTP_INP_RUNLOCK(inp);
@@ -4065,10 +4060,10 @@ sctp_setopt(struct socket *so, int optname, void *optval, size_t optsize,
 			SCTP_FIND_STCB(inp, stcb, av->assoc_id);
 			if (stcb) {
 				SCTP_TCB_SEND_LOCK(stcb);
-				stcb->asoc.ss_functions.sctp_ss_clear(stcb, &stcb->asoc, 1, 1);
+				stcb->asoc.ss_functions.sctp_ss_clear(stcb, &stcb->asoc, true);
 				stcb->asoc.ss_functions = sctp_ss_functions[av->assoc_value];
 				stcb->asoc.stream_scheduling_module = av->assoc_value;
-				stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc, 1);
+				stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc);
 				SCTP_TCB_SEND_UNLOCK(stcb);
 				SCTP_TCB_UNLOCK(stcb);
 			} else {
@@ -4088,10 +4083,10 @@ sctp_setopt(struct socket *so, int optname, void *optval, size_t optsize,
 					LIST_FOREACH(stcb, &inp->sctp_asoc_list, sctp_tcblist) {
 						SCTP_TCB_LOCK(stcb);
 						SCTP_TCB_SEND_LOCK(stcb);
-						stcb->asoc.ss_functions.sctp_ss_clear(stcb, &stcb->asoc, 1, 1);
+						stcb->asoc.ss_functions.sctp_ss_clear(stcb, &stcb->asoc, true);
 						stcb->asoc.ss_functions = sctp_ss_functions[av->assoc_value];
 						stcb->asoc.stream_scheduling_module = av->assoc_value;
-						stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc, 1);
+						stcb->asoc.ss_functions.sctp_ss_init(stcb, &stcb->asoc);
 						SCTP_TCB_SEND_UNLOCK(stcb);
 						SCTP_TCB_UNLOCK(stcb);
 					}
@@ -7084,18 +7079,13 @@ sctp_connect(struct socket *so, struct sockaddr *addr, struct thread *p)
 
 	vrf_id = inp->def_vrf_id;
 	/* We are GOOD to go */
-	stcb = sctp_aloc_assoc(inp, addr, &error, 0, 0, vrf_id,
+	stcb = sctp_aloc_assoc_connected(inp, addr, &error, 0, 0, vrf_id,
 	    inp->sctp_ep.pre_open_stream_count,
 	    inp->sctp_ep.port, p,
 	    SCTP_INITIALIZE_AUTH_PARAMS);
 	if (stcb == NULL) {
 		/* Gak! no memory */
 		goto out_now;
-	}
-	if (stcb->sctp_ep->sctp_flags & SCTP_PCB_FLAGS_TCPTYPE) {
-		stcb->sctp_ep->sctp_flags |= SCTP_PCB_FLAGS_CONNECTED;
-		/* Set the connected flag so we can queue data */
-		soisconnecting(so);
 	}
 	SCTP_SET_STATE(stcb, SCTP_STATE_COOKIE_WAIT);
 	(void)SCTP_GETTIME_TIMEVAL(&stcb->asoc.time_entered);
