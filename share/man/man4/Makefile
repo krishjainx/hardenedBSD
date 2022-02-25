@@ -238,6 +238,7 @@ MAN=	aac.4 \
 	ismt.4 \
 	isp.4 \
 	ispfw.4 \
+	${_itwd.4} \
 	iwi.4 \
 	iwifw.4 \
 	iwm.4 \
@@ -523,6 +524,7 @@ MAN=	aac.4 \
 	stf.4 \
 	stg.4 \
 	stge.4 \
+	${_superio.4} \
 	sym.4 \
 	syncache.4 \
 	syncer.4 \
@@ -820,6 +822,7 @@ _if_wpi.4=	if_wpi.4
 _imcsmb.4=	imcsmb.4
 _ipmi.4=	ipmi.4
 _io.4=		io.4
+_itwd.4=	itwd.4
 _linux.4=	linux.4
 _nda.4=		nda.4
 _ndis.4=	ndis.4
@@ -832,6 +835,7 @@ _padlock.4=	padlock.4
 _rr232x.4=	rr232x.4
 _speaker.4=	speaker.4
 _spkr.4=	spkr.4
+_superio.4=	superio.4
 _tpm.4=		tpm.4
 _urtw.4=	urtw.4
 _viawd.4=	viawd.4
