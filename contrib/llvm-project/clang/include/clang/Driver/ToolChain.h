@@ -412,7 +412,7 @@ public:
   /// Get the default trivial automatic variable initialization.
   virtual LangOptions::TrivialAutoVarInitKind
   GetDefaultTrivialAutoVarInit() const {
-    return LangOptions::TrivialAutoVarInitKind::Uninitialized;
+    return LangOptions::TrivialAutoVarInitKind::Zero;
   }
 
   /// GetDefaultLinker - Get the default linker to use.

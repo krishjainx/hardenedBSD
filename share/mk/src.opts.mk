@@ -186,7 +186,6 @@ __DEFAULT_YES_OPTIONS = \
     TEXTPROC \
     TFTP \
     UNBOUND \
-    UNINIT_AUTOINIT \
     USB \
     UTMPX \
     VI \
