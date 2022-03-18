@@ -402,7 +402,7 @@ fetch_update() {
 		fi
 
 		if [ ${verbose} -gt 0 ]; then
-			debug_print "[*] Verified hash: ${filehash}\n[*] ↳ Remote Hash: ${pubhash}"
+			debug_print "[*] Verified hash: ${filehash}\n  [+] Remote hash: ${pubhash}"
 		fi
 	fi
 
