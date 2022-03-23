@@ -257,6 +257,8 @@ CFLAGS+=	-mretpoline
 CFLAGS+=	-gdwarf-2
 .endif
 
+CFLAGS+=	-ftrivial-auto-var-init=uninitialized
+
 CFLAGS+= ${CWARNFLAGS:M*} ${CWARNFLAGS.${.IMPSRC:T}}
 CFLAGS+= ${CFLAGS.${COMPILER_TYPE}} ${CFLAGS.${.IMPSRC:T}}
 
