@@ -227,6 +227,8 @@ CFLAGS+=	-fstack-protector
 CFLAGS+=	-mretpoline
 .endif
 
+CFLAGS+=	-ftrivial-auto-var-init=uninitialized
+
 CFLAGS+= ${CWARNFLAGS:M*} ${CWARNFLAGS.${.IMPSRC:T}}
 CFLAGS+= ${CWARNFLAGS.${COMPILER_TYPE}}
 CFLAGS+= ${CFLAGS.${COMPILER_TYPE}} ${CFLAGS.${.IMPSRC:T}}
