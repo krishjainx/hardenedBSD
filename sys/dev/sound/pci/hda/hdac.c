@@ -384,13 +384,13 @@ hdac_intr_handler(void *context)
 	 * re-examine GIS then we can leave it set and never get an interrupt
 	 * again.
 	 */
+	hdac_lock(sc);
 	intsts = HDAC_READ_4(&sc->mem, HDAC_INTSTS);
-	while ((intsts & HDAC_INTSTS_GIS) != 0) {
-		hdac_lock(sc);
+	while (intsts != 0xffffffff && (intsts & HDAC_INTSTS_GIS) != 0) {
 		hdac_one_intr(sc, intsts);
-		hdac_unlock(sc);
 		intsts = HDAC_READ_4(&sc->mem, HDAC_INTSTS);
 	}
+	hdac_unlock(sc);
 }
 
 static void
@@ -607,9 +607,9 @@ hdac_dma_alloc(struct hdac_softc *sc, struct hdac_dma *dma, bus_size_t size)
 	    BUS_SPACE_MAXADDR,			/* highaddr */
 	    NULL,				/* filtfunc */
 	    NULL,				/* fistfuncarg */
-	    roundsz, 				/* maxsize */
+	    roundsz,				/* maxsize */
 	    1,					/* nsegments */
-	    roundsz, 				/* maxsegsz */
+	    roundsz,				/* maxsegsz */
 	    0,					/* flags */
 	    NULL,				/* lockfunc */
 	    NULL,				/* lockfuncarg */
@@ -1317,9 +1317,9 @@ hdac_attach(device_t dev)
 	    BUS_SPACE_MAXADDR,			/* highaddr */
 	    NULL,				/* filtfunc */
 	    NULL,				/* fistfuncarg */
-	    HDA_BUFSZ_MAX, 			/* maxsize */
+	    HDA_BUFSZ_MAX,			/* maxsize */
 	    1,					/* nsegments */
-	    HDA_BUFSZ_MAX, 			/* maxsegsz */
+	    HDA_BUFSZ_MAX,			/* maxsegsz */
 	    0,					/* flags */
 	    NULL,				/* lockfunc */
 	    NULL,				/* lockfuncarg */
