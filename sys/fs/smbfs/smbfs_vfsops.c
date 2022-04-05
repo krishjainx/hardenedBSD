@@ -51,6 +51,8 @@
 #include <fs/smbfs/smbfs_node.h>
 #include <fs/smbfs/smbfs_subr.h>
 
+int __insecure_kmod = 0;
+
 static int smbfs_debuglevel = 0;
 
 static int smbfs_version = SMBFS_VERSION;
