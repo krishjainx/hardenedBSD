@@ -38,6 +38,8 @@
 #include <sys/sysctl.h>
 #include <sys/socketvar.h>
 
+int __insecure_kmod = 1;
+
 /* check for full DNS request */
 static int sohasdns(struct socket *so, void *arg, int waitflag);
 
