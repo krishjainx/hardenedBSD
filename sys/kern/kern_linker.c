@@ -447,6 +447,14 @@ linker_load_file(const char *filename, linker_file_t *result)
 		    filename));
 		error = LINKER_LOAD_FILE(lc, filename, &lf);
 		/*
+		 * We'll get an EPERM when an attempt to load an
+		 * insecure kernel module is made, and loading
+		 * insecure modules is prohibited.
+		 */
+		if (error == EPERM) {
+			return (error);
+		}
+		/*
 		 * If we got something other than ENOENT, then it exists but
 		 * we cannot load it for some other reason.
 		 */

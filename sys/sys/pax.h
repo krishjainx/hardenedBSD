@@ -225,6 +225,8 @@ int pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts);
 #endif
 int pax_procfs_harden(struct thread *td);
 
+bool pax_insecure_kmod(void);
+
 #endif /* _KERNEL */
 
 #define	PAX_NOTE_PAGEEXEC	0x00000001
