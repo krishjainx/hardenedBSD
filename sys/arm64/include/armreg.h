@@ -460,12 +460,18 @@
 #define	 ID_AA64ISAR1_APA_NONE		(UL(0x0) << ID_AA64ISAR1_APA_SHIFT)
 #define	 ID_AA64ISAR1_APA_PAC		(UL(0x1) << ID_AA64ISAR1_APA_SHIFT)
 #define	 ID_AA64ISAR1_APA_EPAC		(UL(0x2) << ID_AA64ISAR1_APA_SHIFT)
+#define	 ID_AA64ISAR1_APA_EPAC2		(UL(0x3) << ID_AA64ISAR1_APA_SHIFT)
+#define	 ID_AA64ISAR1_APA_FPAC		(UL(0x4) << ID_AA64ISAR1_APA_SHIFT)
+#define	 ID_AA64ISAR1_APA_FPAC_COMBINED	(UL(0x5) << ID_AA64ISAR1_APA_SHIFT)
 #define	ID_AA64ISAR1_API_SHIFT		8
 #define	ID_AA64ISAR1_API_MASK		(UL(0xf) << ID_AA64ISAR1_API_SHIFT)
 #define	ID_AA64ISAR1_API_VAL(x)		((x) & ID_AA64ISAR1_API_MASK)
 #define	 ID_AA64ISAR1_API_NONE		(UL(0x0) << ID_AA64ISAR1_API_SHIFT)
 #define	 ID_AA64ISAR1_API_PAC		(UL(0x1) << ID_AA64ISAR1_API_SHIFT)
 #define	 ID_AA64ISAR1_API_EPAC		(UL(0x2) << ID_AA64ISAR1_API_SHIFT)
+#define	 ID_AA64ISAR1_API_EPAC2		(UL(0x3) << ID_AA64ISAR1_API_SHIFT)
+#define	 ID_AA64ISAR1_API_FPAC		(UL(0x4) << ID_AA64ISAR1_API_SHIFT)
+#define	 ID_AA64ISAR1_API_FPAC_COMBINED	(UL(0x5) << ID_AA64ISAR1_API_SHIFT)
 #define	ID_AA64ISAR1_JSCVT_SHIFT	12
 #define	ID_AA64ISAR1_JSCVT_MASK		(UL(0xf) << ID_AA64ISAR1_JSCVT_SHIFT)
 #define	ID_AA64ISAR1_JSCVT_VAL(x)	((x) & ID_AA64ISAR1_JSCVT_MASK)
@@ -962,6 +968,33 @@
 #define	PMBSR_EC_SHIFT			26
 #define	PMBSR_EC_MASK			(UL(0x3f) << PMBSR_EC_SHIFT)
 
+/* PMCR_EL0 - Perfomance Monitoring Counters */
+#define	PMCR_E				(1 << 0) /* Enable all counters */
+#define	PMCR_P				(1 << 1) /* Reset all counters */
+#define	PMCR_C				(1 << 2) /* Clock counter reset */
+#define	PMCR_D				(1 << 3) /* CNTR counts every 64 clk cycles */
+#define	PMCR_X				(1 << 4) /* Export to ext. monitoring (ETM) */
+#define	PMCR_DP				(1 << 5) /* Disable CCNT if non-invasive debug*/
+#define	PMCR_LC				(1 << 6) /* Long cycle count enable */
+#define	PMCR_IMP_SHIFT			24	/* Implementer code */
+#define	PMCR_IMP_MASK			(0xff << PMCR_IMP_SHIFT)
+#define	 PMCR_IMP_ARM			0x41
+#define	PMCR_IDCODE_SHIFT		16	/* Identification code */
+#define	PMCR_IDCODE_MASK		(0xff << PMCR_IDCODE_SHIFT)
+#define	 PMCR_IDCODE_CORTEX_A57		0x01
+#define	 PMCR_IDCODE_CORTEX_A72		0x02
+#define	 PMCR_IDCODE_CORTEX_A53		0x03
+#define	 PMCR_IDCODE_CORTEX_A73		0x04
+#define	 PMCR_IDCODE_CORTEX_A35		0x0a
+#define	 PMCR_IDCODE_CORTEX_A76		0x0b
+#define	 PMCR_IDCODE_NEOVERSE_N1	0x0c
+#define	 PMCR_IDCODE_CORTEX_A77		0x10
+#define	 PMCR_IDCODE_CORTEX_A55		0x45
+#define	 PMCR_IDCODE_NEOVERSE_E1	0x46
+#define	 PMCR_IDCODE_CORTEX_A75		0x4a
+#define	PMCR_N_SHIFT			11  /* Number of counters implemented */
+#define	PMCR_N_MASK			(0x1f << PMCR_N_SHIFT)
+
 /* PMSCR_EL1 */
 #define	PMSCR_EL1			MRS_REG(PMSCR_EL1)
 #define	PMSCR_EL1_op0			0x3
@@ -1395,9 +1428,9 @@
 #define	TCR_T1SZ_SHIFT		16
 #define	TCR_T1SZ(x)		((x) << TCR_T1SZ_SHIFT)
 #define	TCR_TG0_SHIFT		14
-#define	TCR_TG0_16K		(1UL << TCR_TG0_SHIFT)
-#define	TCR_TG0_4K		(2UL << TCR_TG0_SHIFT)
-#define	TCR_TG0_64K		(3UL << TCR_TG0_SHIFT)
+#define	TCR_TG0_4K		(0UL << TCR_TG0_SHIFT)
+#define	TCR_TG0_64K		(1UL << TCR_TG0_SHIFT)
+#define	TCR_TG0_16K		(2UL << TCR_TG0_SHIFT)
 #define	TCR_SH0_SHIFT		12
 #define	TCR_SH0_IS		(3UL << TCR_SH0_SHIFT)
 #define	TCR_ORGN0_SHIFT		10
@@ -1426,33 +1459,5 @@
 #define	TTBR_BADDR		0x0000fffffffffffeul
 #define	TTBR_CnP_SHIFT		0
 #define	TTBR_CnP		(1ul << TTBR_CnP_SHIFT)
-
-
-/* Perfomance Monitoring Counters */
-#define	PMCR_E		(1 << 0) /* Enable all counters */
-#define	PMCR_P		(1 << 1) /* Reset all counters */
-#define	PMCR_C		(1 << 2) /* Clock counter reset */
-#define	PMCR_D		(1 << 3) /* CNTR counts every 64 clk cycles */
-#define	PMCR_X		(1 << 4) /* Export to ext. monitoring (ETM) */
-#define	PMCR_DP		(1 << 5) /* Disable CCNT if non-invasive debug*/
-#define	PMCR_LC		(1 << 6) /* Long cycle count enable */
-#define	PMCR_IMP_SHIFT	24 /* Implementer code */
-#define	PMCR_IMP_MASK	(0xff << PMCR_IMP_SHIFT)
-#define	 PMCR_IMP_ARM			0x41
-#define	PMCR_IDCODE_SHIFT	16 /* Identification code */
-#define	PMCR_IDCODE_MASK	(0xff << PMCR_IDCODE_SHIFT)
-#define	 PMCR_IDCODE_CORTEX_A57		0x01
-#define	 PMCR_IDCODE_CORTEX_A72		0x02
-#define	 PMCR_IDCODE_CORTEX_A53		0x03
-#define	 PMCR_IDCODE_CORTEX_A73		0x04
-#define	 PMCR_IDCODE_CORTEX_A35		0x0a
-#define	 PMCR_IDCODE_CORTEX_A76		0x0b
-#define	 PMCR_IDCODE_NEOVERSE_N1	0x0c
-#define	 PMCR_IDCODE_CORTEX_A77		0x10
-#define	 PMCR_IDCODE_CORTEX_A55		0x45
-#define	 PMCR_IDCODE_NEOVERSE_E1	0x46
-#define	 PMCR_IDCODE_CORTEX_A75		0x4a
-#define	PMCR_N_SHIFT	11       /* Number of counters implemented */
-#define	PMCR_N_MASK	(0x1f << PMCR_N_SHIFT)
 
 #endif /* !_MACHINE_ARMREG_H_ */
