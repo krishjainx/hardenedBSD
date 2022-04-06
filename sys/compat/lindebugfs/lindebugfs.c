@@ -75,6 +75,8 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DEFINE(M_DFSINT, "debugfsint", "Linux debugfs internal");
 
+int __insecure_kmod = 1;
+
 static struct pfs_node *debugfs_root;
 
 #define DM_SYMLINK 0x1
