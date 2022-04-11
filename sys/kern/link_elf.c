@@ -53,6 +53,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/linker.h>
 #include <sys/sysctl.h>
 
+#include <sys/pax.h>
+
 #include <machine/elf.h>
 
 #include <net/vnet.h>
@@ -166,6 +168,11 @@ static long	link_elf_symtab_get(linker_file_t, const Elf_Sym **);
 static long	link_elf_strtab_get(linker_file_t, caddr_t *);
 static int	elf_lookup(linker_file_t, Elf_Size, int, Elf_Addr *);
 
+static int	link_elf_detect_insecure_early(struct thread *td,
+		    struct vnode *vp, const char *filename);
+static int	link_elf_detect_insecure_late(struct thread *td,
+		    const char *filename, linker_file_t lf);
+
 static kobj_method_t link_elf_methods[] = {
 	KOBJMETHOD(linker_lookup_symbol,	link_elf_lookup_symbol),
 	KOBJMETHOD(linker_lookup_debug_symbol,	link_elf_lookup_debug_symbol),
@@ -212,6 +219,33 @@ static struct elf_set_head set_pcpu_list;
 #ifdef VIMAGE
 static struct elf_set_head set_vnet_list;
 #endif
+
+static int
+link_elf_detect_insecure_early(struct thread *td, struct vnode *vp,
+    const char *filename)
+{
+
+	return (0);
+}
+
+static int
+link_elf_detect_insecure_late(struct thread *td, const char *filename,
+    linker_file_t lf)
+{
+	c_linker_sym_t insecure_sym;
+
+	if (link_elf_lookup_symbol(lf, "__insecure_kmod", &insecure_sym) !=
+	    ENOENT) {
+		if (!pax_insecure_kmod()) {
+			pax_log_internal(td->td_proc, PAX_LOG_P_COMM,
+			    "Insecure kernel module load attempt rejected: %s",
+			    filename != NULL ? filename : "<unknown>");
+			return (EPERM);
+		}
+	}
+
+	return (0);
+}
 
 static void
 elf_set_add(struct elf_set_head *list, Elf_Addr start, Elf_Addr stop, Elf_Addr base)
@@ -1002,6 +1036,12 @@ link_elf_load_file(linker_class_t cls, const char* filename,
 	}
 #endif
 
+	error = link_elf_detect_insecure_early(td, nd.ni_vp, filename);
+	if (error != 0) {
+		firstpage = NULL;
+		goto out;
+	}
+
 	/*
 	 * Read the elf header from the file.
 	 */
@@ -1309,6 +1349,11 @@ link_elf_load_file(linker_class_t cls, const char* filename,
 	ef->ddbsymtab = (const Elf_Sym *)ef->symbase;
 	ef->ddbstrcnt = strcnt;
 	ef->ddbstrtab = ef->strbase;
+
+	error = link_elf_detect_insecure_late(td, filename, lf);
+	if (error != 0) {
+		goto out;
+	}
 
 nosyms:
 
