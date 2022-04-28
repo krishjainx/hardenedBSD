@@ -168,10 +168,11 @@ static long	link_elf_symtab_get(linker_file_t, const Elf_Sym **);
 static long	link_elf_strtab_get(linker_file_t, caddr_t *);
 static int	elf_lookup(linker_file_t, Elf_Size, int, Elf_Addr *);
 
+static bool	link_elf_kmod_is_insecure(linker_file_t lf);
 static int	link_elf_detect_insecure_early(struct thread *td,
 		    struct vnode *vp, const char *filename);
 static int	link_elf_detect_insecure_late(struct thread *td,
-		    const char *filename, linker_file_t lf);
+		    const char *filename, struct vnode *vp, linker_file_t lf);
 
 static kobj_method_t link_elf_methods[] = {
 	KOBJMETHOD(linker_lookup_symbol,	link_elf_lookup_symbol),
@@ -220,6 +221,15 @@ static struct elf_set_head set_pcpu_list;
 static struct elf_set_head set_vnet_list;
 #endif
 
+static bool
+link_elf_kmod_is_insecure(linker_file_t lf)
+{
+	c_linker_sym_t insecure_sym;
+
+	return (link_elf_lookup_symbol(lf, "__insecure_kmod",
+	    &insecure_sym) != ENOENT);
+}
+
 static int
 link_elf_detect_insecure_early(struct thread *td, struct vnode *vp,
     const char *filename)
@@ -230,18 +240,21 @@ link_elf_detect_insecure_early(struct thread *td, struct vnode *vp,
 
 static int
 link_elf_detect_insecure_late(struct thread *td, const char *filename,
-    linker_file_t lf)
+    struct vnode *vp, linker_file_t lf)
 {
-	c_linker_sym_t insecure_sym;
+	pax_flag_t flags;
 
-	if (link_elf_lookup_symbol(lf, "__insecure_kmod", &insecure_sym) !=
-	    ENOENT) {
-		if (!pax_insecure_kmod()) {
-			pax_log_internal(td->td_proc, PAX_LOG_P_COMM,
-			    "Insecure kernel module load attempt rejected: %s",
-			    filename != NULL ? filename : "<unknown>");
-			return (EPERM);
-		}
+	flags = pax_control_extattr_kmod(td, vp);
+	if ((flags & PAX_NOTE_PERMITKMOD) == PAX_NOTE_PERMITKMOD) {
+		return (0);
+	}
+
+	if ((flags & PAX_NOTE_FORBIDKMOD) == PAX_NOTE_FORBIDKMOD ||
+	    (link_elf_kmod_is_insecure(lf) && !pax_insecure_kmod())) {
+		pax_log_internal(td->td_proc, PAX_LOG_P_COMM,
+		    "Insecure kernel module load attempt rejected: %s",
+		    filename != NULL ? filename : "<unknown>");
+		return (EPERM);
 	}
 
 	return (0);
@@ -1350,7 +1363,7 @@ link_elf_load_file(linker_class_t cls, const char* filename,
 	ef->ddbstrcnt = strcnt;
 	ef->ddbstrtab = ef->strbase;
 
-	error = link_elf_detect_insecure_late(td, filename, lf);
+	error = link_elf_detect_insecure_late(td, filename, nd.ni_vp, lf);
 	if (error != 0) {
 		goto out;
 	}

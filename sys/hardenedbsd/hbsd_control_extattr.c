@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/ktr.h>
 #include <sys/libkern.h>
 #include <sys/limits.h>
+#include <sys/linker.h>
 #include <sys/namei.h>
 #include <sys/pax.h>
 #include <sys/proc.h>
@@ -54,6 +55,8 @@ FEATURE(hbsd_control_extattr, "HardenedBSD's extattr based control subsystem.");
 static int pax_control_extattr_status = PAX_FEATURE_SIMPLE_ENABLED;
 TUNABLE_INT("hardening.control.extattr.status", &pax_control_extattr_status);
 
+static pax_flag_t pax_control_extattr_get_all(struct thread *td,
+    struct vnode *vp);
 static bool pax_control_extattr_active(void);
 
 struct pax_feature_entry {
@@ -74,6 +77,8 @@ const struct pax_feature_entry pax_features[] = {
 	{"hbsd.pax.noshlibrandom",		PAX_NOTE_NOSHLIBRANDOM},
 	{"hbsd.pax.disallow_map32bit",		PAX_NOTE_DISALLOWMAP32BIT},
 	{"hbsd.pax.nodisallow_map32bit",	PAX_NOTE_NODISALLOWMAP32BIT},
+	{"hbsd.hardening.permit_kmod",		PAX_NOTE_PERMITKMOD},
+	{"hbsd.hardening.forbid_kmod",		PAX_NOTE_FORBIDKMOD},
 	{NULL, 0}
 };
 
@@ -94,6 +99,21 @@ SYSCTL_INT(_hardening_control_extattr, OID_AUTO, status,
 int
 pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 {
+	imgp->pax.req_extattr_flags = pax_control_extattr_get_all(td, imgp->vp);
+
+	return (0);
+}
+
+pax_flag_t
+pax_control_extattr_kmod(struct thread *td, struct vnode *vp)
+{
+	return (pax_control_extattr_get_all(td, vp));
+}
+
+static
+pax_flag_t
+pax_control_extattr_get_all(struct thread *td, struct vnode *vp)
+{
 	struct uio uio;
 	struct iovec iov;
 	unsigned char feature_status;
@@ -107,7 +127,6 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 	int error;
 
 	if (!pax_control_extattr_active()) {
-		imgp->pax.req_extattr_flags = 0;
 		return (0);
 	}
 
@@ -121,7 +140,7 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 		feature_present[i] = false;
 
 	/* Query the size of extended attribute names list. */
-	error = VOP_LISTEXTATTR(imgp->vp, EXTATTR_NAMESPACE_SYSTEM, NULL,
+	error = VOP_LISTEXTATTR(vp, EXTATTR_NAMESPACE_SYSTEM, NULL,
 	    &fsea_list_size, NULL, td);
 
 	/*
@@ -131,22 +150,10 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 	 *   - no FS-EA assigned for the file.
 	 */
 	if (error != 0 || fsea_list_size == 0) {
-		/* Use system defaults. */
-		imgp->pax.req_extattr_flags = 0;
-
-		if (error == EOPNOTSUPP) {
-			/*
-			 * Use system default, without
-			 * returning an error.
-			 */
-			return (0);
-		}
-
-		return (error);
+		return (0);
 	}
 
 	if (fsea_list_size > IOSIZE_MAX) {
-		error = ENOMEM;
 		goto out;
 	}
 
@@ -165,9 +172,10 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 	uio.uio_resid = fsea_list_size;
 
 	/* Query the FS-EA list. */
-	error = VOP_LISTEXTATTR(imgp->vp, EXTATTR_NAMESPACE_SYSTEM, &uio, NULL, NULL, td);
-	if (error != 0)
+	error = VOP_LISTEXTATTR(vp, EXTATTR_NAMESPACE_SYSTEM, &uio, NULL, NULL, td);
+	if (error != 0) {
 		goto out;
+	}
 
 	/*
 	 * Create a filter from existing hbsd.pax attributes.
@@ -184,8 +192,9 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 			 * compare the string's len without the the ending zero
 			 * with the attribute name stored without zero.
 			 */
-			if (fsea_attrname_len != entry_size)
+			if (fsea_attrname_len != entry_size) {
 				continue;
+			}
 
 			/*
 			 * Compare the strings as byte arrays without the ending zeros
@@ -226,7 +235,7 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 		 * Use NOCRED as credential to always get the extended attributes,
 		 * even if the user execs a program.
 		 */
-		error = VOP_GETEXTATTR(imgp->vp, EXTATTR_NAMESPACE_SYSTEM,
+		error = VOP_GETEXTATTR(vp, EXTATTR_NAMESPACE_SYSTEM,
 		    pax_features[i].fs_ea_attribute, &uio, NULL, NOCRED, td);
 
 		if (error == 0) {
@@ -261,13 +270,8 @@ pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp)
 out:
 	free(fsea_list, M_TEMP);
 
-	/* In case of error, reset to the system defaults. */
-	if (error)
-		parsed_flags = 0;
+	return (parsed_flags);
 
-	imgp->pax.req_extattr_flags = parsed_flags;
-
-	return (error);
 }
 
 static bool
