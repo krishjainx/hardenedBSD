@@ -24,28 +24,40 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * from: src/lib/libthr/arch/arm/include/pthread_md.h,v 1.3 2005/10/29 13:40:31 davidxu
- * $FreeBSD$
  */
 
-/*
- * Machine-dependent thread prototypes/definitions.
- */
-#ifndef _PTHREAD_MD_H_
-#define	_PTHREAD_MD_H_
+#ifndef _MACHINE_TLS_H_
+#define	_MACHINE_TLS_H_
 
-#include <sys/types.h>
-#include <machine/tls.h>
+#include <sys/_tls_variant_i.h>
+#include <machine/sysarch.h>
 
-#define	CPU_SPINWAIT
+#define	TLS_DTV_OFFSET	0
+#define	TLS_TCB_ALIGN	8
+#define	TLS_TP_OFFSET	0
 
-static __inline struct pthread *
-_get_curthread(void)
+static __inline void
+_tcb_set(struct tcb *tcb)
 {
-	if (_thr_initial)
-		return (_tcb_get()->tcb_thread);
-	return (NULL);
+#ifdef ARM_TP_ADDRESS
+	*((struct tcb **)ARM_TP_ADDRESS) = tcb;	/* avoids a system call */
+#else
+	sysarch(ARM_SET_TP, tcb);
+#endif
 }
 
-#endif /* _PTHREAD_MD_H_ */
+static __inline struct tcb *
+_tcb_get(void)
+{
+#ifdef ARM_TP_ADDRESS
+	return (*((struct tcb **)ARM_TP_ADDRESS));
+#else
+	struct tcb *tcb;
+
+	__asm __volatile("mrc  p15, 0, %0, c13, c0, 3"		\
+	   		 : "=r" (tcb));
+	return (tcb);
+#endif
+}
+
+#endif /* !_MACHINE_TLS_H_ */

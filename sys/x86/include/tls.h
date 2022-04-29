@@ -25,32 +25,57 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
+
+#ifndef _MACHINE_TLS_H_
+#define	_MACHINE_TLS_H_
+
+#include <x86/sysarch.h>
+
+#define	TLS_VARIANT_II
+
+struct pthread;
 
 /*
- * Machine-dependent thread prototypes/definitions.
+ * Variant II tcb, first two members are required by rtld,
+ * %fs (amd64) / %gs (i386) points to the structure.
  */
-#ifndef _PTHREAD_MD_H_
-#define	_PTHREAD_MD_H_
+struct tcb {
+	struct tcb		*tcb_self;	/* required by rtld */
+	uintptr_t		*tcb_dtv;	/* required by rtld */
+	struct pthread		*tcb_thread;
+};
 
-#include <stddef.h>
-#include <sys/types.h>
-#include <machine/tls.h>
+#define	TLS_DTV_OFFSET	0
+#ifdef __amd64__
+#define	TLS_TCB_ALIGN	16
+#else
+#define	TLS_TCB_ALIGN	4
+#endif
+#define	TLS_TCB_SIZE	sizeof(struct tcb)
+#define	TLS_TP_OFFSET	0
 
-#define	CPU_SPINWAIT		__asm __volatile("pause")
-
-static __inline struct pthread *
-_get_curthread(void)
+static __inline void
+_tcb_set(struct tcb *tcb)
 {
-	struct pthread *thr;
-
-	__asm __volatile("movq %%fs:%1, %0" : "=r" (thr)
-	    : "m" (*(volatile u_long *)offsetof(struct tcb, tcb_thread)));
-	return (thr);
+#ifdef __amd64__
+	amd64_set_fsbase(tcb);
+#else
+ 	i386_set_gsbase(tcb);
+#endif
 }
 
-#define	HAS__UMTX_OP_ERR	1
+static __inline struct tcb *
+_tcb_get(void)
+{
+	struct tcb *tcb;
 
+#ifdef __amd64__
+	__asm __volatile("movq %%fs:0, %0" : "=r" (tcb));
+#else
+	__asm __volatile("movl %%gs:0, %0" : "=r" (tcb));
 #endif
+	return (tcb);
+}
+
+#endif /* !_MACHINE_TLS_H_ */

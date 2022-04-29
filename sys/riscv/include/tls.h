@@ -31,28 +31,30 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-/*
- * Machine-dependent thread prototypes/definitions.
- */
-#ifndef _PTHREAD_MD_H_
-#define	_PTHREAD_MD_H_
+#ifndef _MACHINE_TLS_H_
+#define	_MACHINE_TLS_H_
 
-#include <sys/types.h>
-#include <machine/tls.h>
+#include <sys/_tls_variant_i.h>
 
-#define	CPU_SPINWAIT
+#define	TLS_DTV_OFFSET	0x800
+#define	TLS_TCB_ALIGN	16
+#define	TLS_TP_OFFSET	0
 
-static __inline struct pthread *
-_get_curthread(void)
+static __inline void
+_tcb_set(struct tcb *tcb)
 {
-
-	if (_thr_initial)
-		return (_tcb_get()->tcb_thread);
-	return (NULL);
+	__asm __volatile("addi tp, %0, %1" :: "r" (tcb), "I" (TLS_TCB_SIZE));
 }
 
-#endif /* _PTHREAD_MD_H_ */
+static __inline struct tcb *
+_tcb_get(void)
+{
+	struct tcb *tcb;
+
+	__asm __volatile("addi %0, tp, %1" : "=r" (tcb) : "I" (-TLS_TCB_SIZE));
+	return (tcb);
+}
+
+#endif /* !_MACHINE_TLS_H_ */

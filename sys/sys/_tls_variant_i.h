@@ -24,28 +24,24 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * from: src/lib/libthr/arch/arm/include/pthread_md.h,v 1.3 2005/10/29 13:40:31 davidxu
- * $FreeBSD$
  */
+
+#ifndef _SYS_TLS_VARIANT_I_H_
+#define	_SYS_TLS_VARIANT_I_H_
 
 /*
- * Machine-dependent thread prototypes/definitions.
+ * Variant I TLS uses the same TCB layout across architectures.
  */
-#ifndef _PTHREAD_MD_H_
-#define	_PTHREAD_MD_H_
 
-#include <sys/types.h>
-#include <machine/tls.h>
+#define	TLS_VARIANT_I
 
-#define	CPU_SPINWAIT
+struct pthread;
 
-static __inline struct pthread *
-_get_curthread(void)
-{
-	if (_thr_initial)
-		return (_tcb_get()->tcb_thread);
-	return (NULL);
-}
+struct tcb {
+	uintptr_t		*tcb_dtv;	/* required by rtld */
+	struct pthread		*tcb_thread;
+};
 
-#endif /* _PTHREAD_MD_H_ */
+#define	TLS_TCB_SIZE	sizeof(struct tcb)
+
+#endif /* !_SYS_TLS_VARIANT_I_H_ */
