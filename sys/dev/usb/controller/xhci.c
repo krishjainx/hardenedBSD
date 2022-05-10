@@ -3530,13 +3530,13 @@ xhci_roothub_exec(struct usb_device *udev,
 		i = UPS_PORT_LINK_STATE_SET(XHCI_PS_PLS_GET(v));
 
 		switch (XHCI_PS_SPEED_GET(v)) {
-		case 3:
+		case XHCI_PS_SPEED_HIGH:
 			i |= UPS_HIGH_SPEED;
 			break;
-		case 2:
+		case XHCI_PS_SPEED_LOW:
 			i |= UPS_LOW_SPEED;
 			break;
-		case 1:
+		case XHCI_PS_SPEED_FULL:
 			/* FULL speed */
 			break;
 		default:
@@ -3601,7 +3601,7 @@ xhci_roothub_exec(struct usb_device *udev,
 
 		switch (value) {
 		case UHF_PORT_U1_TIMEOUT:
-			if (XHCI_PS_SPEED_GET(v) != 4) {
+			if (XHCI_PS_SPEED_GET(v) < XHCI_PS_SPEED_SS) {
 				err = USB_ERR_IOERROR;
 				goto done;
 			}
@@ -3612,7 +3612,7 @@ xhci_roothub_exec(struct usb_device *udev,
 			XWRITE4(sc, oper, port, v);
 			break;
 		case UHF_PORT_U2_TIMEOUT:
-			if (XHCI_PS_SPEED_GET(v) != 4) {
+			if (XHCI_PS_SPEED_GET(v) < XHCI_PS_SPEED_SS) {
 				err = USB_ERR_IOERROR;
 				goto done;
 			}
@@ -3637,7 +3637,7 @@ xhci_roothub_exec(struct usb_device *udev,
 		case UHF_PORT_SUSPEND:
 			DPRINTFN(6, "suspend port %u (LPM=%u)\n", index, i);
 			j = XHCI_PS_SPEED_GET(v);
-			if ((j < 1) || (j > 3)) {
+			if (j == 0 || j >= XHCI_PS_SPEED_SS) {
 				/* non-supported speed */
 				err = USB_ERR_IOERROR;
 				goto done;
