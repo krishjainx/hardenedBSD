@@ -72,8 +72,13 @@ CWARNEXTRA+=	-Wno-error=memset-elt-size
 CWARNEXTRA+=	-Wno-error=packed-not-aligned
 .endif
 .if ${COMPILER_VERSION} >= 90100
-CWARNEXTRA+=	-Wno-address-of-packed-member
+CWARNEXTRA+=	-Wno-address-of-packed-member			\
+		-Wno-error=alloca-larger-than=
 .endif
+
+# GCC produces false positives for functions that switch on an
+# enum (GCC bug 87950)
+CWARNFLAGS+=	-Wno-return-type
 .endif	# gcc
 
 # This warning is utter nonsense
