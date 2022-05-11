@@ -469,7 +469,13 @@ void vm_copyout(struct vm *vm, int vcpuid, const void *kaddr,
 int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 #endif	/* KERNEL */
 
+<<<<<<< HEAD
 #define	VM_MAXCPU	48			/* maximum virtual cpus */
+=======
+#ifdef _KERNEL
+#define	VM_MAXCPU	16			/* maximum virtual cpus */
+#endif
+>>>>>>> origin/freebsd/13-stable/main
 
 /*
  * Identifiers for optional vmm capabilities
