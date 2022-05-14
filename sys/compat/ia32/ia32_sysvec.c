@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 #define __ELF_WORD_SIZE 32
 
 #include <sys/param.h>
+#include <sys/elf.h>
 #include <sys/exec.h>
 #include <sys/fcntl.h>
 #include <sys/imgact.h>
@@ -47,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/procfs.h>
+#include <sys/reg.h>
 #include <sys/resourcevar.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
@@ -115,6 +117,9 @@ struct sysentvec ia32_freebsd_sysvec = {
 	.sv_sigcodeoff	= VDSO_IA32_SIGCODE_OFFSET,
 	.sv_name	= "FreeBSD ELF32",
 	.sv_coredump	= elf32_coredump,
+	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = elf32_prepare_notes,
 	.sv_imgact_try	= NULL,
 	.sv_minsigstksz	= MINSIGSTKSZ,
 	.sv_minuser	= FREEBSD32_MINUSER,
@@ -141,6 +146,8 @@ struct sysentvec ia32_freebsd_sysvec = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 INIT_SYSENTVEC(elf_ia32_sysvec, &ia32_freebsd_sysvec);
 

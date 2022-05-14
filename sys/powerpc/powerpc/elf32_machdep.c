@@ -45,6 +45,7 @@
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
 #include <sys/jail.h>
+#include <sys/reg.h>
 #include <sys/smp.h>
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
@@ -59,7 +60,6 @@
 #include <machine/cpu.h>
 #include <machine/fpu.h>
 #include <machine/elf.h>
-#include <machine/reg.h>
 #include <machine/md_var.h>
 
 #include <powerpc/powerpc/elf_common.c>
@@ -101,6 +101,9 @@ struct sysentvec elf32_freebsd_sysvec = {
 	.sv_szsigcode	= &szsigcode32,
 	.sv_name	= "FreeBSD ELF32",
 	.sv_coredump	= __elfN(coredump),
+	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = __elfN(prepare_notes),
 	.sv_imgact_try	= NULL,
 	.sv_minsigstksz	= MINSIGSTKSZ,
 	.sv_minuser	= VM_MIN_ADDRESS,
@@ -139,6 +142,8 @@ struct sysentvec elf32_freebsd_sysvec = {
 	.sv_hwcap2	= &cpu_features2,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 INIT_SYSENTVEC(elf32_sysvec, &elf32_freebsd_sysvec);
 
