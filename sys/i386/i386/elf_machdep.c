@@ -37,11 +37,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/exec.h>
 #include <sys/imgact.h>
 #include <sys/linker.h>
-<<<<<<< HEAD
 #include <sys/pax.h>
-=======
 #include <sys/reg.h>
->>>>>>> origin/freebsd/13-stable/main
 #include <sys/proc.h>
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
