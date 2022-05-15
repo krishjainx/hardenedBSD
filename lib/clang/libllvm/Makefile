@@ -668,6 +668,7 @@ SRCS_EXT+=	ExecutionEngine/Orc/JITTargetMachineBuilder.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/LLJIT.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/Layer.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/LazyReexports.cpp
+SRCS_EXT+=	ExecutionEngine/Orc/LookupAndRecordAddrs.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/MachOPlatform.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/Mangling.cpp
 SRCS_EXT+=	ExecutionEngine/Orc/ObjectFileInterface.cpp
