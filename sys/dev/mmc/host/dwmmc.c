@@ -679,7 +679,6 @@ dwmmc_attach(device_t dev)
 {
 	struct dwmmc_softc *sc;
 	int error;
-	int slot;
 
 	sc = device_get_softc(dev);
 
@@ -711,14 +710,6 @@ dwmmc_attach(device_t dev)
 
 	device_printf(dev, "Hardware version ID is %04x\n",
 		READ4(sc, SDMMC_VERID) & 0xffff);
-
-	/* XXX: we support operation for slot index 0 only */
-	slot = 0;
-	if (sc->pwren_inverted) {
-		WRITE4(sc, SDMMC_PWREN, (0 << slot));
-	} else {
-		WRITE4(sc, SDMMC_PWREN, (1 << slot));
-	}
 
 	/* Reset all */
 	if (dwmmc_ctrl_reset(sc, (SDMMC_CTRL_RESET |
@@ -900,6 +891,17 @@ dwmmc_update_ios(device_t brdev, device_t reqdev)
 
 	dprintf("Setting up clk %u bus_width %d, timming: %d\n",
 		ios->clock, ios->bus_width, ios->timing);
+
+	switch (ios->power_mode) {
+	case power_on:
+		break;
+	case power_off:
+		WRITE4(sc, SDMMC_PWREN, 0);
+		break;
+	case power_up:
+		WRITE4(sc, SDMMC_PWREN, 1);
+		break;
+	}
 
 	mmc_fdt_set_power(&sc->mmc_helper, ios->power_mode);
 
@@ -1109,9 +1111,6 @@ dwmmc_start_cmd(struct dwmmc_softc *sc, struct mmc_command *cmd)
 	sc->curcmd = cmd;
 	data = cmd->data;
 
-	if ((sc->hwtype & HWTYPE_MASK) == HWTYPE_ROCKCHIP)
-		dwmmc_setup_bus(sc, sc->host.ios.clock);
-
 #ifndef MMCCAM
 	/* XXX Upper layers don't always set this */
 	cmd->mrq = sc->req;
@@ -1162,10 +1161,18 @@ dwmmc_start_cmd(struct dwmmc_softc *sc, struct mmc_command *cmd)
 			cmdr |= SDMMC_CMD_DATA_WRITE;
 
 		WRITE4(sc, SDMMC_TMOUT, 0xffffffff);
-		WRITE4(sc, SDMMC_BYTCNT, data->len);
-		blksz = (data->len < MMC_SECTOR_SIZE) ? \
-			 data->len : MMC_SECTOR_SIZE;
-		WRITE4(sc, SDMMC_BLKSIZ, blksz);
+#ifdef MMCCAM
+		if (cmd->data->flags & MMC_DATA_BLOCK_SIZE) {
+			WRITE4(sc, SDMMC_BLKSIZ, cmd->data->block_size);
+			WRITE4(sc, SDMMC_BYTCNT, cmd->data->len);
+		} else
+#endif
+		{
+			WRITE4(sc, SDMMC_BYTCNT, data->len);
+			blksz = (data->len < MMC_SECTOR_SIZE) ? \
+				data->len : MMC_SECTOR_SIZE;
+			WRITE4(sc, SDMMC_BLKSIZ, blksz);
+		}
 
 		if (sc->use_pio) {
 			pio_prepare(sc, cmd);
