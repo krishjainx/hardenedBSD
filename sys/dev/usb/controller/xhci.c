@@ -2,7 +2,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * Copyright (c) 2010 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2010-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -103,6 +103,10 @@ SYSCTL_INT(_hw_usb_xhci, OID_AUTO, streams, CTLFLAG_RWTUN,
 static int xhcictlquirk = 1;
 SYSCTL_INT(_hw_usb_xhci, OID_AUTO, ctlquirk, CTLFLAG_RWTUN,
     &xhcictlquirk, 0, "Set to enable control endpoint quirk");
+
+static int xhcidcepquirk;
+SYSCTL_INT(_hw_usb_xhci, OID_AUTO, dcepquirk, CTLFLAG_RWTUN,
+    &xhcidcepquirk, 0, "Set to disable endpoint deconfigure command");
 
 #ifdef USB_DEBUG
 static int xhcidebug;
@@ -281,7 +285,7 @@ xhci_reset_command_queue_locked(struct xhci_softc *sc)
 	/* set up command ring control base address */
 	addr = buf_res.physaddr;
 	phwr = buf_res.buffer;
-	addr += (uintptr_t)&((struct xhci_hw_root *)0)->hwr_commands[0];
+	addr += __offsetof(struct xhci_hw_root, hwr_commands[0]);
 
 	DPRINTF("CRCR=0x%016llx\n", (unsigned long long)addr);
 
@@ -337,7 +341,7 @@ xhci_start_controller(struct xhci_softc *sc)
 	memset(pdctxa, 0, sizeof(*pdctxa));
 
 	addr = buf_res.physaddr;
-	addr += (uintptr_t)&((struct xhci_dev_ctx_addr *)0)->qwSpBufPtr[0];
+	addr += __offsetof(struct xhci_dev_ctx_addr, qwSpBufPtr[0]);
 
 	/* slot 0 points to the table of scratchpad pointers */
 	pdctxa->qwBaaDevCtxAddr[0] = htole64(addr);
@@ -368,7 +372,7 @@ xhci_start_controller(struct xhci_softc *sc)
 
 	phwr = buf_res.buffer;
 	addr = buf_res.physaddr;
-	addr += (uintptr_t)&((struct xhci_hw_root *)0)->hwr_events[0];
+	addr += __offsetof(struct xhci_hw_root, hwr_events[0]);
 
 	/* reset hardware root structure */
 	memset(phwr, 0, sizeof(*phwr));
@@ -408,7 +412,7 @@ xhci_start_controller(struct xhci_softc *sc)
 
 	/* set up command ring control base address */
 	addr = buf_res.physaddr;
-	addr += (uintptr_t)&((struct xhci_hw_root *)0)->hwr_commands[0];
+	addr += __offsetof(struct xhci_hw_root, hwr_commands[0]);
 
 	DPRINTF("CRCR=0x%016llx\n", (unsigned long long)addr);
 
@@ -1100,7 +1104,7 @@ xhci_interrupt_poll(struct xhci_softc *sc)
 	 */
 
 	addr = buf_res.physaddr;
-	addr += (uintptr_t)&((struct xhci_hw_root *)0)->hwr_events[i];
+	addr += __offsetof(struct xhci_hw_root, hwr_events[i]);
 
 	/* try to clear busy bit */
 	addr |= XHCI_ERDP_LO_BUSY;
@@ -1164,7 +1168,7 @@ retry:
 	usb_pc_cpu_flush(&sc->sc_hw.root_pc);
 
 	addr = buf_res.physaddr;
-	addr += (uintptr_t)&((struct xhci_hw_root *)0)->hwr_commands[i];
+	addr += __offsetof(struct xhci_hw_root, hwr_commands[i]);
 
 	sc->sc_cmd_addr = htole64(addr);
 
@@ -1477,8 +1481,11 @@ xhci_cmd_configure_ep(struct xhci_softc *sc, uint64_t input_ctx,
 	temp = XHCI_TRB_3_TYPE_SET(XHCI_TRB_TYPE_CONFIGURE_EP) |
 	    XHCI_TRB_3_SLOT_SET(slot_id);
 
-	if (deconfigure)
+	if (deconfigure) {
+		if (sc->sc_no_deconfigure != 0 || xhcidcepquirk != 0)
+			return (0);	/* Success */
 		temp |= XHCI_TRB_3_DCEP_BIT;
+	}
 
 	trb.dwTrb3 = htole32(temp);
 
@@ -3472,13 +3479,13 @@ xhci_roothub_exec(struct usb_device *udev,
 		i = UPS_PORT_LINK_STATE_SET(XHCI_PS_PLS_GET(v));
 
 		switch (XHCI_PS_SPEED_GET(v)) {
-		case 3:
+		case XHCI_PS_SPEED_HIGH:
 			i |= UPS_HIGH_SPEED;
 			break;
-		case 2:
+		case XHCI_PS_SPEED_LOW:
 			i |= UPS_LOW_SPEED;
 			break;
-		case 1:
+		case XHCI_PS_SPEED_FULL:
 			/* FULL speed */
 			break;
 		default:
@@ -3543,7 +3550,7 @@ xhci_roothub_exec(struct usb_device *udev,
 
 		switch (value) {
 		case UHF_PORT_U1_TIMEOUT:
-			if (XHCI_PS_SPEED_GET(v) != 4) {
+			if (XHCI_PS_SPEED_GET(v) < XHCI_PS_SPEED_SS) {
 				err = USB_ERR_IOERROR;
 				goto done;
 			}
@@ -3554,7 +3561,7 @@ xhci_roothub_exec(struct usb_device *udev,
 			XWRITE4(sc, oper, port, v);
 			break;
 		case UHF_PORT_U2_TIMEOUT:
-			if (XHCI_PS_SPEED_GET(v) != 4) {
+			if (XHCI_PS_SPEED_GET(v) < XHCI_PS_SPEED_SS) {
 				err = USB_ERR_IOERROR;
 				goto done;
 			}
@@ -3579,7 +3586,7 @@ xhci_roothub_exec(struct usb_device *udev,
 		case UHF_PORT_SUSPEND:
 			DPRINTFN(6, "suspend port %u (LPM=%u)\n", index, i);
 			j = XHCI_PS_SPEED_GET(v);
-			if ((j < 1) || (j > 3)) {
+			if (j == 0 || j >= XHCI_PS_SPEED_SS) {
 				/* non-supported speed */
 				err = USB_ERR_IOERROR;
 				goto done;
@@ -3765,6 +3772,7 @@ xhci_configure_reset_endpoint(struct usb_xfer *xfer)
 	uint32_t mask;
 	uint8_t index;
 	uint8_t epno;
+	uint8_t drop;
 
 	pepext = xhci_get_endpoint_ext(xfer->xroot->udev,
 	    xfer->endpoint->edesc);
@@ -3806,15 +3814,19 @@ xhci_configure_reset_endpoint(struct usb_xfer *xfer)
 	 */
 	switch (xhci_get_endpoint_state(udev, epno)) {
 	case XHCI_EPCTX_0_EPSTATE_DISABLED:
-                break;
+		drop = 0;
+		break;
 	case XHCI_EPCTX_0_EPSTATE_STOPPED:
+		drop = 1;
 		break;
 	case XHCI_EPCTX_0_EPSTATE_HALTED:
 		err = xhci_cmd_reset_ep(sc, 0, epno, index);
-		if (err != 0)
+		drop = (err != 0);
+		if (drop)
 			DPRINTF("Could not reset endpoint %u\n", epno);
 		break;
 	default:
+		drop = 1;
 		err = xhci_cmd_stop_ep(sc, 0, epno, index);
 		if (err != 0)
 			DPRINTF("Could not stop endpoint %u\n", epno);
@@ -3835,11 +3847,36 @@ xhci_configure_reset_endpoint(struct usb_xfer *xfer)
 	 */
 
 	mask = (1U << epno);
+
+	/*
+	 * So-called control and isochronous transfer types have
+	 * predefined data toggles (USB 2.0) or sequence numbers (USB
+	 * 3.0) and does not need to be dropped.
+	 */
+	if (drop != 0 &&
+	    (edesc->bmAttributes & UE_XFERTYPE) != UE_CONTROL &&
+	    (edesc->bmAttributes & UE_XFERTYPE) != UE_ISOCHRONOUS) {
+		/* drop endpoint context to reset data toggle value, if any. */
+		xhci_configure_mask(udev, mask, 1);
+		err = xhci_cmd_configure_ep(sc, buf_inp.physaddr, 0, index);
+		if (err != 0) {
+			DPRINTF("Could not drop "
+			    "endpoint %u at slot %u.\n", epno, index);
+		} else {
+			sc->sc_hw.devs[index].ep_configured &= ~mask;
+		}
+	}
+
+	/*
+	 * Always need to evaluate the slot context, because the maximum
+	 * number of endpoint contexts is stored there.
+	 */
 	xhci_configure_mask(udev, mask | 1U, 0);
 
 	if (!(sc->sc_hw.devs[index].ep_configured & mask)) {
-		sc->sc_hw.devs[index].ep_configured |= mask;
 		err = xhci_cmd_configure_ep(sc, buf_inp.physaddr, 0, index);
+		if (err == 0)
+			sc->sc_hw.devs[index].ep_configured |= mask;
 	} else {
 		err = xhci_cmd_evaluate_ctx(sc, buf_inp.physaddr, index);
 	}

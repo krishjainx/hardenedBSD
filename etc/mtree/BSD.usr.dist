@@ -37,7 +37,7 @@
     ..
     lib
         clang
-            13.0.0
+            14.0.3
                 include
                     cuda_wrappers
                     ..
@@ -169,6 +169,10 @@
     ..
     share
         atf             tags=package=tests
+        ..
+        bhyve
+            kbdlayout
+            ..
         ..
         bsdconfig
             media

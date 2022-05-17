@@ -803,7 +803,7 @@ t4_push_frames(struct adapter *sc, struct toepcb *toep, int drop)
 			int newsize = min(sb->sb_hiwat + V_tcp_autosndbuf_inc,
 			    V_tcp_autosndbuf_max);
 
-			if (!sbreserve_locked(sb, newsize, so, NULL))
+			if (!sbreserve_locked(so, SO_SND, newsize, NULL))
 				sb->sb_flags &= ~SB_AUTOSIZE;
 			else
 				sowwakeup = 1;	/* room available */
@@ -1002,7 +1002,7 @@ write_iscsi_mbuf_wr(struct toepcb *toep, struct mbuf *sndptr)
 	int tx_credits, shove, npdu, wr_len;
 	uint16_t iso_mss;
 	static const u_int ulp_extra_len[] = {0, 4, 4, 8};
-	bool iso;
+	bool iso, nomap_mbuf_seen;
 
 	M_ASSERTPKTHDR(sndptr);
 
@@ -1030,8 +1030,15 @@ write_iscsi_mbuf_wr(struct toepcb *toep, struct mbuf *sndptr)
 	plen = 0;
 	nsegs = 0;
 	max_nsegs_1mbuf = 0; /* max # of SGL segments in any one mbuf */
+	nomap_mbuf_seen = false;
 	for (m = sndptr; m != NULL; m = m->m_next) {
-		int n = sglist_count(mtod(m, void *), m->m_len);
+		int n;
+
+		if (m->m_flags & M_EXTPG)
+			n = sglist_count_mbuf_epg(m, mtod(m, vm_offset_t),
+			    m->m_len);
+		else
+			n = sglist_count(mtod(m, void *), m->m_len);
 
 		nsegs += n;
 		plen += m->m_len;
@@ -1040,9 +1047,11 @@ write_iscsi_mbuf_wr(struct toepcb *toep, struct mbuf *sndptr)
 		 * This mbuf would send us _over_ the nsegs limit.
 		 * Suspend tx because the PDU can't be sent out.
 		 */
-		if (plen > max_imm && nsegs > max_nsegs)
+		if ((nomap_mbuf_seen || plen > max_imm) && nsegs > max_nsegs)
 			return (NULL);
 
+		if (m->m_flags & M_EXTPG)
+			nomap_mbuf_seen = true;
 		if (max_nsegs_1mbuf < n)
 			max_nsegs_1mbuf = n;
 	}
@@ -1075,7 +1084,7 @@ write_iscsi_mbuf_wr(struct toepcb *toep, struct mbuf *sndptr)
 	wr_len = sizeof(*txwr);
 	if (iso)
 		wr_len += sizeof(struct cpl_tx_data_iso);
-	if (plen <= max_imm) {
+	if (plen <= max_imm && !nomap_mbuf_seen) {
 		/* Immediate data tx */
 		imm_data = plen;
 		wr_len += plen;
@@ -1761,7 +1770,7 @@ do_rx_data(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 		unsigned int newsize = min(hiwat + sc->tt.autorcvbuf_inc,
 		    V_tcp_autorcvbuf_max);
 
-		if (!sbreserve_locked(sb, newsize, so, NULL))
+		if (!sbreserve_locked(so, SO_RCV, newsize, NULL))
 			sb->sb_flags &= ~SB_AUTOSIZE;
 	}
 
@@ -2183,7 +2192,6 @@ static void
 t4_aiotx_process_job(struct toepcb *toep, struct socket *so, struct kaiocb *job)
 {
 	struct sockbuf *sb;
-	struct file *fp;
 	struct inpcb *inp;
 	struct tcpcb *tp;
 	struct mbuf *m;
@@ -2192,11 +2200,10 @@ t4_aiotx_process_job(struct toepcb *toep, struct socket *so, struct kaiocb *job)
 
 	sb = &so->so_snd;
 	SOCKBUF_UNLOCK(sb);
-	fp = job->fd_file;
 	m = NULL;
 
 #ifdef MAC
-	error = mac_socket_check_send(fp->f_cred, so);
+	error = mac_socket_check_send(job->fd_file->f_cred, so);
 	if (error != 0)
 		goto out;
 #endif

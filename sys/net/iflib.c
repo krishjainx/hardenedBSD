@@ -209,6 +209,7 @@ struct iflib_ctx {
 #define isc_rxd_refill ifc_txrx.ift_rxd_refill
 #define isc_rxd_flush ifc_txrx.ift_rxd_flush
 #define isc_legacy_intr ifc_txrx.ift_legacy_intr
+#define isc_txq_select ifc_txrx.ift_txq_select
 	eventhandler_tag ifc_vlan_attach_event;
 	eventhandler_tag ifc_vlan_detach_event;
 	struct ether_addr ifc_mac;
@@ -1398,6 +1399,7 @@ prefetch(void *x)
 {
 	__asm volatile("prefetcht0 %0" :: "m" (*(unsigned long *)x));
 }
+
 static __inline void
 prefetch2cachelines(void *x)
 {
@@ -1407,8 +1409,15 @@ prefetch2cachelines(void *x)
 #endif
 }
 #else
-#define prefetch(x)
-#define prefetch2cachelines(x)
+static __inline void
+prefetch(void *x)
+{
+}
+
+static __inline void
+prefetch2cachelines(void *x)
+{
+}
 #endif
 
 static void
@@ -4153,11 +4162,14 @@ iflib_if_transmit(if_t ifp, struct mbuf *m)
 	MPASS(m->m_nextpkt == NULL);
 	/* ALTQ-enabled interfaces always use queue 0. */
 	qidx = 0;
-	if ((NTXQSETS(ctx) > 1) && M_HASHTYPE_GET(m) && !ALTQ_IS_ENABLED(&ifp->if_snd))
+	/* Use driver-supplied queue selection method if it exists */
+	if (ctx->isc_txq_select)
+		qidx = ctx->isc_txq_select(ctx->ifc_softc, m);
+	/* If not, use iflib's standard method */
+	else if ((NTXQSETS(ctx) > 1) && M_HASHTYPE_GET(m) && !ALTQ_IS_ENABLED(&ifp->if_snd))
 		qidx = QIDX(ctx, m);
-	/*
-	 * XXX calculate buf_ring based on flowid (divvy up bits?)
-	 */
+
+	/* Set TX queue */
 	txq = &ctx->ifc_txqs[qidx];
 
 #ifdef DRIVER_BACKPRESSURE
@@ -5057,6 +5069,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	ifp = ctx->ifc_ifp;
 
 	iflib_reset_qvalues(ctx);
+	IFNET_WLOCK();
 	CTX_LOCK(ctx);
 	if ((err = IFDI_ATTACH_PRE(ctx)) != 0) {
 		device_printf(dev, "IFDI_ATTACH_PRE failed %d\n", err);
@@ -5250,6 +5263,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	iflib_add_pfil(ctx);
 	ctx->ifc_flags |= IFC_INIT_DONE;
 	CTX_UNLOCK(ctx);
+	IFNET_WUNLOCK();
 
 	return (0);
 
@@ -5265,6 +5279,7 @@ fail_intr_free:
 	iflib_free_intr_mem(ctx);
 fail_unlock:
 	CTX_UNLOCK(ctx);
+	IFNET_WUNLOCK();
 	iflib_deregister(ctx);
 fail_ctx_free:
 	device_set_softc(ctx->ifc_dev, NULL);

@@ -32,6 +32,7 @@
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/elf.h>
 #include <sys/exec.h>
 #include <sys/imgact.h>
 #include <sys/malloc.h>
@@ -39,6 +40,7 @@
 #include <sys/proc.h>
 #include <sys/namei.h>
 #include <sys/fcntl.h>
+#include <sys/reg.h>
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
 #include <sys/jail.h>
@@ -81,6 +83,7 @@ struct sysentvec elf64_freebsd_sysvec_v1 = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS,
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
+	.sv_psstringssz	= sizeof(struct ps_strings),
 	.sv_stackprot	= VM_PROT_ALL,
 	.sv_copyout_auxargs = __elfN(powerpc_copyout_auxargs),
 	.sv_copyout_strings = exec_copyout_strings,
@@ -101,6 +104,8 @@ struct sysentvec elf64_freebsd_sysvec_v1 = {
 	.sv_hwcap2	= &cpu_features2,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 
 struct sysentvec elf64_freebsd_sysvec_v2 = {
@@ -122,6 +127,7 @@ struct sysentvec elf64_freebsd_sysvec_v2 = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS,
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
+	.sv_psstringssz	= sizeof(struct ps_strings),
 	.sv_stackprot	= VM_PROT_ALL,
 	.sv_copyout_auxargs = __elfN(powerpc_copyout_auxargs),
 	.sv_copyout_strings = exec_copyout_strings,
@@ -143,6 +149,8 @@ struct sysentvec elf64_freebsd_sysvec_v2 = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 
 static boolean_t ppc64_elfv1_header_match(struct image_params *params,

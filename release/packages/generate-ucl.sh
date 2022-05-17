@@ -34,6 +34,9 @@ main() {
 	vital="false"
 
 	case "${outname}" in
+		bootloader)
+			pkgdeps=""
+			;;
 		clibs)
 			vital="true"
 			# clibs should not have any dependencies or anything
@@ -124,7 +127,7 @@ main() {
 	if [ ! -z "${pkgdeps}" ]; then
 		cat <<EOF >> ${uclfile}
 deps: {
-	FreeBSD-${pkgdeps}: {
+	%PKG_NAME_PREFIX%-${pkgdeps}: {
 		origin: "base",
 		version: "${PKG_VERSION}"
 	}

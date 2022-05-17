@@ -890,7 +890,12 @@ install_check_params () {
 install_create_be () {
 	# Figure out if we're running in a jail and return if we are
 	if [ `sysctl -n security.jail.jailed` = 1 ]; then
-	    return 1
+		return 1
+	fi
+	# Operating on roots that aren't located at / will, more often than not,
+	# not touch the boot environment.
+	if [ "$BASEDIR" != "/" ]; then
+		return 1
 	fi
 	# Create a boot environment if enabled
 	if [ ${BOOTENV} = yes ]; then
@@ -911,7 +916,7 @@ install_create_be () {
 		esac
 		if [ ${CREATEBE} = yes ]; then
 			echo -n "Creating snapshot of existing boot environment... "
-			VERSION=`freebsd-version -k`
+			VERSION=`freebsd-version -ku | sort -V | tail -n 1`
 			TIMESTAMP=`date +"%Y-%m-%d_%H%M%S"`
 			bectl create ${VERSION}_${TIMESTAMP}
 			if [ $? -eq 0 ]; then
@@ -3017,6 +3022,14 @@ Kernel updates have been installed.  Please reboot and run
 		    grep -vE '^[^|]*/lib/[^|]*\.so\.[0-9]+\|' > INDEX-NEW
 		install_from_index INDEX-NEW || return 1
 		install_delete INDEX-OLD INDEX-NEW || return 1
+
+		# Restart sshd if running (PR263489).  Note that this does not
+		# affect child sshd processes handling existing sessions.
+		if service sshd status >/dev/null 2>/dev/null; then
+			echo
+			echo "Restarting sshd after upgrade"
+			service sshd restart
+		fi
 
 		# Rehash certs if we actually have certctl installed.
 		if which certctl>/dev/null; then

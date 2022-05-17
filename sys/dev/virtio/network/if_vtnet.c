@@ -361,10 +361,7 @@ static driver_t vtnet_driver = {
     .methods = vtnet_methods,
     .size = sizeof(struct vtnet_softc)
 };
-static devclass_t vtnet_devclass;
-
-VIRTIO_DRIVER_MODULE(vtnet, vtnet_driver, vtnet_devclass,
-    vtnet_modevent, 0);
+VIRTIO_DRIVER_MODULE(vtnet, vtnet_driver, vtnet_modevent, NULL);
 MODULE_VERSION(vtnet, 1);
 MODULE_DEPEND(vtnet, virtio, 1, 1, 1);
 #ifdef DEV_NETMAP
@@ -1302,9 +1299,13 @@ vtnet_ioctl_ifflags(struct vtnet_softc *sc)
 
 	if ((ifp->if_flags ^ sc->vtnet_if_flags) &
 	    (IFF_PROMISC | IFF_ALLMULTI)) {
-		if ((sc->vtnet_flags & VTNET_FLAG_CTRL_RX) == 0)
-			return (ENOTSUP);
-		vtnet_rx_filter(sc);
+		if (sc->vtnet_flags & VTNET_FLAG_CTRL_RX)
+			vtnet_rx_filter(sc);
+		else {
+			if ((ifp->if_flags ^ sc->vtnet_if_flags) & IFF_ALLMULTI)
+				return (ENOTSUP);
+			ifp->if_flags |= IFF_PROMISC;
+		}
 	}
 
 out:
@@ -2084,6 +2085,7 @@ vtnet_rxq_eof(struct vtnet_rxq *rxq)
 		if (sc->vtnet_flags & VTNET_FLAG_MRG_RXBUFS) {
 			struct virtio_net_hdr_mrg_rxbuf *mhdr =
 			    mtod(m, struct virtio_net_hdr_mrg_rxbuf *);
+			kmsan_mark(mhdr, sizeof(*mhdr), KMSAN_STATE_INITED);
 			nbufs = vtnet_htog16(sc, mhdr->num_buffers);
 			adjsz = sizeof(struct virtio_net_hdr_mrg_rxbuf);
 		} else if (vtnet_modern(sc)) {
@@ -2354,7 +2356,9 @@ vtnet_txq_offload_ctx(struct vtnet_txq *txq, struct mbuf *m, int *etype,
 {
 	struct vtnet_softc *sc;
 	struct ether_vlan_header *evh;
+#if defined(INET) || defined(INET6)
 	int offset;
+#endif
 
 	sc = txq->vtntx_sc;
 
@@ -2362,10 +2366,14 @@ vtnet_txq_offload_ctx(struct vtnet_txq *txq, struct mbuf *m, int *etype,
 	if (evh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
 		/* BMV: We should handle nested VLAN tags too. */
 		*etype = ntohs(evh->evl_proto);
+#if defined(INET) || defined(INET6)
 		offset = sizeof(struct ether_vlan_header);
+#endif
 	} else {
 		*etype = ntohs(evh->evl_encap_proto);
+#if defined(INET) || defined(INET6)
 		offset = sizeof(struct ether_header);
+#endif
 	}
 
 	switch (*etype) {
@@ -4393,8 +4401,27 @@ vtnet_debugnet_init(struct ifnet *ifp, int *nrxr, int *ncl, int *clsize)
 }
 
 static void
-vtnet_debugnet_event(struct ifnet *ifp __unused, enum debugnet_ev event __unused)
+vtnet_debugnet_event(struct ifnet *ifp, enum debugnet_ev event)
 {
+	struct vtnet_softc *sc;
+	static bool sw_lro_enabled = false;
+
+	/*
+	 * Disable software LRO, since it would require entering the network
+	 * epoch when calling vtnet_txq_eof() in vtnet_debugnet_poll().
+	 */
+	sc = if_getsoftc(ifp);
+	switch (event) {
+	case DEBUGNET_START:
+		sw_lro_enabled = (sc->vtnet_flags & VTNET_FLAG_SW_LRO) != 0;
+		if (sw_lro_enabled)
+			sc->vtnet_flags &= ~VTNET_FLAG_SW_LRO;
+		break;
+	case DEBUGNET_END:
+		if (sw_lro_enabled)
+			sc->vtnet_flags |= VTNET_FLAG_SW_LRO;
+		break;
+	}
 }
 
 static int

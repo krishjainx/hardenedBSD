@@ -786,7 +786,7 @@ t4_push_ktls(struct adapter *sc, struct toepcb *toep, int drop)
 			int newsize = min(sb->sb_hiwat + V_tcp_autosndbuf_inc,
 			    V_tcp_autosndbuf_max);
 
-			if (!sbreserve_locked(sb, newsize, so, NULL))
+			if (!sbreserve_locked(so, SO_SND, newsize, NULL))
 				sb->sb_flags &= ~SB_AUTOSIZE;
 			else
 				sowwakeup = 1;	/* room available */
@@ -958,7 +958,10 @@ do_rx_tls_cmp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 	struct mbuf *tls_data;
 	struct tls_get_record *tgr;
 	struct mbuf *control;
-	int len, pdu_length, rx_credits;
+	int pdu_length, rx_credits;
+#if defined(KTR) || defined(INVARIANTS)
+	int len;
+#endif
 
 	KASSERT(toep->tid == tid, ("%s: toep tid/atid mismatch", __func__));
 	KASSERT(!(toep->flags & TPF_SYNQE),
@@ -966,7 +969,9 @@ do_rx_tls_cmp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 
 	/* strip off CPL header */
 	m_adj(m, sizeof(*cpl));
+#if defined(KTR) || defined(INVARIANTS)
 	len = m->m_pkthdr.len;
+#endif
 
 	toep->ofld_rxq->rx_toe_tls_records++;
 
@@ -1047,6 +1052,7 @@ do_rx_tls_cmp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 
 	tgr = (struct tls_get_record *)
 	    CMSG_DATA(mtod(control, struct cmsghdr *));
+	memset(tgr, 0, sizeof(*tgr));
 	tgr->tls_type = tls_hdr_pkt->type;
 	tgr->tls_vmajor = be16toh(tls_hdr_pkt->version) >> 8;
 	tgr->tls_vminor = be16toh(tls_hdr_pkt->version) & 0xff;
@@ -1102,7 +1108,7 @@ do_rx_tls_cmp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 		unsigned int newsize = min(hiwat + sc->tt.autorcvbuf_inc,
 		    V_tcp_autorcvbuf_max);
 
-		if (!sbreserve_locked(sb, newsize, so, NULL))
+		if (!sbreserve_locked(so, SO_RCV, newsize, NULL))
 			sb->sb_flags &= ~SB_AUTOSIZE;
 	}
 

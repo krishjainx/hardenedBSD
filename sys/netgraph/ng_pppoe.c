@@ -49,8 +49,13 @@
 #include <sys/malloc.h>
 #include <sys/errno.h>
 #include <sys/epoch.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <net/ethernet.h>
+#include <net/if.h>
+#include <net/if_vlan_var.h>
+#include <net/vnet.h>
 
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
@@ -64,7 +69,18 @@ static MALLOC_DEFINE(M_NETGRAPH_PPPOE, "netgraph_pppoe", "netgraph pppoe node");
 #define M_NETGRAPH_PPPOE M_NETGRAPH
 #endif
 
+/* Some PPP protocol numbers we're interested in */
+#define PROT_LCP		0xc021
+
 #define SIGNOFF "session closed"
+
+VNET_DEFINE_STATIC(u_int32_t, ng_pppoe_lcp_pcp) = 0;
+#define V_ng_pppoe_lcp_pcp	VNET(ng_pppoe_lcp_pcp)
+
+SYSCTL_NODE(_net_graph, OID_AUTO, pppoe, CTLFLAG_RW, 0, "PPPoE");
+SYSCTL_UINT(_net_graph_pppoe, OID_AUTO, lcp_pcp,
+	CTLFLAG_VNET | CTLFLAG_RW, &VNET_NAME(ng_pppoe_lcp_pcp), 0,
+	"Set PCP for LCP");
 
 /*
  * This section contains the netgraph method declarations for the
@@ -1438,6 +1454,12 @@ ng_pppoe_rcvdata(hook_p hook, item_p item)
 			    mtod(m, u_char *)[1] == 0x03)
 				m_adj(m, 2);
 		}
+
+		if (V_ng_pppoe_lcp_pcp && m->m_pkthdr.len >= 2 &&
+		    m->m_len >= 2 && (m = m_pullup(m, 2)) &&
+		    mtod(m, uint16_t *)[0] == htons(PROT_LCP))
+			EVL_APPLY_PRI(m, (uint8_t)(V_ng_pppoe_lcp_pcp & 0x7));
+
 		/*
 		 * Bang in a pre-made header, and set the length up
 		 * to be correct. Then send it to the ethernet driver.
@@ -2031,6 +2053,7 @@ ng_pppoe_disconnect(hook_p hook)
 				log(LOG_NOTICE, "ng_pppoe[%x]: session out of "
 				    "mbufs\n", node->nd_ID);
 			else {
+				struct epoch_tracker et;
 				struct pppoe_full_hdr *wh;
 				struct pppoe_tag *tag;
 				int	msglen = strlen(SIGNOFF);
@@ -2061,8 +2084,11 @@ ng_pppoe_disconnect(hook_p hook)
 				m->m_pkthdr.len = m->m_len = sizeof(*wh) + sizeof(*tag) +
 				    msglen;
 				wh->ph.length = htons(sizeof(*tag) + msglen);
+
+				NET_EPOCH_ENTER(et);
 				NG_SEND_DATA_ONLY(error,
 					privp->ethernet_hook, m);
+				NET_EPOCH_EXIT(et);
 			}
 		}
 		if (sp->state == PPPOE_LISTENING)

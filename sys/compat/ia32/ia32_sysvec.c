@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 #define __ELF_WORD_SIZE 32
 
 #include <sys/param.h>
+#include <sys/elf.h>
 #include <sys/exec.h>
 #include <sys/fcntl.h>
 #include <sys/imgact.h>
@@ -47,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/procfs.h>
+#include <sys/reg.h>
 #include <sys/resourcevar.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
@@ -81,9 +83,9 @@ CTASSERT(sizeof(struct ia32_ucontext) == 704);
 CTASSERT(sizeof(struct ia32_sigframe) == 800);
 CTASSERT(sizeof(struct siginfo32) == 64);
 #ifdef COMPAT_FREEBSD4
-CTASSERT(sizeof(struct ia32_mcontext4) == 260);
-CTASSERT(sizeof(struct ia32_ucontext4) == 324);
-CTASSERT(sizeof(struct ia32_sigframe4) == 408);
+CTASSERT(sizeof(struct ia32_freebsd4_mcontext) == 260);
+CTASSERT(sizeof(struct ia32_freebsd4_ucontext) == 324);
+CTASSERT(sizeof(struct ia32_freebsd4_sigframe) == 408);
 #endif
 
 #include "vdso_ia32_offsets.h"
@@ -124,6 +126,7 @@ struct sysentvec ia32_freebsd_sysvec = {
 	.sv_maxuser	= FREEBSD32_MAXUSER,
 	.sv_usrstack	= FREEBSD32_USRSTACK,
 	.sv_psstrings	= FREEBSD32_PS_STRINGS,
+	.sv_psstringssz	= sizeof(struct freebsd32_ps_strings),
 	.sv_stackprot	= VM_PROT_ALL,
 	.sv_copyout_auxargs	= elf32_freebsd_copyout_auxargs,
 	.sv_copyout_strings	= freebsd32_copyout_strings,
@@ -141,12 +144,11 @@ struct sysentvec ia32_freebsd_sysvec = {
 	.sv_thread_detach = NULL,
 	.sv_trap	= NULL,
 	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
-#if !defined(PAX_ASLR)
-	.sv_stackgap	= elf32_stackgap,
-#endif
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
 	.sv_set_fork_retval = x86_set_fork_retval,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 INIT_SYSENTVEC(elf_ia32_sysvec, &ia32_freebsd_sysvec);
 

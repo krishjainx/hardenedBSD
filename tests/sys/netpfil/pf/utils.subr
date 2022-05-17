@@ -59,7 +59,10 @@ pft_onerror()
 
 pft_init()
 {
-	trap pft_onerror EXIT
+	if [ "$1" == "debug" ]
+	then
+		trap pft_onerror EXIT
+	fi
 
 	vnet_init
 
@@ -81,6 +84,15 @@ pflog_init()
 {
 	if ! kldstat -q -m pflog; then
 		atf_skip "This test requires pflog"
+	fi
+}
+
+dummynet_init()
+{
+	pft_init
+
+	if ! kldstat -q -m dummynet; then
+		atf_skip "This test requires dummynet"
 	fi
 }
 

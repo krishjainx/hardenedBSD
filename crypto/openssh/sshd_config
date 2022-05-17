@@ -1,5 +1,4 @@
 #	$OpenBSD: sshd_config,v 1.104 2021/07/02 05:11:21 dtucker Exp $
-#	$FreeBSD$
 
 # This is the sshd server system-wide configuration file.  See
 # sshd_config(5) for more information.
@@ -28,15 +27,15 @@
 
 # Logging
 #SyslogFacility AUTH
-#LogLevel INFO
+LogLevel VERBOSE
 
 # Authentication:
 
 #LoginGraceTime 2m
 #PermitRootLogin no
 #StrictModes yes
-#MaxAuthTries 6
-#MaxSessions 10
+MaxAuthTries 3
+MaxSessions 5
 
 #PubkeyAuthentication yes
 
@@ -79,33 +78,33 @@ AuthorizedKeysFile	.ssh/authorized_keys
 # be allowed through the KbdInteractiveAuthentication and
 # PasswordAuthentication.  Depending on your PAM configuration,
 # PAM authentication via KbdInteractiveAuthentication may bypass
-# the setting of "PermitRootLogin without-password".
+# the setting of "PermitRootLogin prohibit-password".
 # If you just want the PAM account and session checks to run without
 # PAM authentication, then enable this but set PasswordAuthentication
 # and KbdInteractiveAuthentication to 'no'.
 #UsePAM yes
 
-#AllowAgentForwarding yes
-#AllowTcpForwarding yes
+AllowAgentForwarding no
+AllowTcpForwarding no
 #GatewayPorts no
-#X11Forwarding yes
+X11Forwarding no
 #X11DisplayOffset 10
 #X11UseLocalhost yes
 #PermitTTY yes
 #PrintMotd yes
 #PrintLastLog yes
-#TCPKeepAlive yes
+TCPKeepAlive no
 #PermitUserEnvironment no
-#Compression delayed
+Compression no
 #ClientAliveInterval 0
-#ClientAliveCountMax 3
-#UseDNS yes
+ClientAliveCountMax 2
+UseDNS no
 #PidFile /var/run/sshd.pid
 #MaxStartups 10:30:100
 #PermitTunnel no
 #ChrootDirectory none
 #UseBlacklist no
-#VersionAddendum FreeBSD-20211221
+#VersionAddendum FreeBSD-20220415
 
 # no default banner path
 #Banner none

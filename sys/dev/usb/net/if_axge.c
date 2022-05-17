@@ -191,10 +191,8 @@ static driver_t axge_driver = {
 	.size = sizeof(struct axge_softc),
 };
 
-static devclass_t axge_devclass;
-
-DRIVER_MODULE(axge, uhub, axge_driver, axge_devclass, NULL, NULL);
-DRIVER_MODULE(miibus, axge, miibus_driver, miibus_devclass, NULL, NULL);
+DRIVER_MODULE(axge, uhub, axge_driver, NULL, NULL);
+DRIVER_MODULE(miibus, axge, miibus_driver, NULL, NULL);
 MODULE_DEPEND(axge, uether, 1, 1, 1);
 MODULE_DEPEND(axge, usb, 1, 1, 1);
 MODULE_DEPEND(axge, ether, 1, 1, 1);
@@ -452,11 +450,9 @@ axge_attach_post(struct usb_ether *ue)
 static int
 axge_attach_post_sub(struct usb_ether *ue)
 {
-	struct axge_softc *sc;
 	struct ifnet *ifp;
 	int error;
 
-	sc = uether_getsc(ue);
 	ifp = ue->ue_ifp;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = uether_start;

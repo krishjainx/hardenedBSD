@@ -79,8 +79,6 @@ __FBSDID("$FreeBSD$");
  * 387 and 287 Numeric Coprocessor Extension (NPX) Driver.
  */
 
-#if defined(__GNUCLIKE_ASM) && !defined(lint)
-
 #define	fldcw(cw)		__asm __volatile("fldcw %0" : : "m" (cw))
 #define	fnclex()		__asm __volatile("fnclex")
 #define	fninit()		__asm __volatile("fninit")
@@ -126,25 +124,6 @@ xsaveopt(char *addr, uint64_t mask)
 	__asm __volatile("xsaveopt %0" : "=m" (*addr) : "a" (low), "d" (hi) :
 	    "memory");
 }
-#else	/* !(__GNUCLIKE_ASM && !lint) */
-
-void	fldcw(u_short cw);
-void	fnclex(void);
-void	fninit(void);
-void	fnsave(caddr_t addr);
-void	fnstcw(caddr_t addr);
-void	fnstsw(caddr_t addr);
-void	fp_divide_by_0(void);
-void	frstor(caddr_t addr);
-void	fxsave(caddr_t addr);
-void	fxrstor(caddr_t addr);
-void	ldmxcsr(u_int csr);
-void	stmxcsr(u_int *csr);
-void	xrstor(char *addr, uint64_t mask);
-void	xsave(char *addr, uint64_t mask);
-void	xsaveopt(char *addr, uint64_t mask);
-
-#endif	/* __GNUCLIKE_ASM && !lint */
 
 #define	start_emulating()	load_cr0(rcr0() | CR0_TS)
 #define	stop_emulating()	clts()
@@ -1368,10 +1347,8 @@ static driver_t npxisa_driver = {
 	1,			/* no softc */
 };
 
-static devclass_t npxisa_devclass;
-
-DRIVER_MODULE(npxisa, isa, npxisa_driver, npxisa_devclass, 0, 0);
-DRIVER_MODULE(npxisa, acpi, npxisa_driver, npxisa_devclass, 0, 0);
+DRIVER_MODULE(npxisa, isa, npxisa_driver, 0, 0);
+DRIVER_MODULE(npxisa, acpi, npxisa_driver, 0, 0);
 ISA_PNP_INFO(npxisa_ids);
 #endif /* DEV_ISA */
 

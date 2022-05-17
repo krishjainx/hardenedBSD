@@ -758,11 +758,9 @@ axp8xx_write(device_t dev, uint8_t reg, uint8_t val)
 static int
 axp8xx_regnode_init(struct regnode *regnode)
 {
-	struct axp8xx_reg_sc *sc;
 	struct regnode_std_param *param;
 	int rv, udelay;
 
-	sc = regnode_get_softc(regnode);
 	param = regnode_get_stdparam(regnode);
 	if (param->min_uvolt == 0)
 		return (0);
@@ -1653,15 +1651,13 @@ static driver_t axp8xx_driver = {
 	sizeof(struct axp8xx_softc),
 };
 
-static devclass_t axp8xx_devclass;
-extern devclass_t ofwgpiobus_devclass, gpioc_devclass;
 extern driver_t ofw_gpiobus_driver, gpioc_driver;
 
-EARLY_DRIVER_MODULE(axp8xx, iicbus, axp8xx_driver, axp8xx_devclass, 0, 0,
+EARLY_DRIVER_MODULE(axp8xx, iicbus, axp8xx_driver, 0, 0,
     BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LAST);
-EARLY_DRIVER_MODULE(ofw_gpiobus, axp8xx_pmu, ofw_gpiobus_driver,
-    ofwgpiobus_devclass, 0, 0, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LAST);
-DRIVER_MODULE(gpioc, axp8xx_pmu, gpioc_driver, gpioc_devclass, 0, 0);
+EARLY_DRIVER_MODULE(ofw_gpiobus, axp8xx_pmu, ofw_gpiobus_driver, 0, 0,
+    BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LAST);
+DRIVER_MODULE(gpioc, axp8xx_pmu, gpioc_driver, 0, 0);
 MODULE_VERSION(axp8xx, 1);
 MODULE_DEPEND(axp8xx, iicbus, 1, 1, 1);
 SIMPLEBUS_PNP_INFO(compat_data);

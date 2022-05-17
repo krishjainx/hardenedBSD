@@ -383,11 +383,8 @@ sun8i_codec_dai_trigger(device_t dev, int go, int pcm_dir)
 static int
 sun8i_codec_dai_setup_mixer(device_t dev, device_t pcmdev)
 {
-	struct sun8i_codec_softc *sc;
 
-	sc = device_get_softc(dev);
 	/* Do nothing for now */
-
 	return (0);
 }
 
@@ -411,7 +408,5 @@ static driver_t sun8i_codec_driver = {
 	sizeof(struct sun8i_codec_softc),
 };
 
-static devclass_t sun8i_codec_devclass;
-
-DRIVER_MODULE(sun8i_codec, simplebus, sun8i_codec_driver, sun8i_codec_devclass, 0, 0);
+DRIVER_MODULE(sun8i_codec, simplebus, sun8i_codec_driver, 0, 0);
 SIMPLEBUS_PNP_INFO(compat_data);

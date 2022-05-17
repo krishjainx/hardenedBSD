@@ -160,11 +160,8 @@ mv_ap806_sei_disable_intr(device_t dev, struct intr_irqsrc *isrc)
 static int
 mv_ap806_sei_map(device_t dev, struct intr_map_data *data, u_int *irqp)
 {
-	struct mv_ap806_sei_softc *sc;
 	struct intr_map_data_fdt *daf;
 	u_int irq;
-
-	sc = device_get_softc(dev);
 
 	if (data->type != INTR_MAP_DATA_FDT)
 		return (ENOTSUP);
@@ -501,13 +498,11 @@ static device_method_t mv_ap806_sei_methods[] = {
 	DEVMETHOD_END
 };
 
-static devclass_t mv_ap806_sei_devclass;
-
 static driver_t mv_ap806_sei_driver = {
 	"mv_ap806_sei",
 	mv_ap806_sei_methods,
 	sizeof(struct mv_ap806_sei_softc),
 };
 
-EARLY_DRIVER_MODULE(mv_ap806_sei, simplebus, mv_ap806_sei_driver,
-    mv_ap806_sei_devclass, 0, 0, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE);
+EARLY_DRIVER_MODULE(mv_ap806_sei, simplebus, mv_ap806_sei_driver, 0, 0,
+    BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE);

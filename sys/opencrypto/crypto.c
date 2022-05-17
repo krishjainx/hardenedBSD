@@ -202,6 +202,13 @@ SYSCTL_INT(_kern, OID_AUTO, cryptodevallowsoft, CTLFLAG_RWTUN,
 	   "Enable/disable use of software crypto by /dev/crypto");
 #endif
 
+#ifdef DIAGNOSTIC
+bool crypto_destroyreq_check;
+SYSCTL_BOOL(_kern_crypto, OID_AUTO, destroyreq_check, CTLFLAG_RWTUN,
+	   &crypto_destroyreq_check, 0,
+	   "Enable checks when destroying a request");
+#endif
+
 MALLOC_DEFINE(M_CRYPTO_DATA, "crypto", "crypto session records");
 
 static	void crypto_dispatch_thread(void *arg);
@@ -579,6 +586,8 @@ crypto_cipher(const struct crypto_session_params *csp)
 		return (&enc_xform_ccm);
 	case CRYPTO_CHACHA20_POLY1305:
 		return (&enc_xform_chacha20_poly1305);
+	case CRYPTO_XCHACHA20_POLY1305:
+		return (&enc_xform_xchacha20_poly1305);
 	default:
 		return (NULL);
 	}
@@ -671,6 +680,7 @@ static enum alg_type {
 	[CRYPTO_AES_CCM_CBC_MAC] = ALG_KEYED_DIGEST,
 	[CRYPTO_AES_CCM_16] = ALG_AEAD,
 	[CRYPTO_CHACHA20_POLY1305] = ALG_AEAD,
+	[CRYPTO_XCHACHA20_POLY1305] = ALG_AEAD,
 };
 
 static enum alg_type
@@ -861,6 +871,12 @@ check_csp(const struct crypto_session_params *csp)
 			break;
 		case CRYPTO_CHACHA20_POLY1305:
 			if (csp->csp_ivlen != 8 && csp->csp_ivlen != 12)
+				return (false);
+			if (csp->csp_auth_mlen > POLY1305_HASH_LEN)
+				return (false);
+			break;
+		case CRYPTO_XCHACHA20_POLY1305:
+			if (csp->csp_ivlen != XCHACHA20_POLY1305_IV_LEN)
 				return (false);
 			if (csp->csp_auth_mlen > POLY1305_HASH_LEN)
 				return (false);
@@ -1570,6 +1586,9 @@ crypto_destroyreq(struct cryptop *crp)
 	{
 		struct cryptop *crp2;
 		struct crypto_ret_worker *ret_worker;
+
+		if (!crypto_destroyreq_check)
+			return;
 
 		CRYPTO_Q_LOCK();
 		TAILQ_FOREACH(crp2, &crp_q, crp_next) {

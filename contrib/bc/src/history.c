@@ -781,11 +781,14 @@ static void bc_history_refresh(BcHistory *h) {
 	if (pos >= h->buf.len - extras_len)
 		bc_vec_grow(&h->buf, pos + extras_len);
 
-	// Move cursor to original position.
+	// Move cursor to original position. Do NOT move the putchar of '\r' to the
+	// printf with colpos. That causes a bug where the cursor will go to the end
+	// of the line when there is no prompt.
+	bc_file_putchar(&vm.fout, bc_flush_none, '\r');
 	colpos = bc_history_colPos(h->buf.v, len - extras_len, pos) + h->pcol;
 
 	// Set the cursor position again.
-	if (colpos) bc_file_printf(&vm.fout, "\r\x1b[%zuC", colpos);
+	if (colpos) bc_file_printf(&vm.fout, "\x1b[%zuC", colpos);
 
 	bc_file_flush(&vm.fout, bc_flush_none);
 }
@@ -1193,7 +1196,34 @@ static void bc_history_escape(BcHistory *h) {
 				if (BC_ERR(BC_HIST_READ(seq + 2, 1)))
 					bc_vm_fatalError(BC_ERR_FATAL_IO_ERR);
 
-				if (seq[2] == '~' && c == '3') bc_history_edit_delete(h);
+				if (seq[2] == '~') {
+
+					switch(c) {
+
+						case '1':
+						{
+							bc_history_edit_home(h);
+							break;
+						}
+
+						case '3':
+						{
+							bc_history_edit_delete(h);
+							break;
+						}
+
+						case '4':
+						{
+							bc_history_edit_end(h);
+							break;
+						}
+
+						default:
+						{
+							break;
+						}
+					}
+				}
 				else if(seq[2] == ';') {
 
 					// Read two characters into seq.
@@ -1505,12 +1535,20 @@ static BcStatus bc_history_edit(BcHistory *h, const char *prompt) {
 			}
 
 #ifndef _WIN32
-			// Act as end-of-file.
+			// Act as end-of-file or delete-forward-char.
 			case BC_ACTION_CTRL_D:
 			{
-				bc_history_printCtrl(h, c);
-				BC_SIG_UNLOCK;
-				return BC_STATUS_EOF;
+				// Act as EOF if there's no chacters, otherwise emulate Emacs
+				// delete next character to match historical gnu bc behavior.
+				if (BC_HIST_BUF_LEN(h) == 0) {
+					bc_history_printCtrl(h, c);
+					BC_SIG_UNLOCK;
+					return BC_STATUS_EOF;
+				}
+
+				bc_history_edit_delete(h);
+
+				break;
 			}
 #endif // _WIN32
 

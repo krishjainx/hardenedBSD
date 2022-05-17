@@ -172,16 +172,16 @@ NOBINMODE?=	444
 KMODDIR?=	/boot/modules
 KMODOWN?=	${BINOWN}
 KMODGRP?=	${BINGRP}
-KMODMODE?=	${BINMODE}
+KMODMODE?=	500
 DTBDIR?=	/boot/dtb
 DTBODIR?=	/boot/dtb/overlays
 DTBOWN?=	root
 DTBGRP?=	wheel
-DTBMODE?=	444
+DTBMODE?=	400
 EFIDIR?=	/boot/efi
 EFIOWN?=	root
 EFIGRP?=	wheel
-EFIMODE?=	555
+EFIMODE?=	500
 
 # Use make.conf / environment LIBDIR as default if set...
 .if !empty(_PREMK_LIBDIR)
@@ -220,7 +220,7 @@ MANMODE?=	${NOBINMODE}
 
 DIROWN?=	root
 DIRGRP?=	wheel
-DIRMODE?=	755
+DIRMODE?=	710
 
 DOCDIR?=	${SHAREDIR}/doc
 DOCOWN?=	${SHAREOWN}

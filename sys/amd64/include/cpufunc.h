@@ -41,10 +41,6 @@
 #ifndef _MACHINE_CPUFUNC_H_
 #define	_MACHINE_CPUFUNC_H_
 
-#ifndef _SYS_CDEFS_H_
-#error this file needs sys/cdefs.h as a prerequisite
-#endif
-
 struct region_descriptor;
 
 #define readb(va)	(*(volatile uint8_t *) (va))
@@ -56,8 +52,6 @@ struct region_descriptor;
 #define writew(va, d)	(*(volatile uint16_t *) (va) = (d))
 #define writel(va, d)	(*(volatile uint32_t *) (va) = (d))
 #define writeq(va, d)	(*(volatile uint64_t *) (va) = (d))
-
-#if defined(__GNUCLIKE_ASM) && defined(__CC_SUPPORTS___INLINE)
 
 static __inline void
 breakpoint(void)
@@ -884,152 +878,6 @@ clac(void)
 
 	__asm __volatile("clac" : : : "cc");
 }
-
-enum {
-	SGX_ECREATE	= 0x0,
-	SGX_EADD	= 0x1,
-	SGX_EINIT	= 0x2,
-	SGX_EREMOVE	= 0x3,
-	SGX_EDGBRD	= 0x4,
-	SGX_EDGBWR	= 0x5,
-	SGX_EEXTEND	= 0x6,
-	SGX_ELDU	= 0x8,
-	SGX_EBLOCK	= 0x9,
-	SGX_EPA		= 0xA,
-	SGX_EWB		= 0xB,
-	SGX_ETRACK	= 0xC,
-};
-
-enum {
-	SGX_PT_SECS = 0x00,
-	SGX_PT_TCS  = 0x01,
-	SGX_PT_REG  = 0x02,
-	SGX_PT_VA   = 0x03,
-	SGX_PT_TRIM = 0x04,
-};
-
-int sgx_encls(uint32_t eax, uint64_t rbx, uint64_t rcx, uint64_t rdx);
-
-static __inline int
-sgx_ecreate(void *pginfo, void *secs)
-{
-
-	return (sgx_encls(SGX_ECREATE, (uint64_t)pginfo,
-	    (uint64_t)secs, 0));
-}
-
-static __inline int
-sgx_eadd(void *pginfo, void *epc)
-{
-
-	return (sgx_encls(SGX_EADD, (uint64_t)pginfo,
-	    (uint64_t)epc, 0));
-}
-
-static __inline int
-sgx_einit(void *sigstruct, void *secs, void *einittoken)
-{
-
-	return (sgx_encls(SGX_EINIT, (uint64_t)sigstruct,
-	    (uint64_t)secs, (uint64_t)einittoken));
-}
-
-static __inline int
-sgx_eextend(void *secs, void *epc)
-{
-
-	return (sgx_encls(SGX_EEXTEND, (uint64_t)secs,
-	    (uint64_t)epc, 0));
-}
-
-static __inline int
-sgx_epa(void *epc)
-{
-
-	return (sgx_encls(SGX_EPA, SGX_PT_VA, (uint64_t)epc, 0));
-}
-
-static __inline int
-sgx_eldu(uint64_t rbx, uint64_t rcx,
-    uint64_t rdx)
-{
-
-	return (sgx_encls(SGX_ELDU, rbx, rcx, rdx));
-}
-
-static __inline int
-sgx_eremove(void *epc)
-{
-
-	return (sgx_encls(SGX_EREMOVE, 0, (uint64_t)epc, 0));
-}
-
-#else /* !(__GNUCLIKE_ASM && __CC_SUPPORTS___INLINE) */
-
-int	breakpoint(void);
-u_int	bsfl(u_int mask);
-u_int	bsrl(u_int mask);
-void	clflush(u_long addr);
-void	clts(void);
-void	cpuid_count(u_int ax, u_int cx, u_int *p);
-void	disable_intr(void);
-void	do_cpuid(u_int ax, u_int *p);
-void	enable_intr(void);
-void	halt(void);
-void	ia32_pause(void);
-u_char	inb(u_int port);
-u_int	inl(u_int port);
-void	insb(u_int port, void *addr, size_t count);
-void	insl(u_int port, void *addr, size_t count);
-void	insw(u_int port, void *addr, size_t count);
-register_t	intr_disable(void);
-void	intr_restore(register_t rf);
-void	invd(void);
-void	invlpg(u_int addr);
-void	invltlb(void);
-u_short	inw(u_int port);
-void	lidt(struct region_descriptor *addr);
-void	lldt(u_short sel);
-void	load_cr0(u_long cr0);
-void	load_cr3(u_long cr3);
-void	load_cr4(u_long cr4);
-void	load_dr0(uint64_t dr0);
-void	load_dr1(uint64_t dr1);
-void	load_dr2(uint64_t dr2);
-void	load_dr3(uint64_t dr3);
-void	load_dr6(uint64_t dr6);
-void	load_dr7(uint64_t dr7);
-void	load_fs(u_short sel);
-void	load_gs(u_short sel);
-void	ltr(u_short sel);
-void	outb(u_int port, u_char data);
-void	outl(u_int port, u_int data);
-void	outsb(u_int port, const void *addr, size_t count);
-void	outsl(u_int port, const void *addr, size_t count);
-void	outsw(u_int port, const void *addr, size_t count);
-void	outw(u_int port, u_short data);
-u_long	rcr0(void);
-u_long	rcr2(void);
-u_long	rcr3(void);
-u_long	rcr4(void);
-uint64_t rdmsr(u_int msr);
-uint32_t rdmsr32(u_int msr);
-uint64_t rdpmc(u_int pmc);
-uint64_t rdr0(void);
-uint64_t rdr1(void);
-uint64_t rdr2(void);
-uint64_t rdr3(void);
-uint64_t rdr6(void);
-uint64_t rdr7(void);
-uint64_t rdtsc(void);
-u_long	read_rflags(void);
-u_int	rfs(void);
-u_int	rgs(void);
-void	wbinvd(void);
-void	write_rflags(u_int rf);
-void	wrmsr(u_int msr, uint64_t newval);
-
-#endif	/* __GNUCLIKE_ASM && __CC_SUPPORTS___INLINE */
 
 void	reset_dbregs(void);
 

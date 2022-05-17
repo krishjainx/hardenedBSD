@@ -99,7 +99,7 @@ __FBSDID("$FreeBSD$");
 static int uaudio_default_rate = 0;		/* use rate list */
 static int uaudio_default_bits = 32;
 static int uaudio_default_channels = 0;		/* use default */
-static int uaudio_buffer_ms = 8;
+static int uaudio_buffer_ms = 2;
 static bool uaudio_handle_hid = true;
 
 static SYSCTL_NODE(_hw_usb, OID_AUTO, uaudio, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
@@ -699,8 +699,6 @@ static const struct usb_config
 		.callback = &uaudio_hid_rx_callback,
 	},
 };
-
-static devclass_t uaudio_devclass;
 
 static device_method_t uaudio_methods[] = {
 	DEVMETHOD(device_probe, uaudio_probe),
@@ -6229,7 +6227,7 @@ uaudio_hid_detach(struct uaudio_softc *sc)
 	usbd_transfer_unsetup(sc->sc_hid.xfer, UAUDIO_HID_N_TRANSFER);
 }
 
-DRIVER_MODULE_ORDERED(uaudio, uhub, uaudio_driver, uaudio_devclass, NULL, 0, SI_ORDER_ANY);
+DRIVER_MODULE_ORDERED(uaudio, uhub, uaudio_driver, NULL, NULL, SI_ORDER_ANY);
 MODULE_DEPEND(uaudio, usb, 1, 1, 1);
 MODULE_DEPEND(uaudio, sound, SOUND_MINVER, SOUND_PREFVER, SOUND_MAXVER);
 MODULE_DEPEND(uaudio, hid, 1, 1, 1);

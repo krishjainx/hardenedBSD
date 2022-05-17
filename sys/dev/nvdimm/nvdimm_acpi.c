@@ -265,6 +265,7 @@ static device_method_t nvdimm_acpi_methods[] = {
 	DEVMETHOD(bus_read_ivar, nvdimm_root_read_ivar),
 	DEVMETHOD(bus_write_ivar, nvdimm_root_write_ivar),
 	DEVMETHOD(bus_child_location, nvdimm_root_child_location),
+	DEVMETHOD(bus_get_device_path, acpi_get_acpi_device_path),
 	DEVMETHOD_END
 };
 
@@ -274,7 +275,5 @@ static driver_t	nvdimm_acpi_driver = {
 	sizeof(struct nvdimm_root_dev),
 };
 
-static devclass_t nvdimm_acpi_root_devclass;
-DRIVER_MODULE(nvdimm_acpi_root, acpi, nvdimm_acpi_driver,
-    nvdimm_acpi_root_devclass, NULL, NULL);
+DRIVER_MODULE(nvdimm_acpi_root, acpi, nvdimm_acpi_driver, NULL, NULL);
 MODULE_DEPEND(nvdimm_acpi_root, acpi, 1, 1, 1);

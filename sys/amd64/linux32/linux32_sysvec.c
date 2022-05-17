@@ -93,6 +93,8 @@ __FBSDID("$FreeBSD$");
 #include <compat/linux/linux_util.h>
 #include <compat/linux/linux_vdso.h>
 
+#include <x86/linux/linux_x86_sigframe.h>
+
 MODULE_VERSION(linux, 1);
 
 #define	LINUX32_MAXUSER		((1ul << 32) - PAGE_SIZE)
@@ -183,10 +185,11 @@ struct linux32_ps_strings {
 				    sizeof(struct linux32_ps_strings))
 
 LINUX_VDSO_SYM_INTPTR(__kernel_vsyscall);
-LINUX_VDSO_SYM_INTPTR(__kernel_sigreturn);
-LINUX_VDSO_SYM_INTPTR(__kernel_rt_sigreturn);
+LINUX_VDSO_SYM_INTPTR(linux32_vdso_sigcode);
+LINUX_VDSO_SYM_INTPTR(linux32_vdso_rt_sigcode);
 LINUX_VDSO_SYM_INTPTR(kern_timekeep_base);
 LINUX_VDSO_SYM_INTPTR(kern_tsc_selector);
+LINUX_VDSO_SYM_INTPTR(kern_cpu_selector);
 LINUX_VDSO_SYM_CHAR(linux_platform);
 
 /*
@@ -315,10 +318,9 @@ linux_rt_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	bzero(&frame, sizeof(frame));
 
-	frame.sf_handler = PTROUT(catcher);
 	frame.sf_sig = sig;
 	frame.sf_siginfo = PTROUT(&fp->sf_si);
-	frame.sf_ucontext = PTROUT(&fp->sf_sc);
+	frame.sf_ucontext = PTROUT(&fp->sf_uc);
 
 	/* Fill in POSIX parts. */
 	siginfo_to_lsiginfo(&ksi->ksi_info, &frame.sf_si, sig);
@@ -326,38 +328,35 @@ linux_rt_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	/*
 	 * Build the signal context to be used by sigreturn and libgcc unwind.
 	 */
-	frame.sf_sc.uc_flags = 0;		/* XXX ??? */
-	frame.sf_sc.uc_link = 0;		/* XXX ??? */
-
-	frame.sf_sc.uc_stack.ss_sp = PTROUT(td->td_sigstk.ss_sp);
-	frame.sf_sc.uc_stack.ss_size = td->td_sigstk.ss_size;
-	frame.sf_sc.uc_stack.ss_flags = (td->td_pflags & TDP_ALTSTACK)
+	frame.sf_uc.uc_stack.ss_sp = PTROUT(td->td_sigstk.ss_sp);
+	frame.sf_uc.uc_stack.ss_size = td->td_sigstk.ss_size;
+	frame.sf_uc.uc_stack.ss_flags = (td->td_pflags & TDP_ALTSTACK)
 	    ? ((oonstack) ? LINUX_SS_ONSTACK : 0) : LINUX_SS_DISABLE;
 	PROC_UNLOCK(p);
 
-	bsd_to_linux_sigset(mask, &frame.sf_sc.uc_sigmask);
+	bsd_to_linux_sigset(mask, &frame.sf_uc.uc_sigmask);
 
-	frame.sf_sc.uc_mcontext.sc_mask   = frame.sf_sc.uc_sigmask.__mask;
-	frame.sf_sc.uc_mcontext.sc_edi    = regs->tf_rdi;
-	frame.sf_sc.uc_mcontext.sc_esi    = regs->tf_rsi;
-	frame.sf_sc.uc_mcontext.sc_ebp    = regs->tf_rbp;
-	frame.sf_sc.uc_mcontext.sc_ebx    = regs->tf_rbx;
-	frame.sf_sc.uc_mcontext.sc_esp    = regs->tf_rsp;
-	frame.sf_sc.uc_mcontext.sc_edx    = regs->tf_rdx;
-	frame.sf_sc.uc_mcontext.sc_ecx    = regs->tf_rcx;
-	frame.sf_sc.uc_mcontext.sc_eax    = regs->tf_rax;
-	frame.sf_sc.uc_mcontext.sc_eip    = regs->tf_rip;
-	frame.sf_sc.uc_mcontext.sc_cs     = regs->tf_cs;
-	frame.sf_sc.uc_mcontext.sc_gs     = regs->tf_gs;
-	frame.sf_sc.uc_mcontext.sc_fs     = regs->tf_fs;
-	frame.sf_sc.uc_mcontext.sc_es     = regs->tf_es;
-	frame.sf_sc.uc_mcontext.sc_ds     = regs->tf_ds;
-	frame.sf_sc.uc_mcontext.sc_eflags = regs->tf_rflags;
-	frame.sf_sc.uc_mcontext.sc_esp_at_signal = regs->tf_rsp;
-	frame.sf_sc.uc_mcontext.sc_ss     = regs->tf_ss;
-	frame.sf_sc.uc_mcontext.sc_err    = regs->tf_err;
-	frame.sf_sc.uc_mcontext.sc_cr2    = (u_int32_t)(uintptr_t)ksi->ksi_addr;
-	frame.sf_sc.uc_mcontext.sc_trapno = bsd_to_linux_trapcode(code);
+	frame.sf_uc.uc_mcontext.sc_mask   = frame.sf_uc.uc_sigmask.__mask;
+	frame.sf_uc.uc_mcontext.sc_edi    = regs->tf_rdi;
+	frame.sf_uc.uc_mcontext.sc_esi    = regs->tf_rsi;
+	frame.sf_uc.uc_mcontext.sc_ebp    = regs->tf_rbp;
+	frame.sf_uc.uc_mcontext.sc_ebx    = regs->tf_rbx;
+	frame.sf_uc.uc_mcontext.sc_esp    = regs->tf_rsp;
+	frame.sf_uc.uc_mcontext.sc_edx    = regs->tf_rdx;
+	frame.sf_uc.uc_mcontext.sc_ecx    = regs->tf_rcx;
+	frame.sf_uc.uc_mcontext.sc_eax    = regs->tf_rax;
+	frame.sf_uc.uc_mcontext.sc_eip    = regs->tf_rip;
+	frame.sf_uc.uc_mcontext.sc_cs     = regs->tf_cs;
+	frame.sf_uc.uc_mcontext.sc_gs     = regs->tf_gs;
+	frame.sf_uc.uc_mcontext.sc_fs     = regs->tf_fs;
+	frame.sf_uc.uc_mcontext.sc_es     = regs->tf_es;
+	frame.sf_uc.uc_mcontext.sc_ds     = regs->tf_ds;
+	frame.sf_uc.uc_mcontext.sc_eflags = regs->tf_rflags;
+	frame.sf_uc.uc_mcontext.sc_esp_at_signal = regs->tf_rsp;
+	frame.sf_uc.uc_mcontext.sc_ss     = regs->tf_ss;
+	frame.sf_uc.uc_mcontext.sc_err    = regs->tf_err;
+	frame.sf_uc.uc_mcontext.sc_cr2    = (u_int32_t)(uintptr_t)ksi->ksi_addr;
+	frame.sf_uc.uc_mcontext.sc_trapno = bsd_to_linux_trapcode(code);
 
 	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
@@ -370,7 +369,8 @@ linux_rt_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	/* Build context to run handler in. */
 	regs->tf_rsp = PTROUT(fp);
-	regs->tf_rip = __kernel_rt_sigreturn;
+	regs->tf_rip = linux32_vdso_rt_sigcode;
+	regs->tf_rdi = PTROUT(catcher);
 	regs->tf_rflags &= ~(PSL_T | PSL_D);
 	regs->tf_cs = _ucode32sel;
 	regs->tf_ss = _udatasel;
@@ -435,7 +435,6 @@ linux_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	bzero(&frame, sizeof(frame));
 
-	frame.sf_handler = PTROUT(catcher);
 	frame.sf_sig = sig;
 
 	bsd_to_linux_sigset(mask, &lmask);
@@ -476,7 +475,8 @@ linux_sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 
 	/* Build context to run handler in. */
 	regs->tf_rsp = PTROUT(fp);
-	regs->tf_rip = __kernel_sigreturn;
+	regs->tf_rip = linux32_vdso_sigcode;
+	regs->tf_rdi = PTROUT(catcher);
 	regs->tf_rflags &= ~(PSL_T | PSL_D);
 	regs->tf_cs = _ucode32sel;
 	regs->tf_ss = _udatasel;
@@ -773,7 +773,7 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	char canary[LINUX_AT_RANDOM_LEN];
 	size_t execpath_len;
 
-	arginfo = (struct linux32_ps_strings *)(imgp->proc->p_psstrings);
+	arginfo = (struct linux32_ps_strings *)PROC_PS_STRINGS(imgp->proc);
 	destp = (uintptr_t)arginfo;
 
 	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
@@ -887,6 +887,9 @@ SYSCTL_ULONG(_compat_linux32, OID_AUTO, maxssiz, CTLFLAG_RW,
 static u_long	linux32_maxvmem = LINUX32_MAXVMEM;
 SYSCTL_ULONG(_compat_linux32, OID_AUTO, maxvmem, CTLFLAG_RW,
     &linux32_maxvmem, 0, "");
+bool linux32_emulate_i386 = false;
+SYSCTL_BOOL(_compat_linux32, OID_AUTO, emulate_i386, CTLFLAG_RWTUN,
+    &linux32_emulate_i386, 0, "Emulate the real i386");
 
 static void
 linux32_fixlimit(struct rlimit *rl, int which)
@@ -939,6 +942,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_maxuser	= LINUX32_MAXUSER,
 	.sv_usrstack	= LINUX32_USRSTACK,
 	.sv_psstrings	= LINUX32_PS_STRINGS,
+	.sv_psstringssz	= sizeof(struct linux32_ps_strings),
 	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
 	.sv_copyout_auxargs = linux_copyout_auxargs,
 	.sv_copyout_strings = linux_copyout_strings,
@@ -999,6 +1003,12 @@ linux_exec_sysvec_init(void *param)
 	*ktsc_selector = linux_vdso_tsc_selector_idx();
 	if (bootverbose)
 		printf("Linux i386 vDSO tsc_selector: %u\n", *ktsc_selector);
+
+	tkoff = kern_cpu_selector - linux_vdso_base;
+	ktsc_selector = (l_uintptr_t *)(linux_vdso_mapping + tkoff);
+	*ktsc_selector = linux_vdso_cpu_selector_idx();
+	if (bootverbose)
+		printf("Linux i386 vDSO cpu_selector: %u\n", *ktsc_selector);
 }
 SYSINIT(elf_linux_exec_sysvec_init, SI_SUB_EXEC + 1, SI_ORDER_ANY,
     linux_exec_sysvec_init, &elf_linux_sysvec);

@@ -88,6 +88,8 @@ __FBSDID("$FreeBSD$");
 #include "fuse_internal.h"
 #include "fuse_node.h"
 
+int __insecure_kmod = 1;
+
 static void fuse_bringdown(eventhandler_tag eh_tag);
 static int fuse_loader(struct module *m, int what, void *arg);
 

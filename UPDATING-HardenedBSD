@@ -1,3 +1,11 @@
+[20220406] Introduce insecure kernel module hardening
+__HardenedBSD_version = 1400002
+
+	Provide support for marking certain kernel modules with a
+	notion of insecure or untrustworthy. Introduce a new hardening
+	sysctl tunable: hardening.insecure_kmod (default to 0, meaning
+	loading insecure kernel modules is prohibited by default.)
+
 [20210528] Introduce LTO libs on amd64
 __HardenedBSD_version = 1400001
 

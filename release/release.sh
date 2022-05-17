@@ -69,14 +69,14 @@ env_setup() {
 		echo "*** The devel/git port/package is required."
 		exit 1
 	fi
-	VCSCMD="/usr/local/bin/git clone -q"
+	VCSCMD="/usr/local/bin/git clone --single-branch --depth 10 -q"
 
 	# The default git checkout server, and branches for src/, doc/,
 	# and ports/.
-	GITROOT="https://git.FreeBSD.org/"
-	SRCBRANCH="main"
-	PORTBRANCH="main"
-	GITSRC="src.git"
+	GITROOT="https://git.hardenedbsd.org/hardenedbsd/"
+	SRCBRANCH="hardened/current/master"
+	PORTBRANCH="hardenedbsd/main"
+	GITSRC="HardenedBSD.git"
 	GITPORTS="ports.git"
 
 	# Set for embedded device builds.
@@ -96,7 +96,7 @@ env_setup() {
 	MAKE_FLAGS="-s"
 
 	# The name of the kernel to build, defaults to GENERIC.
-	KERNEL="GENERIC"
+	KERNEL="HARDENEDBSD"
 
 	# Set to non-empty value to disable checkout of doc/ and/or ports/.
 	NOPORTS=

@@ -186,7 +186,6 @@ __DEFAULT_YES_OPTIONS = \
     TEXTPROC \
     TFTP \
     UNBOUND \
-    UNINIT_AUTOINIT \
     USB \
     UTMPX \
     VI \
@@ -291,7 +290,7 @@ __DEFAULT_NO_OPTIONS+=LLVM_TARGET_BPF LLVM_TARGET_MIPS
 
 .include <bsd.compiler.mk>
 
-.if ${__T} == "aarch64" || ${__T} == "amd64" || ${__T} == "i386"
+.if ${__T:Marm*} == "" && ${__T:Mriscv64*} == ""
 __DEFAULT_YES_OPTIONS+=LLDB
 .else
 __DEFAULT_NO_OPTIONS+=LLDB
@@ -341,8 +340,8 @@ __DEFAULT_NO_OPTIONS+=CLANG_EXTRAS
 .if ${__T:Mpowerpc*} == ""
 BROKEN_OPTIONS+=LOADER_OFW
 .endif
-# KBOOT is only for powerpc64 (powerpc64le broken)
-.if ${__T} != "powerpc64"
+# KBOOT is only for powerpc64 (powerpc64le broken) and kinda for amd64
+.if ${__T} != "powerpc64" && ${__T} != "amd64"
 BROKEN_OPTIONS+=LOADER_KBOOT
 .endif
 # UBOOT is only for arm, and big-endian powerpc
@@ -365,7 +364,7 @@ __DEFAULT_NO_OPTIONS+=OPENSSL_KTLS
 .endif
 
 .if ${__T} != "aarch64" && ${__T} != "amd64" && ${__T} != "i386" && \
-    ${__T} != "powerpc64"
+    ${__T:Mpowerpc64*} == ""
 BROKEN_OPTIONS+=CXGBETOOL
 BROKEN_OPTIONS+=MLX5TOOL
 .endif

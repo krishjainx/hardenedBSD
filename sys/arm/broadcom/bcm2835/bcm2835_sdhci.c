@@ -395,13 +395,10 @@ bcm_sdhci_intr(void *arg)
 static int
 bcm_sdhci_update_ios(device_t bus, device_t child)
 {
-#ifdef EXT_RESOURCES
 	struct bcm_sdhci_softc *sc;
 	struct mmc_ios *ios;
-#endif
 	int rv;
 
-#ifdef EXT_RESOURCES
 	sc = device_get_softc(bus);
 	ios = &sc->sc_slot.host.ios;
 
@@ -411,20 +408,17 @@ bcm_sdhci_update_ios(device_t bus, device_t child)
 		if (sc->sc_mmc_helper.vqmmc_supply)
 			regulator_enable(sc->sc_mmc_helper.vqmmc_supply);
 	}
-#endif
 
 	rv = sdhci_generic_update_ios(bus, child);
 	if (rv != 0)
 		return (rv);
 
-#ifdef EXT_RESOURCES
 	if (ios->power_mode == power_off) {
 		if (sc->sc_mmc_helper.vmmc_supply)
 			regulator_disable(sc->sc_mmc_helper.vmmc_supply);
 		if (sc->sc_mmc_helper.vqmmc_supply)
 			regulator_disable(sc->sc_mmc_helper.vqmmc_supply);
 	}
-#endif
 
 	return (0);
 }
@@ -583,7 +577,7 @@ bcm_sdhci_start_dma_seg(struct bcm_sdhci_softc *sc)
 {
 	struct sdhci_slot *slot;
 	vm_paddr_t pdst, psrc;
-	int err, idx, len, sync_op, width;
+	int err __diagused, idx, len, sync_op, width;
 
 	slot = &sc->sc_slot;
 	mtx_assert(&slot->mtx, MA_OWNED);
@@ -858,16 +852,13 @@ static device_method_t bcm_sdhci_methods[] = {
 	DEVMETHOD_END
 };
 
-static devclass_t bcm_sdhci_devclass;
-
 static driver_t bcm_sdhci_driver = {
 	"sdhci_bcm",
 	bcm_sdhci_methods,
 	sizeof(struct bcm_sdhci_softc),
 };
 
-DRIVER_MODULE(sdhci_bcm, simplebus, bcm_sdhci_driver, bcm_sdhci_devclass,
-    NULL, NULL);
+DRIVER_MODULE(sdhci_bcm, simplebus, bcm_sdhci_driver, NULL, NULL);
 #ifdef NOTYET
 MODULE_DEPEND(sdhci_bcm, bcm2835_clkman, 1, 1, 1);
 #endif

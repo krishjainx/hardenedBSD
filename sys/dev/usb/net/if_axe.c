@@ -274,10 +274,8 @@ static driver_t axe_driver = {
 	.size = sizeof(struct axe_softc),
 };
 
-static devclass_t axe_devclass;
-
-DRIVER_MODULE(axe, uhub, axe_driver, axe_devclass, NULL, 0);
-DRIVER_MODULE(miibus, axe, miibus_driver, miibus_devclass, 0, 0);
+DRIVER_MODULE(axe, uhub, axe_driver, NULL, NULL);
+DRIVER_MODULE(miibus, axe, miibus_driver, 0, 0);
 MODULE_DEPEND(axe, uether, 1, 1, 1);
 MODULE_DEPEND(axe, usb, 1, 1, 1);
 MODULE_DEPEND(axe, ether, 1, 1, 1);
@@ -709,9 +707,6 @@ axe_ax88772_init(struct axe_softc *sc)
 static void
 axe_ax88772_phywake(struct axe_softc *sc)
 {
-	struct usb_ether *ue;
-
-	ue = &sc->sc_ue;
 	if (sc->sc_phyno == AXE_772_PHY_NO_EPHY) {
 		/* Manually select internal(embedded) PHY - MAC mode. */
 		axe_cmd(sc, AXE_CMD_SW_PHY_SELECT, 0, AXE_SW_PHY_SELECT_SS_ENB |

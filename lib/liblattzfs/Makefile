@@ -1,3 +1,5 @@
+PACKAGE=	hardenedbsd
+
 SHLIB=		lattzfs
 SHLIB_MAJOR=	0
 

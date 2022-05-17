@@ -207,6 +207,13 @@ typedef struct {
 __BEGIN_DECLS
 #if __BSD_VISIBLE
 DB *dbopen(const char *, int, int, DBTYPE, const void *);
+int cfi_libc_db_dbclose(DB *);
+int cfi_libc_db_dbdel(const DB *, const DBT *, unsigned int);
+int cfi_libc_db_dbget(const DB *, const DBT *, DBT *, unsigned int);
+int cfi_libc_db_dbput(const DB *, DBT *, const DBT *, unsigned int);
+int cfi_libc_db_dbseq(const DB *, DBT *, DBT *, unsigned int);
+int cfi_libc_db_dbsync(const DB *, unsigned int);
+int cfi_libc_db_dbfd(const DB *);
 #endif
 
 #ifdef __DBINTERFACE_PRIVATE

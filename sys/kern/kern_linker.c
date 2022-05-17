@@ -35,27 +35,28 @@ __FBSDID("$FreeBSD$");
 #include "opt_pax.h"
 
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/sysproto.h>
-#include <sys/sysent.h>
-#include <sys/priv.h>
-#include <sys/proc.h>
-#include <sys/lock.h>
-#include <sys/mutex.h>
-#include <sys/sx.h>
-#include <sys/module.h>
-#include <sys/mount.h>
-#include <sys/linker.h>
+#include <sys/boottrace.h>
 #include <sys/eventhandler.h>
 #include <sys/fcntl.h>
 #include <sys/jail.h>
+#include <sys/kernel.h>
 #include <sys/libkern.h>
+#include <sys/linker.h>
+#include <sys/lock.h>
+#include <sys/malloc.h>
+#include <sys/module.h>
+#include <sys/mount.h>
+#include <sys/mutex.h>
 #include <sys/namei.h>
-#include <sys/vnode.h>
+#include <sys/priv.h>
+#include <sys/proc.h>
+#include <sys/sx.h>
 #include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
+#include <sys/sysent.h>
+#include <sys/sysproto.h>
+#include <sys/vnode.h>
 
 #ifdef DDB
 #include <ddb/ddb.h>
@@ -197,6 +198,7 @@ static void
 linker_file_sysinit(linker_file_t lf)
 {
 	struct sysinit **start, **stop, **sipp, **xipp, *save;
+	int last;
 
 	KLD_DPF(FILE, ("linker_file_sysinit: calling SYSINITs for %s\n",
 	    lf->filename));
@@ -228,14 +230,20 @@ linker_file_sysinit(linker_file_t lf)
 	 * Traverse the (now) ordered list of system initialization tasks.
 	 * Perform each task, and continue on to the next task.
 	 */
+	last = SI_SUB_DUMMY;
 	sx_xunlock(&kld_sx);
 	mtx_lock(&Giant);
 	for (sipp = start; sipp < stop; sipp++) {
 		if ((*sipp)->subsystem == SI_SUB_DUMMY)
 			continue;	/* skip dummy task(s) */
 
+		if ((*sipp)->subsystem > last)
+			BOOTTRACE("%s: sysinit 0x%7x", lf->filename,
+			    (*sipp)->subsystem);
+
 		/* Call function */
 		(*((*sipp)->func)) ((*sipp)->udata);
+		last = (*sipp)->subsystem;
 	}
 	mtx_unlock(&Giant);
 	sx_xlock(&kld_sx);
@@ -245,6 +253,7 @@ static void
 linker_file_sysuninit(linker_file_t lf)
 {
 	struct sysinit **start, **stop, **sipp, **xipp, *save;
+	int last;
 
 	KLD_DPF(FILE, ("linker_file_sysuninit: calling SYSUNINITs for %s\n",
 	    lf->filename));
@@ -280,12 +289,18 @@ linker_file_sysuninit(linker_file_t lf)
 	 */
 	sx_xunlock(&kld_sx);
 	mtx_lock(&Giant);
+	last = SI_SUB_DUMMY;
 	for (sipp = start; sipp < stop; sipp++) {
 		if ((*sipp)->subsystem == SI_SUB_DUMMY)
 			continue;	/* skip dummy task(s) */
 
+		if ((*sipp)->subsystem > last)
+			BOOTTRACE("%s: sysuninit 0x%7x", lf->filename,
+			    (*sipp)->subsystem);
+
 		/* Call function */
 		(*((*sipp)->func)) ((*sipp)->udata);
+		last = (*sipp)->subsystem;
 	}
 	mtx_unlock(&Giant);
 	sx_xlock(&kld_sx);
@@ -446,6 +461,14 @@ linker_load_file(const char *filename, linker_file_t *result)
 		KLD_DPF(FILE, ("linker_load_file: trying to load %s\n",
 		    filename));
 		error = LINKER_LOAD_FILE(lc, filename, &lf);
+		/*
+		 * We'll get an EPERM when an attempt to load an
+		 * insecure kernel module is made, and loading
+		 * insecure modules is prohibited.
+		 */
+		if (error == EPERM) {
+			return (error);
+		}
 		/*
 		 * If we got something other than ENOENT, then it exists but
 		 * we cannot load it for some other reason.
@@ -1373,10 +1396,11 @@ kern_kldstat(struct thread *td, int fileid, struct kld_file_stat *stat)
 	stat->id = lf->id;
 #ifdef HARDEN_KLD
 	stat->address = NULL;
+	stat->size = 0;
 #else
 	stat->address = lf->address;
-#endif
 	stat->size = lf->size;
+#endif
 	/* Version 2 fields: */
 	namelen = strlen(lf->pathname) + 1;
 	if (namelen > sizeof(stat->pathname))
@@ -1475,10 +1499,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 		    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
 #ifdef HARDEN_KLD
 			lookup.symvalue = (uintptr_t) NULL;
+			lookup.symsize = 0;
 #else
 			lookup.symvalue = (uintptr_t) symval.value;
-#endif
 			lookup.symsize = symval.size;
+#endif
 			error = copyout(&lookup, uap->data, sizeof(lookup));
 		} else
 			error = ENOENT;
@@ -1488,10 +1513,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 			    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
 #ifdef HARDEN_KLD
 				lookup.symvalue = (uintptr_t)NULL;
+				lookup.symsize = 0;
 #else
 				lookup.symvalue = (uintptr_t)symval.value;
-#endif
 				lookup.symsize = symval.size;
+#endif
 				error = copyout(&lookup, uap->data,
 				    sizeof(lookup));
 				break;
@@ -1900,7 +1926,7 @@ linker_lookup_file(const char *path, int pathlen, const char *name,
 		flags = FREAD;
 		error = vn_open(&nd, &flags, 0, NULL);
 		if (error == 0) {
-			NDFREE(&nd, NDF_ONLY_PNBUF);
+			NDFREE_PNBUF(&nd);
 			type = nd.ni_vp->v_type;
 			if (vap)
 				VOP_GETATTR(nd.ni_vp, vap, td->td_ucred);
@@ -1951,7 +1977,7 @@ linker_hints_lookup(const char *path, int pathlen, const char *modname,
 	error = vn_open(&nd, &flags, 0, NULL);
 	if (error)
 		goto bad;
-	NDFREE(&nd, NDF_ONLY_PNBUF);
+	NDFREE_PNBUF(&nd);
 	if (nd.ni_vp->v_type != VREG)
 		goto bad;
 	best = cp = NULL;

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018-2020 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
  */
 #ifndef __iwl_modparams_h__
 #define __iwl_modparams_h__
@@ -76,7 +76,11 @@ struct iwl_mod_params {
 	bool power_save;
 	int power_level;
 #ifdef CONFIG_IWLWIFI_DEBUG
+#if defined(__linux__)
+	u32 debug_level;
+#elif defined(__FreeBSD__)
 	enum iwl_dl debug_level;
+#endif
 #endif
 	char *nvm_file;
 	u32 uapsd_disable;
@@ -86,7 +90,8 @@ struct iwl_mod_params {
 	 */
 	bool disable_11ax;
 	bool remove_when_gone;
-	bool enable_ini;
+	u32 enable_ini;
+	bool disable_11be;
 };
 
 static inline bool iwl_enable_rx_ampdu(void)

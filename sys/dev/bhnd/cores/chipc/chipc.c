@@ -68,8 +68,6 @@ __FBSDID("$FreeBSD$");
 
 #include "chipc_private.h"
 
-devclass_t bhnd_chipc_devclass;	/**< bhnd(4) chipcommon device class */
-
 static struct bhnd_device_quirk chipc_quirks[];
 
 /* Supported device identifiers */
@@ -411,7 +409,7 @@ chipc_find_nvram_src(struct chipc_softc *sc, struct chipc_caps *caps)
 
 	/*
 	 * We check for hardware presence in order of precedence. For example,
-	 * SPROM is is always used in preference to internal OTP if found.
+	 * SPROM is always used in preference to internal OTP if found.
 	 */
 	if (CHIPC_QUIRK(sc, SUPPORTS_SPROM) && caps->sprom) {
 		srom_ctrl = bhnd_bus_read_4(sc->core, CHIPC_SPROM_CTRL);
@@ -599,11 +597,8 @@ chipc_print_child(device_t dev, device_t child)
 static device_t
 chipc_add_child(device_t dev, u_int order, const char *name, int unit)
 {
-	struct chipc_softc	*sc;
 	struct chipc_devinfo	*dinfo;
 	device_t		 child;
-
-	sc = device_get_softc(dev);
 
 	child = device_add_child_ordered(dev, order, name, unit);
 	if (child == NULL)
@@ -1424,7 +1419,7 @@ static device_method_t chipc_methods[] = {
 };
 
 DEFINE_CLASS_0(bhnd_chipc, bhnd_chipc_driver, chipc_methods, sizeof(struct chipc_softc));
-EARLY_DRIVER_MODULE(bhnd_chipc, bhnd, bhnd_chipc_driver, bhnd_chipc_devclass, 0, 0,
+EARLY_DRIVER_MODULE(bhnd_chipc, bhnd, bhnd_chipc_driver, 0, 0,
     BUS_PASS_BUS + BUS_PASS_ORDER_MIDDLE);
 MODULE_DEPEND(bhnd_chipc, bhnd, 1, 1, 1);
 MODULE_VERSION(bhnd_chipc, 1);

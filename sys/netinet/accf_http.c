@@ -40,6 +40,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysctl.h>
 #include <sys/socketvar.h>
 
+int __insecure_kmod = 1;
+
 /* check for GET/HEAD */
 static int sohashttpget(struct socket *so, void *arg, int waitflag);
 /* check for HTTP/1.0 or HTTP/1.1 */

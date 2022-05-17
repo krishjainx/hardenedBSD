@@ -38,7 +38,6 @@
 #include <machine/vmparam.h>
 
 #define	VIRT_BITS	48
-#define	DMAP_TABLES	((DMAP_MAX_ADDRESS - DMAP_MIN_ADDRESS) >> L0_SHIFT)
 
 	.globl	kernbase
 	.set	kernbase, KERNBASE
@@ -152,6 +151,16 @@ virtdone:
 	bl	initarm
 	/* We are done with the boot params */
 	add	sp, sp, #BOOTPARAMS_SIZE
+
+	/*
+	 * Enable pointer authentication in the kernel. We set the keys for
+	 * thread0 in initarm so have to wait until it returns to enable it.
+	 * If we were to enable it in initarm then any authentication when
+	 * returning would fail as it was called with pointer authentication
+	 * disabled.
+	 */
+	bl	ptrauth_start
+
 	bl	mi_startup
 
 	/* We should not get here */
@@ -238,8 +247,18 @@ LENTRY(drop_to_el1)
 	b.eq	1f
 	ret
 1:
+	/*
+	 * Disable the MMU. If the HCR_EL2.E2H field is set we will clear it
+	 * which may break address translation.
+	 */
+	dsb	sy
+	mrs	x2, sctlr_el2
+	bic	x2, x2, SCTLR_M
+	msr	sctlr_el2, x2
+	isb
+
 	/* Configure the Hypervisor */
-	mov	x2, #(HCR_RW)
+	ldr	x2, =(HCR_RW | HCR_APK | HCR_API)
 	msr	hcr_el2, x2
 
 	/* Load the Virtualization Process ID Register */
@@ -368,7 +387,6 @@ LEND(get_virt_delta)
  *    - The Kernel L0 table             (TTBR1)
  *    - The identity (PA = VA) L1 table
  *    - The identity (PA = VA) L0 table (TTBR0)
- *    - The DMAP L1 tables
  */
 LENTRY(create_pagetables)
 	/* Save the Link register */
@@ -445,7 +463,7 @@ common:
 	/* Create the kernel space L2 table */
 	mov	x6, x26
 	mov	x7, #(ATTR_S1_IDX(VM_MEMATTR_WRITE_BACK))
-	mov	x8, #(KERNBASE & L2_BLOCK_MASK)
+	mov	x8, #(KERNBASE)
 	mov	x9, x28
 	bl	build_l2_block_pagetable
 
@@ -464,13 +482,6 @@ common:
 	mov	x9, x6
 	mov	x6, x24
 	mov	x10, #1
-	bl	link_l0_pagetable
-
-	/* Link the DMAP tables */
-	ldr	x8, =DMAP_MIN_ADDRESS
-	adrp	x9, pagetable_dmap
-	add	x9, x9, :lo12:pagetable_dmap
-	mov	x10, #DMAP_TABLES
 	bl	link_l0_pagetable
 
 	/*
@@ -732,7 +743,7 @@ mair:
 		MAIR_ATTR(MAIR_NORMAL_WT, VM_MEMATTR_WRITE_THROUGH) |	\
 		MAIR_ATTR(MAIR_DEVICE_nGnRE, VM_MEMATTR_DEVICE_nGnRE)
 tcr:
-	.quad (TCR_TxSZ(64 - VIRT_BITS) | TCR_TG1_4K | \
+	.quad (TCR_TxSZ(64 - VIRT_BITS) | TCR_TG1_4K | TCR_TG0_4K | \
 	    TCR_CACHE_ATTRS | TCR_SMP_ATTRS)
 sctlr_set:
 	/* Bits to set */
@@ -761,6 +772,7 @@ END(abort)
 	 *           L0 bootstrap for user
 	 *           L0 for user
 	 */
+	.globl pagetable_l0_ttbr1
 pagetable:
 	.space	PAGE_SIZE
 pagetable_l1_ttbr1:
@@ -776,9 +788,6 @@ pagetable_l0_ttbr0_boostrap:
 pagetable_l0_ttbr0:
 	.space	PAGE_SIZE
 
-	.globl pagetable_dmap
-pagetable_dmap:
-	.space	PAGE_SIZE * DMAP_TABLES
 pagetable_end:
 
 el2_pagetable:

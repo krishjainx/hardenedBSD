@@ -33,6 +33,7 @@ nooptions	COMPAT_FREEBSD9
 nooptions	COMPAT_FREEBSD10
 nooptions	COMPAT_FREEBSD32
 nooptions	QUEUE_MACRO_DEBUG_TRASH
+nooptions	INCLUDE_CONFIG_FILE # reduce kernel infoleaks
 
 # HardenedBSD hardening options
 options 	HARDEN_KLD		# Harden the kernel module interface

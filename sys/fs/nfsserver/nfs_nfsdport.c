@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 
 #include <fs/nfs/nfsport.h>
 #include <security/mac/mac_framework.h>
+#include <sys/callout.h>
 #include <sys/filio.h>
 #include <sys/hash.h>
 #include <sys/sysctl.h>
@@ -60,7 +61,6 @@ extern int nfsrv_useacl;
 extern int newnfs_numnfsd;
 extern struct mount nfsv4root_mnt;
 extern struct nfsrv_stablefirst nfsrv_stablefirst;
-extern void (*nfsd_call_servertimer)(void);
 extern SVCPOOL	*nfsrvd_pool;
 extern struct nfsv4lock nfsd_suspend_lock;
 extern struct nfsclienthashhead *nfsclienthash;
@@ -97,6 +97,7 @@ static char nfsd_master_comm[MAXCOMLEN + 1];
 static struct timeval nfsd_master_start;
 static uint32_t nfsv4_sysid = 0;
 static fhandle_t zerofh;
+struct callout nfsd_callout;
 
 static int nfssvc_srvcall(struct thread *, struct nfssvc_args *,
     struct ucred *);
@@ -676,7 +677,7 @@ nfsvno_namei(struct nfsrv_descript *nd, struct nameidata *ndp,
 		 * In either case ni_startdir will be dereferenced and NULLed
 		 * out.
 		 */
-		error = lookup(ndp);
+		error = vfs_lookup(ndp);
 		if (error)
 			break;
 
@@ -1259,8 +1260,8 @@ nfsvno_createsub(struct nfsrv_descript *nd, struct nameidata *ndp,
 				tempsize = nvap->na_size;
 				NFSVNO_ATTRINIT(nvap);
 				nvap->na_size = tempsize;
-				error = VOP_SETATTR(*vpp,
-				    &nvap->na_vattr, nd->nd_cred);
+				error = nfsvno_setattr(*vpp, nvap,
+				    nd->nd_cred, p, exp);
 			}
 		}
 		if (error)
@@ -1929,8 +1930,8 @@ nfsvno_open(struct nfsrv_descript *nd, struct nameidata *ndp,
 					tempsize = nvap->na_size;
 					NFSVNO_ATTRINIT(nvap);
 					nvap->na_size = tempsize;
-					nd->nd_repstat = VOP_SETATTR(vp,
-					    &nvap->na_vattr, cred);
+					nd->nd_repstat = nfsvno_setattr(vp,
+					    nvap, cred, p, exp);
 				}
 			} else if (vp->v_type == VREG) {
 				nd->nd_repstat = nfsrv_opencheck(clientid,
@@ -2991,7 +2992,7 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 			attrsum += NFSX_HYPER;
 			break;
 		case NFSATTRBIT_ACL:
-			error = nfsrv_dissectacl(nd, aclp, false, &aceerr,
+			error = nfsrv_dissectacl(nd, aclp, true, &aceerr,
 			    &aclsize, p);
 			if (error)
 				goto nfsmout;
@@ -3530,6 +3531,14 @@ nfsd_mntinit(void)
 	nfsv4root_mnt.mnt_lazyvnodelistsize = 0;
 }
 
+static void
+nfsd_timer(void *arg)
+{
+
+	nfsrv_servertimer();
+	callout_reset_sbt(&nfsd_callout, SBT_1S, SBT_1S, nfsd_timer, NULL, 0);
+}
+
 /*
  * Get a vnode for a file handle, without checking exports, etc.
  */
@@ -3771,6 +3780,7 @@ nfssvc_nfsd(struct thread *td, struct nfssvc_args *uap)
 			nfsdarg.mdspathlen = 0;
 			nfsdarg.mirrorcnt = 1;
 		}
+		nfsd_timer(NULL);
 		error = nfsrvd_nfsd(td, &nfsdarg);
 		free(nfsdarg.addr, M_TEMP);
 		free(nfsdarg.dnshost, M_TEMP);
@@ -4041,16 +4051,11 @@ nfsvno_testexp(struct nfsrv_descript *nd, struct nfsexstuff *exp)
 {
 	int i;
 
-	/*
-	 * Allow NFSv3 Fsinfo per RFC2623.
-	 */
-	if (((nd->nd_flag & ND_NFSV4) != 0 ||
-	     nd->nd_procnum != NFSPROC_FSINFO) &&
-	    ((NFSVNO_EXTLS(exp) && (nd->nd_flag & ND_TLS) == 0) ||
-	     (NFSVNO_EXTLSCERT(exp) &&
-	      (nd->nd_flag & ND_TLSCERT) == 0) ||
-	     (NFSVNO_EXTLSCERTUSER(exp) &&
-	      (nd->nd_flag & ND_TLSCERTUSER) == 0))) {
+	if ((NFSVNO_EXTLS(exp) && (nd->nd_flag & ND_TLS) == 0) ||
+	    (NFSVNO_EXTLSCERT(exp) &&
+	     (nd->nd_flag & ND_TLSCERT) == 0) ||
+	    (NFSVNO_EXTLSCERTUSER(exp) &&
+	     (nd->nd_flag & ND_TLSCERTUSER) == 0)) {
 		if ((nd->nd_flag & ND_NFSV4) != 0)
 			return (NFSERR_WRONGSEC);
 #ifdef notnow
@@ -4063,6 +4068,13 @@ nfsvno_testexp(struct nfsrv_descript *nd, struct nfsexstuff *exp)
 		else
 			return (NFSERR_AUTHERR | AUTH_TOOWEAK);
 	}
+
+	/*
+	 * RFC2623 suggests that the NFSv3 Fsinfo RPC be allowed to use
+	 * AUTH_NONE or AUTH_SYS for file systems requiring RPCSEC_GSS.
+	 */
+	if ((nd->nd_flag & ND_NFSV3) != 0 && nd->nd_procnum == NFSPROC_FSINFO)
+		return (0);
 
 	/*
 	 * This seems odd, but allow the case where the security flavor
@@ -6926,18 +6938,15 @@ nfsm_trimtrailing(struct nfsrv_descript *nd, struct mbuf *mb, char *bpos,
  * Check to see if a put file handle operation should test for
  * NFSERR_WRONGSEC, although NFSv3 actually returns NFSERR_AUTHERR.
  * When Open is the next operation, NFSERR_WRONGSEC cannot be
- * replied for the Open cases that use a component.  Thia can
+ * replied for the Open cases that use a component.  This can
  * be identified by the fact that the file handle's type is VDIR.
  */
 bool
 nfsrv_checkwrongsec(struct nfsrv_descript *nd, int nextop, enum vtype vtyp)
 {
 
-	if ((nd->nd_flag & ND_NFSV4) == 0) {
-		if (nd->nd_procnum == NFSPROC_FSINFO)
-			return (false);
+	if ((nd->nd_flag & ND_NFSV4) == 0)
 		return (true);
-	}
 
 	if ((nd->nd_flag & ND_LASTOP) != 0)
 		return (false);
@@ -7033,6 +7042,7 @@ nfsd_modevent(module_t mod, int type, void *data)
 		mtx_init(&nfsrv_dontlistlock_mtx, "nfs4dnl", NULL, MTX_DEF);
 		mtx_init(&nfsrv_recalllock_mtx, "nfs4rec", NULL, MTX_DEF);
 		lockinit(&nfsv4root_mnt.mnt_explock, PVFS, "explock", 0, 0);
+		callout_init(&nfsd_callout, 1);
 		nfsrvd_initcache();
 		nfsd_init();
 		NFSD_LOCK();
@@ -7043,7 +7053,6 @@ nfsd_modevent(module_t mod, int type, void *data)
 		vn_deleg_ops.vndeleg_recall = nfsd_recalldelegation;
 		vn_deleg_ops.vndeleg_disable = nfsd_disabledelegation;
 #endif
-		nfsd_call_servertimer = nfsrv_servertimer;
 		nfsd_call_nfsd = nfssvc_nfsd;
 		loaded = 1;
 		break;
@@ -7058,8 +7067,8 @@ nfsd_modevent(module_t mod, int type, void *data)
 		vn_deleg_ops.vndeleg_recall = NULL;
 		vn_deleg_ops.vndeleg_disable = NULL;
 #endif
-		nfsd_call_servertimer = NULL;
 		nfsd_call_nfsd = NULL;
+		callout_drain(&nfsd_callout);
 
 		/* Clean out all NFSv4 state. */
 		nfsrv_throwawayallstate(curthread);

@@ -127,9 +127,7 @@ static driver_t nicvf_driver = {
 	sizeof(struct nicvf),
 };
 
-static devclass_t nicvf_devclass;
-
-DRIVER_MODULE(vnicvf, pci, nicvf_driver, nicvf_devclass, 0, 0);
+DRIVER_MODULE(vnicvf, pci, nicvf_driver, 0, 0);
 MODULE_VERSION(vnicvf, 1);
 MODULE_DEPEND(vnicvf, pci, 1, 1, 1);
 MODULE_DEPEND(vnicvf, ether, 1, 1, 1);
@@ -1251,7 +1249,7 @@ nicvf_release_all_interrupts(struct nicvf *nic)
 {
 	struct resource *res;
 	int irq;
-	int err;
+	int err __diagused;
 
 	/* Free registered interrupts */
 	for (irq = 0; irq < nic->num_vec; irq++) {

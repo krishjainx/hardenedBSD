@@ -24,6 +24,13 @@ FBSD_1.0 {
 };
 
 FBSD_1.1 {
+	cfi_libc_db_dbclose;
+	cfi_libc_db_dbdel;
+	cfi_libc_db_dbget;
+	cfi_libc_db_dbput;
+	cfi_libc_db_dbseq;
+	cfi_libc_db_dbsync;
+	cfi_libc_db_dbfd;
 	mpool_new;
 	mpool_delete;
 };

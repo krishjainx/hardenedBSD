@@ -130,9 +130,9 @@ usage() {
 	debug_print "\t-n\t\tDo not install kernel"
 	debug_print "\t-o\t\tDo not remove obsolete files/directories"
 	debug_print "\t-R\t\tUse system nameserver for the DNS-based version check"
-	debug_print "\t-r path\tBootstrap root directory <path>"
+	debug_print "\t-r path\t\tBootstrap root directory <path>"
 	debug_print "\t-s\t\tInstall sources (if present)"
-	debug_print "\t-t tmpdir\tTemporary directory"
+	debug_print "\t-t tmpdir\tTemporary directory (example: /root/tmp)"
 	debug_print "\t-U\t\tAllow unsigned updates"
 	debug_print "\t-v version\tUse a different version"
 	debug_print "\t-V\t\tVerbose output"
@@ -402,7 +402,7 @@ fetch_update() {
 		fi
 
 		if [ ${verbose} -gt 0 ]; then
-			debug_print "[*] Verified hash: ${filehash} = ${pubhash}"
+			debug_print "[*] Verified hash: ${filehash}\n  [+] Remote hash: ${pubhash}"
 		fi
 	fi
 
@@ -645,12 +645,13 @@ apply_base() {
 	dirs="/bin /sbin /lib /libexec /usr/bin /usr/sbin /usr/lib"
 
 	if [ ${verbose} -gt 0 ]; then
-		debug_print "[*] Applying base"
+		debug_print "\n[*] Applying base"
 	fi
 
 	for dir in ${dirs}; do
 		if [ -d ${mountpoint}/${dir} ]; then
-			${CHFLAGS} -R noschg ${mountpoint}/${dir}
+			#FIX-ME: empty:  flags ("schg" is not "none"
+			${CHFLAGS} -R noschg ${mountpoint}/${dir} 2> /dev/null
 			res=${?}
 			if [ ${res} -gt 0 ]; then
 				return ${res}
@@ -661,6 +662,7 @@ apply_base() {
 	${TAR} -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		--exclude ./boot \
+		--exclude ./boot/efi \
 		-C ${mountpoint}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -669,7 +671,7 @@ apply_base() {
 
 	boottmp=$(env TMPDIR=${tmpdir} ${MKTEMP} -d)
 	[ ! -d ${mountpoint}/boot ] && mkdir ${mountpoint}/boot
-	${TAR} -xpf ${tmpdir}/base.txz --include ./boot -C ${boottmp}
+	${TAR} -xpf ${tmpdir}/base.txz --include ./boot --exclude ./boot/efi -C ${boottmp}
 	${TAR} -c -C ${boottmp}/boot -f - . | \
 		(cd ${mountpoint}/boot; ${TAR} -xpf -)
 	res=${?}
@@ -900,7 +902,7 @@ remove_obsolete() {
 		for file in $(cat ${tmpdir}/ObsoleteFiles.txt); do
 			if [ -f ${mountpoint}/${file} ]; then
 				if [ ${interactive} -gt 0 ]; then
-					read -p "Remove ${mountpoint}/${file} (Y/n)? " val
+					read -p "Remove ${mountpoint}${file} (Y/n)? " val
 					case "${val}" in
 						[Nn]*)
 							continue
@@ -909,7 +911,7 @@ remove_obsolete() {
 				fi
 
 				if [ ${verbose} -gt 0 ]; then
-					debug_print "    [+] Removing ${mountpoint}/${file}"
+					debug_print "    [+] Removing ${mountpoint}${file}"
 				fi
 
 				rm -f ${mountpoint}/${file}
@@ -921,7 +923,7 @@ remove_obsolete() {
 		for file in $(cat ${tmpdir}/ObsoleteDirs.txt); do
 			if [ -e ${mountpoint}/${file} ]; then
 				if [ ${verbose} -gt 0 ]; then
-					debug_print "    [+] Removing ${mountpoint}/${file}"
+					debug_print "    [+] Removing ${mountpoint}${file}"
 				fi
 
 				rm -rf ${mountpoint}/${file}

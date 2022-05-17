@@ -223,11 +223,12 @@ struct vm_map {
  * vm_flags_t values
  */
 #define MAP_WIREFUTURE		0x01	/* wire all future pages */
-#define	MAP_BUSY_WAKEUP		0x02
+#define	MAP_BUSY_WAKEUP		0x02	/* thread(s) waiting on busy state */
 #define	MAP_IS_SUB_MAP		0x04	/* has parent */
 #define	MAP_ASLR		0x08	/* enabled ASLR */
-#define	MAP_ASLR_IGNSTART	0x10
-#define	MAP_REPLENISH		0x20
+#define	MAP_ASLR_IGNSTART	0x10	/* ASLR ignores data segment */
+#define	MAP_REPLENISH		0x20	/* kmapent zone needs to be refilled */
+#define	MAP_ASLR_STACK		0x80	/* stack location is randomized */
 
 #ifdef	_KERNEL
 #if defined(KLD_MODULE) && !defined(KLD_TIED)
@@ -293,6 +294,7 @@ struct vmspace {
 	caddr_t vm_daddr;	/* (c) user virtual address of data */
 	caddr_t vm_maxsaddr;	/* user VA at max stack growth */
 	vm_offset_t vm_aslr_delta_mmap;	/* mmap() random delta for ASLR */
+	vm_offset_t vm_aslr_delta_rtld;	/* RTLD random delta for ASLR */
 	vm_offset_t vm_aslr_delta_stack;	/* stack random delta for ASLR */
 	vm_offset_t vm_aslr_delta_thr_stack;	/* thread stack random delta for ASLR */
 	vm_offset_t vm_aslr_delta_exec;	/* exec base random delta for ASLR */
@@ -300,7 +302,6 @@ struct vmspace {
 #ifdef __LP64__
 	vm_offset_t vm_aslr_delta_map32bit; /* random for MAP_32BIT mappings */
 #endif
-	vm_size_t vm_stkgap;	/* stack gap size in bytes */
 	u_int vm_refcnt;	/* number of references */
 	/*
 	 * Keep the PMAP last, so that CPU-specific variations of that

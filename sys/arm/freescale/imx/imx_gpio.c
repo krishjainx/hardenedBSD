@@ -56,7 +56,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#if defined(EXT_RESOURCES) && defined(__aarch64__)
+#if defined(__aarch64__)
 #define	IMX_ENABLE_CLOCKS
 #endif
 
@@ -952,7 +952,6 @@ static driver_t imx51_gpio_driver = {
 	imx51_gpio_methods,
 	sizeof(struct imx51_gpio_softc),
 };
-static devclass_t imx51_gpio_devclass;
 
-EARLY_DRIVER_MODULE(imx51_gpio, simplebus, imx51_gpio_driver,
-    imx51_gpio_devclass, 0, 0, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LATE);
+EARLY_DRIVER_MODULE(imx51_gpio, simplebus, imx51_gpio_driver, 0, 0,
+    BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LATE);

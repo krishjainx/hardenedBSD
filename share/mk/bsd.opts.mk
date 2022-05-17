@@ -103,7 +103,7 @@ __DEFAULT_DEPENDENT_OPTIONS = \
     WARNS \
     WERROR
 .if defined(NO_${var})
-.error "NO_${var} is defined, but deprecated. Please use MK_${var}=no instead."
+.error NO_${var} is defined, but deprecated. Please use MK_${var}=no instead.
 MK_${var}:=no
 .endif
 .endfor

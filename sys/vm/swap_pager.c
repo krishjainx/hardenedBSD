@@ -163,10 +163,10 @@ static SYSCTL_NODE(_vm_stats, OID_AUTO, swap, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
     "VM swap stats");
 
 SYSCTL_PROC(_vm, OID_AUTO, swap_reserved, CTLTYPE_U64 | CTLFLAG_RD | CTLFLAG_MPSAFE,
-    &swap_reserved, 0, sysctl_page_shift, "A", 
+    &swap_reserved, 0, sysctl_page_shift, "QU",
     "Amount of swap storage needed to back all allocated anonymous memory.");
 SYSCTL_PROC(_vm, OID_AUTO, swap_total, CTLTYPE_U64 | CTLFLAG_RD | CTLFLAG_MPSAFE,
-    &swap_total, 0, sysctl_page_shift, "A", 
+    &swap_total, 0, sysctl_page_shift, "QU",
     "Total amount of available swap storage.");
 
 static int overcommit = 0;
@@ -633,12 +633,8 @@ swap_pager_swap_init(void)
 	    vm_cnt.v_page_count / 2;
 	swpctrie_zone = uma_zcreate("swpctrie", pctrie_node_size(), NULL, NULL,
 	    pctrie_zone_init, NULL, UMA_ALIGN_PTR, 0);
-	if (swpctrie_zone == NULL)
-		panic("failed to create swap pctrie zone.");
 	swblk_zone = uma_zcreate("swblk", sizeof(struct swblk), NULL, NULL,
 	    NULL, NULL, _Alignof(struct swblk) - 1, 0);
-	if (swblk_zone == NULL)
-		panic("failed to create swap blk zone.");
 	n2 = n;
 	do {
 		if (uma_zone_reserve_kva(swblk_zone, n))
@@ -1019,7 +1015,7 @@ static bool
 swp_pager_xfer_source(vm_object_t srcobject, vm_object_t dstobject,
     vm_pindex_t pindex, daddr_t addr)
 {
-	daddr_t dstaddr;
+	daddr_t dstaddr __diagused;
 
 	KASSERT((srcobject->flags & OBJ_SWAP) != 0,
 	    ("%s: Srcobject not swappable", __func__));
@@ -2370,7 +2366,7 @@ sys_swapon(struct thread *td, struct swapon_args *uap)
 	if (error)
 		goto done;
 
-	NDFREE(&nd, NDF_ONLY_PNBUF);
+	NDFREE_PNBUF(&nd);
 	vp = nd.ni_vp;
 
 	if (vn_isdisk_error(vp, &error)) {
@@ -2501,7 +2497,7 @@ kern_swapoff(struct thread *td, const char *name, enum uio_seg name_seg,
 	error = namei(&nd);
 	if (error)
 		goto done;
-	NDFREE(&nd, NDF_ONLY_PNBUF);
+	NDFREE_PNBUF(&nd);
 	vp = nd.ni_vp;
 
 	mtx_lock(&sw_dev_mtx);

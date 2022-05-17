@@ -57,6 +57,7 @@ struct ogetdirentries_args;
 struct rlimit;
 struct rusage;
 struct sched_param;
+struct sembuf;
 union semun;
 struct sockaddr;
 struct spacectl_range;
@@ -111,7 +112,7 @@ int	kern_clock_settime(struct thread *td, clockid_t clock_id,
 	    struct timespec *ats);
 void	kern_thread_cputime(struct thread *targettd, struct timespec *ats);
 void	kern_process_cputime(struct proc *targetp, struct timespec *ats);
-int	kern_close_range(struct thread *td, u_int lowfd, u_int highfd);
+int	kern_close_range(struct thread *td, int flags, u_int lowfd, u_int highfd);
 int	kern_close(struct thread *td, int fd);
 int	kern_connectat(struct thread *td, int dirfd, int fd,
 	    struct sockaddr *sa);
@@ -120,6 +121,8 @@ int	kern_copy_file_range(struct thread *td, int infd, off_t *inoffp,
 int	kern_cpuset_getaffinity(struct thread *td, cpulevel_t level,
 	    cpuwhich_t which, id_t id, size_t cpusetsize, cpuset_t *maskp);
 int	kern_cpuset_setaffinity(struct thread *td, cpulevel_t level,
+	    cpuwhich_t which, id_t id, cpuset_t *maskp);
+int	user_cpuset_setaffinity(struct thread *td, cpulevel_t level,
 	    cpuwhich_t which, id_t id, size_t cpusetsize,
 	    const cpuset_t *maskp);
 int	kern_cpuset_getdomain(struct thread *td, cpulevel_t level,
@@ -328,6 +331,8 @@ int	kern_ktimer_settime(struct thread *td, int timer_id, int flags,
 int	kern_ktimer_gettime(struct thread *td, int timer_id,
 	    struct itimerspec *val);
 int	kern_ktimer_getoverrun(struct thread *td, int timer_id);
+int	kern_semop(struct thread *td, int usemid, struct sembuf *usops,
+	    size_t nsops, struct timespec *timeout);
 int	kern_thr_alloc(struct proc *, int pages, struct thread **);
 int	kern_thr_exit(struct thread *td);
 int	kern_thr_new(struct thread *td, struct thr_param *param);

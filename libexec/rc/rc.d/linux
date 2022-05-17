@@ -35,7 +35,6 @@ linux_start()
 		load_kld -e 'linux64elf' linux64
 		;;
 	amd64)
-		load_kld -e 'linuxelf' linux
 		load_kld -e 'linux64elf' linux64
 		;;
 	i386)
@@ -66,10 +65,6 @@ linux_start()
 	# Handle unbranded ELF executables by defaulting to ELFOSABI_LINUX.
 	if [ `sysctl -ni kern.elf64.fallback_brand` -eq "-1" ]; then
 		sysctl kern.elf64.fallback_brand=3 > /dev/null
-	fi
-
-	if [ `sysctl -ni kern.elf32.fallback_brand` -eq "-1" ]; then
-		sysctl kern.elf32.fallback_brand=3 > /dev/null
 	fi
 
 	if checkyesno linux_mounts_enable; then

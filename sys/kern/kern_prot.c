@@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/pax.h>
+#include <sys/ptrace.h>
 #include <sys/refcount.h>
 #include <sys/sx.h>
 #include <sys/priv.h>
@@ -1768,7 +1769,7 @@ p_candebug(struct thread *td, struct proc *p)
 	if ((p->p_flag & P_INEXEC) != 0)
 		return (EBUSY);
 
-	/* Denied explicitely */
+	/* Denied explicitly */
 	if ((p->p_flag2 & P2_NOTRACE) != 0) {
 		error = priv_check(td, PRIV_DEBUG_DENIED);
 		if (error != 0)
@@ -2493,3 +2494,12 @@ change_svgid(struct ucred *newcred, gid_t svgid)
 
 	newcred->cr_svgid = svgid;
 }
+
+#ifdef PAX_HARDENING
+bool allow_ptrace = false;
+#else
+bool allow_ptrace = true;
+#endif
+SYSCTL_BOOL(_security_bsd, OID_AUTO, allow_ptrace, CTLFLAG_RWTUN,
+    &allow_ptrace, 0,
+    "Deny ptrace(2) use by returning ENOSYS");

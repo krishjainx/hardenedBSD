@@ -298,6 +298,12 @@ fuse_vnode_get(struct mount *mp,
 	uint64_t generation = feo ? feo->generation : 0;
 	int err = 0;
 
+	if (dvp != NULL && VTOFUD(dvp)->nid == nodeid) {
+		fuse_warn(fuse_get_mpdata(mp), FSESS_WARN_ILLEGAL_INODE,
+			"Assigned same inode to both parent and child.");
+		return EIO;
+	}
+
 	err = fuse_vnode_alloc(mp, td, nodeid, vtyp, vpp);
 	if (err) {
 		return err;
@@ -448,9 +454,8 @@ fuse_vnode_setsize(struct vnode *vp, off_t newsize, bool from_server)
 		 * The FUSE server changed the file size behind our back.  We
 		 * should invalidate the entire cache.
 		 */
-		daddr_t left_lbn, end_lbn;
+		daddr_t end_lbn;
 
-		left_lbn = oldsize / iosize;
 		end_lbn = howmany(newsize, iosize);
 		v_inval_buf_range(vp, 0, end_lbn, iosize);
 	}

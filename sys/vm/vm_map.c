@@ -229,7 +229,7 @@ static void
 kmapent_free(void *item, vm_size_t size, uint8_t pflag)
 {
 	vm_offset_t addr;
-	int error;
+	int error __diagused;
 
 	if ((pflag & UMA_SLAB_PRIV) == 0)
 		/* XXX leaked */
@@ -351,6 +351,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 	vm->vm_maxsaddr = 0;
 #ifdef PAX_ASLR
 	vm->vm_aslr_delta_mmap = 0;
+	vm->vm_aslr_delta_rtld = 0;
 	vm->vm_aslr_delta_stack = 0;
 	vm->vm_aslr_delta_thr_stack = 0;
 	vm->vm_aslr_delta_exec = 0;
@@ -360,7 +361,6 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #endif
 #endif
 
-	vm->vm_stkgap = 0;
 	return (vm);
 }
 
@@ -4264,7 +4264,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm_map_t new_map, old_map;
 	vm_map_entry_t new_entry, old_entry;
 	vm_object_t object;
-	int error, locked;
+	int error, locked __diagused;
 	vm_inherit_t inh;
 
 	old_map = &vm1->vm_map;
@@ -4280,6 +4280,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 #ifdef PAX_ASLR
 	vm2->vm_aslr_delta_exec = vm1->vm_aslr_delta_exec;
 	vm2->vm_aslr_delta_mmap = vm1->vm_aslr_delta_mmap;
+	vm2->vm_aslr_delta_rtld = vm1->vm_aslr_delta_rtld;
 	vm2->vm_aslr_delta_stack = vm1->vm_aslr_delta_stack;
 	vm2->vm_aslr_delta_thr_stack = vm1->vm_aslr_delta_thr_stack;
 	vm2->vm_aslr_delta_vdso = vm1->vm_aslr_delta_vdso;
@@ -4287,7 +4288,6 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_aslr_delta_map32bit = vm1->vm_aslr_delta_map32bit;
 #endif
 #endif
-	vm2->vm_stkgap = vm1->vm_stkgap;
 	vm_map_lock(old_map);
 	if (old_map->busy)
 		vm_map_wait_busy(old_map);
@@ -4305,7 +4305,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	}
 
 	new_map->anon_loc = old_map->anon_loc;
-	new_map->flags |= old_map->flags & (MAP_ASLR | MAP_ASLR_IGNSTART);
+	new_map->flags |= old_map->flags & MAP_ASLR_IGNSTART;
 
 	VM_MAP_ENTRY_FOREACH(old_entry, old_map) {
 		if ((old_entry->eflags & MAP_ENTRY_IS_SUB_MAP) != 0)
@@ -4661,13 +4661,13 @@ vm_map_growstack(vm_map_t map, vm_offset_t addr, vm_map_entry_t gap_entry)
 	vm_offset_t gap_end, gap_start, grow_start;
 	vm_size_t grow_amount, guard, max_grow;
 	rlim_t lmemlim, stacklim, vmemlim;
-	int rv, rv1;
+	int rv, rv1 __diagused;
 	bool gap_deleted, grow_down, is_procstack;
 #ifdef notyet
 	uint64_t limit;
 #endif
 #ifdef RACCT
-	int error;
+	int error __diagused;
 #endif
 
 	p = curproc;

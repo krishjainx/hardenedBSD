@@ -358,7 +358,7 @@ struct thread {
 	} td_state;			/* (t) thread state */
 	/* Note: td_state must be accessed using TD_{GET,SET}_STATE(). */
 	union {
-		register_t	tdu_retval[2];
+		syscallarg_t	tdu_retval[2];
 		off_t		tdu_off;
 	} td_uretoff;			/* (k) Syscall aux returns. */
 #define td_retval	td_uretoff.tdu_retval
@@ -1013,9 +1013,18 @@ extern pid_t pid_max;
 } while (0)
 
 #define	PROC_UPDATE_COW(p) do {						\
-	PROC_LOCK_ASSERT((p), MA_OWNED);				\
-	(p)->p_cowgen++;						\
+	struct proc *_p = (p);						\
+	PROC_LOCK_ASSERT((_p), MA_OWNED);				\
+	atomic_store_int(&_p->p_cowgen, _p->p_cowgen + 1);		\
 } while (0)
+
+#define	PROC_COW_CHANGECOUNT(td, p) ({					\
+	struct thread *_td = (td);					\
+	struct proc *_p = (p);						\
+	MPASS(_td == curthread);					\
+	PROC_LOCK_ASSERT(_p, MA_OWNED);					\
+	_p->p_cowgen - _td->td_cowgen;					\
+})
 
 /* Check whether a thread is safe to be swapped out. */
 #define	thread_safetoswapout(td)	((td)->td_flags & TDF_CANSWAP)
@@ -1208,6 +1217,7 @@ void	thread_cow_get_proc(struct thread *newtd, struct proc *p);
 void	thread_cow_get(struct thread *newtd, struct thread *td);
 void	thread_cow_free(struct thread *td);
 void	thread_cow_update(struct thread *td);
+void	thread_cow_synced(struct thread *td);
 int	thread_create(struct thread *td, struct rtprio *rtp,
 	    int (*initialize_thread)(struct thread *, void *), void *thunk);
 void	thread_exit(void) __dead2;
@@ -1230,6 +1240,8 @@ void	thread_unlink(struct thread *td);
 void	thread_unsuspend(struct proc *p);
 void	thread_wait(struct proc *p);
 
+void	stop_all_proc_block(void);
+void	stop_all_proc_unblock(void);
 void	stop_all_proc(void);
 void	resume_all_proc(void);
 

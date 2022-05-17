@@ -414,7 +414,7 @@ finalconfig() {
 	esac
 }
 
-# Allow user to change his mind
+# Allow the user to make last-minute changes
 finalconfig
 
 trap error SIGINT	# SIGINT is bad again

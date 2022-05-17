@@ -86,7 +86,8 @@ struct dp83822_softc {
 };
 
 static const struct mii_phydesc dpphys[] = {
-	MII_PHY_DESC(xxTI, DP83822)
+	MII_PHY_DESC(xxTI, DP83822),
+	MII_PHY_END
 };
 
 static const struct mii_phy_funcs dpphy_funcs = {
@@ -208,12 +209,10 @@ static device_method_t dp_methods[] = {
 	DEVMETHOD_END
 };
 
-static devclass_t dp_devclass;
-
 static driver_t dp_driver = {
 	"dp83822phy",
 	dp_methods,
 	sizeof(struct dp83822_softc)
 };
 
-DRIVER_MODULE(dp83822phy, miibus, dp_driver, dp_devclass, 0, 0);
+DRIVER_MODULE(dp83822phy, miibus, dp_driver, 0, 0);

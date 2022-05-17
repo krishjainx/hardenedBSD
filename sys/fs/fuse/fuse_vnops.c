@@ -133,6 +133,7 @@ static vop_close_t fuse_fifo_close;
 static vop_close_t fuse_vnop_close;
 static vop_copy_file_range_t fuse_vnop_copy_file_range;
 static vop_create_t fuse_vnop_create;
+static vop_deallocate_t fuse_vnop_deallocate;
 static vop_deleteextattr_t fuse_vnop_deleteextattr;
 static vop_fdatasync_t fuse_vnop_fdatasync;
 static vop_fsync_t fuse_vnop_fsync;
@@ -189,6 +190,7 @@ struct vop_vector fuse_vnops = {
 	.vop_close = fuse_vnop_close,
 	.vop_copy_file_range = fuse_vnop_copy_file_range,
 	.vop_create = fuse_vnop_create,
+	.vop_deallocate = fuse_vnop_deallocate,
 	.vop_deleteextattr = fuse_vnop_deleteextattr,
 	.vop_fsync = fuse_vnop_fsync,
 	.vop_fdatasync = fuse_vnop_fdatasync,
@@ -621,11 +623,8 @@ fuse_vnop_allocate(struct vop_allocate_args *ap)
 	} else if (err == EOPNOTSUPP) {
 		/*
 		 * The file system server does not support FUSE_FALLOCATE with
-		 * the supplied mode.  That's effectively the same thing as
-		 * ENOSYS since we only ever issue mode=0.
-		 * TODO: revise this section once we support fspacectl.
+		 * the supplied mode for this particular file.
 		 */
-		fsess_set_notimpl(mp, FUSE_FALLOCATE);
 		err = EINVAL;
 	} else if (!err) {
 		*offset += *len;
@@ -1043,7 +1042,11 @@ fuse_vnop_create(struct vop_create_args *ap)
 	}
 
 	if (op == FUSE_CREATE) {
-		foo = (struct fuse_open_out*)(feo + 1);
+		if (fuse_libabi_geq(data, 7, 9))
+			foo = (struct fuse_open_out*)(feo + 1);
+		else
+			foo = (struct fuse_open_out*)((char*)feo +
+				FUSE_COMPAT_ENTRY_OUT_SIZE);
 	} else {
 		/* Issue a separate FUSE_OPEN */
 		struct fuse_open_in *foi;
@@ -1324,6 +1327,16 @@ fuse_vnop_link(struct vop_link_args *ap)
 	}
 	feo = fdi.answ;
 
+	if (fli.oldnodeid != feo->nodeid) {
+		struct fuse_data *data = fuse_get_mpdata(vnode_mount(vp));
+		fuse_warn(data, FSESS_WARN_ILLEGAL_INODE,
+			"Assigned wrong inode for a hard link.");
+		fuse_vnode_clear_attr_cache(vp);
+		fuse_vnode_clear_attr_cache(tdvp);
+		err = EIO;
+		goto out;
+	}
+
 	err = fuse_internal_checkentry(feo, vnode_vtype(vp));
 	if (!err) {
 		/* 
@@ -1383,6 +1396,7 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 	struct mount *mp = vnode_mount(dvp);
 	struct fuse_data *data = fuse_get_mpdata(mp);
 	int default_permissions = data->dataflags & FSESS_DEFAULT_PERMISSIONS;
+	bool is_dot;
 
 	int err = 0;
 	int lookup_err = 0;
@@ -1392,7 +1406,6 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 	bool did_lookup = false;
 	struct fuse_entry_out *feo = NULL;
 	enum vtype vtyp;	/* vnode type of target */
-	off_t filesize;		/* filesize of target */
 
 	uint64_t nid;
 
@@ -1411,6 +1424,7 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 	else if ((err = fuse_internal_access(dvp, VEXEC, td, cred)))
 		return err;
 
+	is_dot = cnp->cn_namelen == 1 && *(cnp->cn_nameptr) == '.';
 	if ((flags & ISDOTDOT) && !(data->dataflags & FSESS_EXPORT_SUPPORT))
 	{
 		if (!(VTOFUD(dvp)->flag & FN_PARENT_NID)) {
@@ -1425,15 +1439,13 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 			return ENOENT;
 		/* .. is obviously a directory */
 		vtyp = VDIR;
-		filesize = 0;
-	} else if (cnp->cn_namelen == 1 && *(cnp->cn_nameptr) == '.') {
+	} else if (is_dot) {
 		nid = VTOI(dvp);
 		/* . is obviously a directory */
 		vtyp = VDIR;
-		filesize = 0;
 	} else {
 		struct timespec timeout;
-		int ncpticks; /* here to accomodate for API contract */
+		int ncpticks; /* here to accommodate for API contract */
 
 		err = cache_lookup(dvp, vpp, cnp, &timeout, &ncpticks);
 		getnanouptime(&now);
@@ -1504,7 +1516,6 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 				}
 			}
 			vtyp = IFTOVT(feo->attr.mode);
-			filesize = feo->attr.size;
 		}
 		if (lookup_err && (!fdi.answ_stat || lookup_err != ENOENT)) {
 			fdisp_destroy(&fdi);
@@ -1547,8 +1558,17 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 				&vp);
 			*vpp = vp;
 		} else if (nid == VTOI(dvp)) {
-			vref(dvp);
-			*vpp = dvp;
+			if (is_dot) {
+				vref(dvp);
+				*vpp = dvp;
+			} else {
+				fuse_warn(fuse_get_mpdata(mp),
+				    FSESS_WARN_ILLEGAL_INODE,
+				    "Assigned same inode to both parent and "
+				    "child.");
+				err = EIO;
+			}
+
 		} else {
 			struct fuse_vnode_data *fvdat;
 
@@ -1689,7 +1709,6 @@ fuse_vnop_open(struct vop_open_args *ap)
 	struct thread *td = ap->a_td;
 	struct ucred *cred = ap->a_cred;
 	pid_t pid = td->td_proc->p_pid;
-	struct fuse_vnode_data *fvdat;
 
 	if (fuse_isdeadfs(vp))
 		return ENXIO;
@@ -1697,8 +1716,6 @@ fuse_vnop_open(struct vop_open_args *ap)
 		return (EOPNOTSUPP);
 	if ((a_mode & (FREAD | FWRITE | FEXEC)) == 0)
 		return EINVAL;
-
-	fvdat = VTOFUD(vp);
 
 	if (fuse_filehandle_validrw(vp, a_mode, cred, pid)) {
 		fuse_vnode_open(vp, 0, td);
@@ -1854,10 +1871,10 @@ fuse_vnop_readdir(struct vop_readdir_args *ap)
 	struct uio *uio = ap->a_uio;
 	struct ucred *cred = ap->a_cred;
 	struct fuse_filehandle *fufh = NULL;
+	struct mount *mp = vnode_mount(vp);
 	struct fuse_iov cookediov;
 	int err = 0;
 	uint64_t *cookies;
-	off_t startoff;
 	ssize_t tresid;
 	int ncookies;
 	bool closefufh = false;
@@ -1874,24 +1891,17 @@ fuse_vnop_readdir(struct vop_readdir_args *ap)
 	}
 
 	tresid = uio->uio_resid;
-	startoff = uio->uio_offset;
 	err = fuse_filehandle_get_dir(vp, &fufh, cred, pid);
-	if (err == EBADF && vnode_mount(vp)->mnt_flag & MNT_EXPORTED) {
+	if (err == EBADF && mp->mnt_flag & MNT_EXPORTED) {
+		KASSERT(fuse_get_mpdata(mp)->dataflags
+				& FSESS_NO_OPENDIR_SUPPORT,
+			("FUSE file systems that don't set "
+			 "FUSE_NO_OPENDIR_SUPPORT should not be exported"));
 		/* 
 		 * nfsd will do VOP_READDIR without first doing VOP_OPEN.  We
-		 * must implicitly open the directory here
+		 * must implicitly open the directory here.
 		 */
 		err = fuse_filehandle_open(vp, FREAD, &fufh, curthread, cred);
-		if (err == 0) {
-			/*
-			 * When a directory is opened, it must be read from
-			 * the beginning.  Hopefully, the "startoff" still
-			 * exists as an offset cookie for the directory.
-			 * If not, it will read the entire directory without
-			 * returning any entries and just return eof.
-			 */
-			uio->uio_offset = 0;
-		}
 		closefufh = true;
 	}
 	if (err)
@@ -1909,7 +1919,7 @@ fuse_vnop_readdir(struct vop_readdir_args *ap)
 #define DIRCOOKEDSIZE FUSE_DIRENT_ALIGN(FUSE_NAME_OFFSET + MAXNAMLEN + 1)
 	fiov_init(&cookediov, DIRCOOKEDSIZE);
 
-	err = fuse_internal_readdir(vp, uio, startoff, fufh, &cookediov,
+	err = fuse_internal_readdir(vp, uio, fufh, &cookediov,
 		&ncookies, cookies);
 
 	fiov_teardown(&cookediov);
@@ -1995,7 +2005,24 @@ fuse_vnop_reclaim(struct vop_reclaim_args *ap)
 		fuse_filehandle_close(vp, fufh, td, NULL);
 	}
 
-	if (!fuse_isdeadfs(vp) && fvdat->nlookup > 0) {
+	if (VTOI(vp) == 1) {
+		/*
+		 * Don't send FUSE_FORGET for the root inode, because
+		 * we never send FUSE_LOOKUP for it (see
+		 * fuse_vfsop_root) and we don't want the server to see
+		 * mismatched lookup counts.
+		 */
+		struct fuse_data *data;
+		struct vnode *vroot;
+
+		data = fuse_get_mpdata(vnode_mount(vp));
+		FUSE_LOCK();
+		vroot = data->vroot;
+		data->vroot = NULL;
+		FUSE_UNLOCK();
+		if (vroot)
+			vrele(vroot);
+	} else if (!fuse_isdeadfs(vp) && fvdat->nlookup > 0) {
 		fuse_internal_forget_send(vnode_mount(vp), td, NULL, VTOI(vp),
 		    fvdat->nlookup);
 	}
@@ -2099,7 +2126,7 @@ fuse_vnop_rename(struct vop_rename_args *ap)
 		cache_purge(tvp);
 	}
 	if (vnode_isdir(fvp)) {
-		if ((tvp != NULL) && vnode_isdir(tvp)) {
+		if (((tvp != NULL) && vnode_isdir(tvp)) || vnode_isdir(fvp)) {
 			cache_purge(tdvp);
 		}
 		cache_purge(fdvp);
@@ -2901,6 +2928,114 @@ out:
 }
 
 /*
+    struct vop_deallocate_args {
+	struct vop_generic_args a_gen;
+	struct vnode *a_vp;
+	off_t *a_offset;
+	off_t *a_len;
+	int a_flags;
+	int a_ioflag;
+        struct ucred *a_cred;
+    };
+*/
+static int
+fuse_vnop_deallocate(struct vop_deallocate_args *ap)
+{
+	struct vnode *vp = ap->a_vp;
+	struct mount *mp = vnode_mount(vp);
+	struct fuse_filehandle *fufh;
+	struct fuse_dispatcher fdi;
+	struct fuse_fallocate_in *ffi;
+	struct ucred *cred = ap->a_cred;
+	pid_t pid = curthread->td_proc->p_pid;
+	off_t *len = ap->a_len;
+	off_t *offset = ap->a_offset;
+	int ioflag = ap->a_ioflag;
+	off_t filesize;
+	int err;
+	bool closefufh = false;
+
+	if (fuse_isdeadfs(vp))
+		return (ENXIO);
+
+	if (vfs_isrdonly(mp))
+		return (EROFS);
+
+	if (fsess_not_impl(mp, FUSE_FALLOCATE))
+		goto fallback;
+
+	err = fuse_filehandle_getrw(vp, FWRITE, &fufh, cred, pid);
+	if (err == EBADF && vnode_mount(vp)->mnt_flag & MNT_EXPORTED) {
+		/*
+		 * nfsd will do I/O without first doing VOP_OPEN.  We
+		 * must implicitly open the file here
+		 */
+		err = fuse_filehandle_open(vp, FWRITE, &fufh, curthread, cred);
+		closefufh = true;
+	}
+	if (err)
+		return (err);
+
+	fuse_vnode_update(vp, FN_MTIMECHANGE | FN_CTIMECHANGE);
+
+	err = fuse_vnode_size(vp, &filesize, cred, curthread);
+	if (err)
+		goto out;
+	fuse_inval_buf_range(vp, filesize, *offset, *offset + *len);
+
+	fdisp_init(&fdi, sizeof(*ffi));
+	fdisp_make_vp(&fdi, FUSE_FALLOCATE, vp, curthread, cred);
+	ffi = fdi.indata;
+	ffi->fh = fufh->fh_id;
+	ffi->offset = *offset;
+	ffi->length = *len;
+	/*
+	 * FreeBSD's fspacectl is equivalent to Linux's fallocate with
+	 * mode == FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE
+	 */
+	ffi->mode = FUSE_FALLOC_FL_PUNCH_HOLE | FUSE_FALLOC_FL_KEEP_SIZE;
+	err = fdisp_wait_answ(&fdi);
+
+	if (err == ENOSYS) {
+		fsess_set_notimpl(mp, FUSE_FALLOCATE);
+		goto fallback;
+	} else if (err == EOPNOTSUPP) {
+		/*
+		 * The file system server does not support FUSE_FALLOCATE with
+		 * the supplied mode for this particular file.
+		 */
+		goto fallback;
+	} else if (!err) {
+		/*
+		 * Clip the returned offset to EoF.  Do it here rather than
+		 * before FUSE_FALLOCATE just in case the kernel's cached file
+		 * size is out of date.  Unfortunately, FUSE does not return
+		 * any information about filesize from that operation.
+		 */
+		*offset = MIN(*offset + *len, filesize);
+		*len = 0;
+		fuse_vnode_undirty_cached_timestamps(vp, false);
+		fuse_internal_clear_suid_on_write(vp, cred, curthread);
+
+		if (ioflag & IO_SYNC)
+			err = fuse_internal_fsync(vp, curthread, MNT_WAIT,
+			    false);
+	}
+
+out:
+	if (closefufh)
+		fuse_filehandle_close(vp, fufh, curthread, cred);
+
+	return (err);
+
+fallback:
+	if (closefufh)
+		fuse_filehandle_close(vp, fufh, curthread, cred);
+
+	return (vop_stddeallocate(ap));
+}
+
+/*
     struct vop_deleteextattr_args {
 	struct vop_generic_args a_gen;
 	struct vnode *a_vp;
@@ -3006,8 +3141,30 @@ fuse_vnop_vptofh(struct vop_vptofh_args *ap)
 	struct vattr va;
 	int err;
 
-	if (!(data->dataflags & FSESS_EXPORT_SUPPORT))
+	if (!(data->dataflags & FSESS_EXPORT_SUPPORT)) {
+		/* NFS requires lookups for "." and ".." */
+		SDT_PROBE2(fusefs, , vnops, trace, 1,
+			"VOP_VPTOFH without FUSE_EXPORT_SUPPORT");
 		return EOPNOTSUPP;
+	}
+	if ((mp->mnt_flag & MNT_EXPORTED) &&
+		!(data->dataflags & FSESS_NO_OPENDIR_SUPPORT))
+	{
+		/*
+		 * NFS is stateless, so nfsd must reopen a directory on every
+		 * call to VOP_READDIR, passing in the d_off field from the
+		 * final dirent of the previous invocation.  But without
+		 * FUSE_NO_OPENDIR_SUPPORT, the FUSE protocol does not
+		 * guarantee that d_off will be valid after a directory is
+		 * closed and reopened.  So prohibit exporting FUSE file
+		 * systems that don't set that flag.
+		 *
+		 * But userspace NFS servers don't have this problem.
+                 */
+		SDT_PROBE2(fusefs, , vnops, trace, 1,
+			"VOP_VPTOFH without FUSE_NO_OPENDIR_SUPPORT");
+		return EOPNOTSUPP;
+	}
 
 	err = fuse_internal_getattr(vp, &va, curthread->td_ucred, curthread);
 	if (err)

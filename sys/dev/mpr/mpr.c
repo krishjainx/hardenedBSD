@@ -2250,7 +2250,8 @@ mpr_periodic(void *arg)
 		mpr_reinit(sc);
 	}
 
-	callout_reset(&sc->periodic, MPR_PERIODIC_DELAY * hz, mpr_periodic, sc);
+	callout_reset_sbt(&sc->periodic, MPR_PERIODIC_DELAY * SBT_1S, 0,
+	    mpr_periodic, sc, C_PREL(1));
 }
 
 static void
@@ -3703,6 +3704,12 @@ mpr_data_cb(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 				mpr_dprint(sc, MPR_INFO, "Out of chain frames, "
 				    "consider increasing hw.mpr.max_chains.\n");
 			cm->cm_flags |= MPR_CM_FLAGS_CHAIN_FAILED;
+			/*
+			 * mpr_complete_command can only be called on commands
+			 * that are in the queue. Since this is an error path
+			 * which gets called before we enqueue, update the state
+			 * to meet this requirement before we complete it.
+			 */
 			cm->cm_state = MPR_CM_STATE_INQUEUE;
 			mpr_complete_command(sc, cm);
 			return;

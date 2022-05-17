@@ -53,7 +53,11 @@ __FBSDID("$FreeBSD$");
 #include "opt_verbose_sysinit.h"
 
 #include <sys/param.h>
-#include <sys/kernel.h>
+#include <sys/systm.h>
+#include <sys/boottrace.h>
+#include <sys/conf.h>
+#include <sys/cpuset.h>
+#include <sys/dtrace_bsd.h>
 #include <sys/epoch.h>
 #include <sys/eventhandler.h>
 #include <sys/exec.h>
@@ -61,31 +65,28 @@ __FBSDID("$FreeBSD$");
 #include <sys/filedesc.h>
 #include <sys/imgact.h>
 #include <sys/jail.h>
+#include <sys/kernel.h>
 #include <sys/ktr.h>
 #include <sys/lock.h>
 #include <sys/loginclass.h>
+#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/mutex.h>
-#include <sys/dtrace_bsd.h>
-#include <sys/syscallsubr.h>
-#include <sys/sysctl.h>
 #include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/racct.h>
-#include <sys/resourcevar.h>
-#include <sys/systm.h>
-#include <sys/signalvar.h>
-#include <sys/vnode.h>
-#include <sys/sysent.h>
 #include <sys/reboot.h>
+#include <sys/resourcevar.h>
 #include <sys/sched.h>
+#include <sys/signalvar.h>
 #include <sys/sx.h>
+#include <sys/syscallsubr.h>
+#include <sys/sysctl.h>
+#include <sys/sysent.h>
 #include <sys/sysproto.h>
-#include <sys/vmmeter.h>
 #include <sys/unistd.h>
-#include <sys/malloc.h>
-#include <sys/conf.h>
-#include <sys/cpuset.h>
+#include <sys/vmmeter.h>
+#include <sys/vnode.h>
 
 #include <machine/cpu.h>
 
@@ -236,8 +237,8 @@ mi_startup(void)
 	struct sysinit **xipp;	/* interior loop of sort*/
 	struct sysinit *save;	/* bubble*/
 
-#if defined(VERBOSE_SYSINIT)
 	int last;
+#if defined(VERBOSE_SYSINIT)
 	int verbose;
 #endif
 
@@ -268,8 +269,8 @@ restart:
 		}
 	}
 
-#if defined(VERBOSE_SYSINIT)
 	last = SI_SUB_COPYRIGHT;
+#if defined(VERBOSE_SYSINIT)
 	verbose = 0;
 #if !defined(DDB)
 	printf("VERBOSE_SYSINIT: DDB not enabled, symbol lookups disabled.\n");
@@ -287,10 +288,12 @@ restart:
 		if ((*sipp)->subsystem == SI_SUB_DONE)
 			continue;
 
+		if ((*sipp)->subsystem > last)
+			BOOTTRACE_INIT("sysinit 0x%7x", (*sipp)->subsystem);
+
 #if defined(VERBOSE_SYSINIT)
 		if ((*sipp)->subsystem > last && verbose_sysinit != 0) {
 			verbose = 1;
-			last = (*sipp)->subsystem;
 			printf("subsystem %x\n", last);
 		}
 		if (verbose) {
@@ -321,6 +324,7 @@ restart:
 #endif
 
 		/* Check off the one we're just done */
+		last = (*sipp)->subsystem;
 		(*sipp)->subsystem = SI_SUB_DONE;
 
 		/* Check if we've installed more sysinit items via KLD */
@@ -336,6 +340,7 @@ restart:
 	}
 
 	TSEXIT();	/* Here so we don't overlap with start_init. */
+	BOOTTRACE("mi_startup done");
 
 	mtx_assert(&Giant, MA_OWNED | MA_NOTRECURSED);
 	mtx_unlock(&Giant);
@@ -426,6 +431,7 @@ struct sysentvec null_sysvec = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS,
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
+	.sv_psstringssz	= sizeof(struct ps_strings),
 	.sv_stackprot	= VM_PROT_ALL,
 	.sv_copyout_strings	= NULL,
 	.sv_setregs	= NULL,
@@ -440,6 +446,8 @@ struct sysentvec null_sysvec = {
 	.sv_trap	= NULL,
 	.sv_pax_aslr_init = NULL,
 	.sv_set_fork_retval = null_set_fork_retval,
+	.sv_regset_begin = NULL,
+	.sv_regset_end  = NULL,
 };
 
 /*
@@ -576,7 +584,7 @@ proc0_init(void *dummy __unused)
 
 	/* Create the file descriptor table. */
 	p->p_pd = pdinit(NULL, false);
-	p->p_fd = fdinit(NULL, false, NULL);
+	p->p_fd = fdinit();
 	p->p_fdtol = NULL;
 
 	/* Create the limits structures. */

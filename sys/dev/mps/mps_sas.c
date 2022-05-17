@@ -86,9 +86,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/mps/mps_table.h>
 #include <dev/mps/mps_sas.h>
 
-#define MPSSAS_DISCOVERY_TIMEOUT	20
-#define MPSSAS_MAX_DISCOVERY_TIMEOUTS	10 /* 200 seconds */
-
 /*
  * static array to check SCSI OpCode for EEDP protection bits
  */
@@ -591,7 +588,9 @@ mpssas_remove_device(struct mps_softc *sc, struct mps_command *tm)
 	 * if so.
 	 */
 	if (TAILQ_FIRST(&targ->commands) == NULL) {
-		mps_dprint(sc, MPS_INFO, "No pending commands: starting remove_device\n");
+		mps_dprint(sc, MPS_INFO,
+		    "No pending commands: starting remove_device target %u handle 0x%04x\n",
+		    targ->tid, handle);
 		mps_map_command(sc, tm);
 		targ->pending_remove_tm = NULL;
 	} else {
@@ -773,8 +772,6 @@ mps_attach_sas(struct mps_softc *sc)
 	sc->sassc->startup_refcount = 0;
 	mpssas_startup_increment(sassc);
 
-	callout_init(&sassc->discovery_callout, 1 /*mpsafe*/);
-
 	mps_unlock(sc);
 
 	/*
@@ -888,9 +885,6 @@ mpssas_discovery_end(struct mpssas_softc *sassc)
 	struct mps_softc *sc = sassc->sc;
 
 	MPS_FUNCTRACE(sc);
-
-	if (sassc->flags & MPSSAS_DISCOVERY_TIMEOUT_PENDING)
-		callout_stop(&sassc->discovery_callout);
 
 	/*
 	 * After discovery has completed, check the mapping table for any
@@ -1645,6 +1639,15 @@ mpssas_action_scsiio(struct mpssas_softc *sassc, union ccb *ccb)
 	targ = &sassc->targets[csio->ccb_h.target_id];
 	mps_dprint(sc, MPS_TRACE, "ccb %p target flag %x\n", ccb, targ->flags);
 	if (targ->handle == 0x0) {
+		if (targ->flags & MPSSAS_TARGET_INDIAGRESET) {
+			mps_dprint(sc, MPS_ERROR,
+			    "%s NULL handle for target %u in diag reset freezing queue\n",
+			    __func__, csio->ccb_h.target_id);
+			ccb->ccb_h.status = CAM_REQUEUE_REQ | CAM_DEV_QFRZN;
+			xpt_freeze_devq(ccb->ccb_h.path, 1);
+			xpt_done(ccb);
+			return;
+		}
 		mps_dprint(sc, MPS_ERROR, "%s NULL handle for target %u\n", 
 		    __func__, csio->ccb_h.target_id);
 		mpssas_set_ccbstatus(ccb, CAM_DEV_NOT_THERE);
@@ -2382,7 +2385,9 @@ mpssas_scsiio_complete(struct mps_softc *sc, struct mps_command *cm)
 	if (cm->cm_targ->flags & MPSSAS_TARGET_INREMOVAL) {
 		if (TAILQ_FIRST(&cm->cm_targ->commands) == NULL &&
 		    cm->cm_targ->pending_remove_tm != NULL) {
-			mps_dprint(sc, MPS_INFO, "Last pending command complete: starting remove_device\n");
+			mps_dprint(sc, MPS_INFO,
+			    "Last pending command complete: starting remove_device target %u handle 0x%04x\n",
+			    cm->cm_targ->tid, cm->cm_targ->handle);
 			mps_map_command(sc, cm->cm_targ->pending_remove_tm);
 			cm->cm_targ->pending_remove_tm = NULL;
 		}

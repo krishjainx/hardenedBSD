@@ -101,12 +101,12 @@ extern const char *pdb_file, *usrdb_file;
 /* some #defines to help with db's stupidity */
 
 #define	DB_CLOSE(db) \
-	((*(db)->close)(db))
+	(cfi_libc_db_dbclose((db)))
 #define	DB_GET(db, key, data, flags) \
-	((*(db)->get)((db), (key), (data), (flags)))
+	(cfi_libc_db_dbget((db), (key), (data), (flags)))
 #define	DB_PUT(db, key, data, flags) \
-	((*(db)->put)((db), (key), (data), (flags)))
+	(cfi_libc_db_dbput((db), (key), (data), (flags)))
 #define	DB_SYNC(db, flags) \
-	((*(db)->sync)((db), (flags)))
+	(cfi_libc_db_dbsync((db), (flags)))
 #define	DB_SEQ(db, key, data, flags) \
-	((*(db)->seq)((db), (key), (data), (flags)))
+	(cfi_libc_db_dbseq((db), (key), (data), (flags)))

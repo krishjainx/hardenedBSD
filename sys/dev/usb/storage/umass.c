@@ -689,8 +689,6 @@ static const uint8_t fake_inq_data[SHORT_INQUIRY_LENGTH] = {
 #define	UFI_COMMAND_LENGTH	12	/* UFI commands are always 12 bytes */
 #define	ATAPI_COMMAND_LENGTH	12	/* ATAPI commands are always 12 bytes */
 
-static devclass_t umass_devclass;
-
 static device_method_t umass_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe, umass_probe),
@@ -711,7 +709,7 @@ static const STRUCT_USB_HOST_ID __used umass_devs[] = {
 	{USB_IFACE_CLASS(UICLASS_MASS),},
 };
 
-DRIVER_MODULE(umass, uhub, umass_driver, umass_devclass, NULL, 0);
+DRIVER_MODULE(umass, uhub, umass_driver, NULL, NULL);
 MODULE_DEPEND(umass, usb, 1, 1, 1);
 MODULE_DEPEND(umass, cam, 1, 1, 1);
 MODULE_VERSION(umass, 1);
@@ -2289,6 +2287,13 @@ umass_cam_action(struct cam_sim *sim, union ccb *ccb)
 					}
 				} else if (sc->sc_transfer.cmd_data[0] == SYNCHRONIZE_CACHE) {
 					if (sc->sc_quirks & NO_SYNCHRONIZE_CACHE) {
+						ccb->csio.scsi_status = SCSI_STATUS_OK;
+						ccb->ccb_h.status = CAM_REQ_CMP;
+						xpt_done(ccb);
+						goto done;
+					}
+				} else if (sc->sc_transfer.cmd_data[0] == START_STOP_UNIT) {
+					if (sc->sc_quirks & NO_START_STOP) {
 						ccb->csio.scsi_status = SCSI_STATUS_OK;
 						ccb->ccb_h.status = CAM_REQ_CMP;
 						xpt_done(ccb);

@@ -142,7 +142,6 @@ static void
 ti_adc_disable(struct ti_adc_softc *sc)
 {
 	int count;
-	uint32_t data;
 
 	TI_ADC_LOCK_ASSERT(sc);
 
@@ -165,13 +164,13 @@ ti_adc_disable(struct ti_adc_softc *sc)
 	/* Drain the FIFO data. */
 	count = ADC_READ4(sc, ADC_FIFO0COUNT) & ADC_FIFO_COUNT_MSK;
 	while (count > 0) {
-		data = ADC_READ4(sc, ADC_FIFO0DATA);
+		(void)ADC_READ4(sc, ADC_FIFO0DATA);
 		count = ADC_READ4(sc, ADC_FIFO0COUNT) & ADC_FIFO_COUNT_MSK;
 	}
 
 	count = ADC_READ4(sc, ADC_FIFO1COUNT) & ADC_FIFO_COUNT_MSK;
 	while (count > 0) {
-		data = ADC_READ4(sc, ADC_FIFO1DATA);
+		(void)ADC_READ4(sc, ADC_FIFO1DATA);
 		count = ADC_READ4(sc, ADC_FIFO1COUNT) & ADC_FIFO_COUNT_MSK;
 	}
 
@@ -958,9 +957,7 @@ static driver_t ti_adc_driver = {
 	sizeof(struct ti_adc_softc),
 };
 
-static devclass_t ti_adc_devclass;
-
-DRIVER_MODULE(ti_adc, simplebus, ti_adc_driver, ti_adc_devclass, 0, 0);
+DRIVER_MODULE(ti_adc, simplebus, ti_adc_driver, 0, 0);
 MODULE_VERSION(ti_adc, 1);
 MODULE_DEPEND(ti_adc, simplebus, 1, 1, 1);
 MODULE_DEPEND(ti_adc, ti_sysc, 1, 1, 1);

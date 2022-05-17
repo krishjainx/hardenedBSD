@@ -81,6 +81,90 @@ dbopen(const char *fname, int flags, int mode, DBTYPE type, const void *openinfo
 	return (NULL);
 }
 
+int
+cfi_libc_db_dbclose(DB *dbp)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->close(dbp));
+}
+
+int
+cfi_libc_db_dbdel(const DB *dbp, const DBT *key, unsigned int flags)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->del(dbp, key, flags));
+}
+
+int
+cfi_libc_db_dbget(const DB *dbp, const DBT *key, DBT *data, unsigned int flags)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->get(dbp, key, data, flags));
+}
+
+int
+cfi_libc_db_dbput(const DB *dbp, DBT *key, const DBT *data, unsigned int flags)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->put(dbp, key, data, flags));
+}
+
+int
+cfi_libc_db_dbseq(const DB *dbp, DBT *key, DBT *data, unsigned int flags)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->seq(dbp, key, data, flags));
+}
+
+int
+cfi_libc_db_dbsync(const DB *dbp, unsigned int flags)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->sync(dbp, flags));
+}
+
+int
+cfi_libc_db_dbfd(const DB *dbp)
+{
+
+	if (dbp == NULL) {
+		errno = EINVAL;
+		return (RET_ERROR);
+	}
+
+	return (dbp->fd(dbp));
+}
+
 static int
 __dberr(void)
 {

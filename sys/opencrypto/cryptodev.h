@@ -70,6 +70,8 @@
 #ifdef _KERNEL
 #include <opencrypto/_cryptodev.h>
 #include <sys/_task.h>
+#include <sys/libkern.h>
+#include <sys/time.h>
 #endif
 
 /* Some initial values */
@@ -129,6 +131,7 @@
 #define	AES_XTS_IV_LEN		8
 #define	AES_XTS_ALPHA		0x87	/* GF(2^128) generator polynomial */
 #define	CHACHA20_POLY1305_IV_LEN	12
+#define	XCHACHA20_POLY1305_IV_LEN	24
 
 /* Min and Max Encryption Key Sizes */
 #define	NULL_MIN_KEY		0
@@ -142,6 +145,7 @@
 #define	CAMELLIA_MIN_KEY	16
 #define	CAMELLIA_MAX_KEY	32
 #define	CHACHA20_POLY1305_KEY	32
+#define	XCHACHA20_POLY1305_KEY	32
 
 /* Maximum hash algorithm result length */
 #define	AALG_MAX_RESULT_LEN	64 /* Keep this updated */
@@ -191,7 +195,8 @@
 #define	CRYPTO_AES_CCM_CBC_MAC	39	/* auth side */
 #define	CRYPTO_AES_CCM_16	40	/* cipher side */
 #define	CRYPTO_CHACHA20_POLY1305 41	/* combined AEAD cipher per RFC 8439 */
-#define	CRYPTO_ALGORITHM_MAX	41	/* Keep updated - see below */
+#define	CRYPTO_XCHACHA20_POLY1305 42
+#define	CRYPTO_ALGORITHM_MAX	42	/* Keep updated - see below */
 
 #define	CRYPTO_ALGO_VALID(x)	((x) >= CRYPTO_ALGORITHM_MIN && \
 				 (x) <= CRYPTO_ALGORITHM_MAX)
@@ -600,7 +605,9 @@ const struct crypto_session_params *crypto_get_params(
 const struct auth_hash *crypto_auth_hash(const struct crypto_session_params *csp);
 const struct enc_xform *crypto_cipher(const struct crypto_session_params *csp);
 
+#ifdef MALLOC_DECLARE
 MALLOC_DECLARE(M_CRYPTO_DATA);
+#endif
 
 int	crypto_newsession(crypto_session_t *cses,
     const struct crypto_session_params *params, int crid);
@@ -677,6 +684,13 @@ void	crypto_cursor_copydata(struct crypto_buffer_cursor *cc, int size,
 	    void *vdst);
 void	crypto_cursor_copydata_noadv(struct crypto_buffer_cursor *cc, int size,
 	    void *vdst);
+
+static __inline void
+crypto_cursor_copy(const struct crypto_buffer_cursor *fromc,
+    struct crypto_buffer_cursor *toc)
+{
+	memcpy(toc, fromc, sizeof(*toc));
+}
 
 static __inline void
 crypto_read_iv(struct cryptop *crp, void *iv)

@@ -96,6 +96,10 @@ LINUXKPI_GENSRCS+= \
 	backlight_if.h \
 	bus_if.h \
 	device_if.h \
+	iicbus_if.h \
+	iicbb_if.h \
+	lkpi_iic_if.c \
+	lkpi_iic_if.h \
 	pci_if.h \
 	pci_iov_if.h \
 	pcib_if.h \
@@ -141,7 +145,11 @@ CFLAGS.gcc+= --param large-function-growth=1000
 # share/mk/src.sys.mk, but the following is important for out-of-tree modules
 # (e.g. ports).
 CFLAGS+=	-fno-common
-LDFLAGS+=	-d -warn-common
+.if ${LINKER_TYPE} != "lld" || ${LINKER_VERSION} < 140000
+# lld >= 14 warns that -d is deprecated, and will be removed.
+LDFLAGS+=	-d
+.endif
+LDFLAGS+=	-warn-common
 
 .if defined(LINKER_FEATURES) && ${LINKER_FEATURES:Mbuild-id}
 LDFLAGS+=	--build-id=sha1
@@ -238,8 +246,8 @@ EXPORT_SYMS?=	NO
 CLEANFILES+=	export_syms
 .endif
 
-.if exists(${SYSDIR}/conf/ldscript.kmod.${MACHINE_ARCH})
-LDSCRIPT_FLAGS?= -T ${SYSDIR}/conf/ldscript.kmod.${MACHINE_ARCH}
+.if exists(${SYSDIR}/conf/ldscript.kmod.${MACHINE})
+LDSCRIPT_FLAGS?= -T ${SYSDIR}/conf/ldscript.kmod.${MACHINE}
 .endif
 
 .if ${__KLD_SHARED} == yes
@@ -247,7 +255,7 @@ ${KMOD}.kld: ${OBJS} ${BLOB_OBJS}
 .else
 ${FULLPROG}: ${OBJS} ${BLOB_OBJS}
 .endif
-	${LD} -m ${LD_EMULATION} ${_LDFLAGS} ${LDSCRIPT_FLAGS} -r -d \
+	${LD} -m ${LD_EMULATION} ${_LDFLAGS} ${LDSCRIPT_FLAGS} -r \
 	    -o ${.TARGET} ${OBJS} ${BLOB_OBJS}
 .if ${MK_CTF} != "no"
 	${CTFMERGE} ${CTFFLAGS} -o ${.TARGET} ${OBJS} ${BLOB_OBJS}
@@ -333,10 +341,10 @@ KERN_DEBUGDIR?=	${DEBUGDIR}
 realinstall: _kmodinstall
 .ORDER: beforeinstall _kmodinstall
 _kmodinstall: .PHONY
-	${INSTALL} -T release -o ${KMODOWN} -g ${KMODGRP} -m ${KMODMODE} \
+	${INSTALL} -T release -o ${KMODOWN} -g ${KMODGRP} -m 500 \
 	    ${_INSTALLFLAGS} ${PROG} ${DESTDIR}${KMODDIR}/
 .if defined(DEBUG_FLAGS) && !defined(INSTALL_NODEBUG) && ${MK_KERNEL_SYMBOLS} != "no"
-	${INSTALL} -T dbg -o ${KMODOWN} -g ${KMODGRP} -m ${KMODMODE} \
+	${INSTALL} -T dbg -o ${KMODOWN} -g ${KMODGRP} -m 500 \
 	    ${_INSTALLFLAGS} ${PROG}.debug ${DESTDIR}${KERN_DEBUGDIR}${KMODDIR}/
 .endif
 
@@ -544,8 +552,7 @@ OPENZFS_CFLAGS=     \
 	-I${SYSDIR}/cddl/contrib/opensolaris/uts/common \
 	-include ${ZINCDIR}/os/freebsd/spl/sys/ccompile.h
 OPENZFS_CWARNFLAGS= \
-	-Wno-nested-externs \
-	-Wno-redundant-decls
+	-Wno-nested-externs
 
 .include <bsd.dep.mk>
 .include <bsd.clang-analyze.mk>

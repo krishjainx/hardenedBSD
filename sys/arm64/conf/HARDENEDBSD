@@ -14,6 +14,7 @@ options 	PAX_HARDENING
 options		PAX_NOEXEC
 options		PAX_SEGVGUARD
 nooptions	COMPAT_FREEBSD32
+nooptions	INCLUDE_CONFIG_FILE # reduce kernel infoleaks
 
 # Needed for ThunderX2 systems
 options 	NUMA

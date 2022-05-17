@@ -121,7 +121,6 @@ SYSCTL_INT(_kern, OID_AUTO, coredump_pack_vmmapinfo, CTLFLAG_RWTUN,
 
 static int sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS);
-static int sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_stackprot(SYSCTL_HANDLER_ARGS);
 static int do_execve(struct thread *td, struct image_args *args,
     struct mac *mac_p, struct vmspace *oldvmspace);
@@ -135,10 +134,6 @@ SYSCTL_PROC(_kern, KERN_PS_STRINGS, ps_strings, CTLTYPE_ULONG|CTLFLAG_RD|
 SYSCTL_PROC(_kern, KERN_USRSTACK, usrstack, CTLTYPE_ULONG|CTLFLAG_RD|
     CTLFLAG_CAPRD|CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_usrstack, "LU",
     "Top of process stack");
-
-SYSCTL_PROC(_kern, KERN_STACKTOP, stacktop, CTLTYPE_ULONG | CTLFLAG_RD |
-    CTLFLAG_CAPRD | CTLFLAG_MPSAFE, NULL, 0, sysctl_kern_stacktop, "LU",
-    "Top of process stack with stack gap.");
 
 SYSCTL_PROC(_kern, OID_AUTO, stackprot, CTLTYPE_INT|CTLFLAG_RD|CTLFLAG_MPSAFE,
     NULL, 0, sysctl_kern_stackprot, "I",
@@ -164,42 +159,22 @@ static int
 sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS)
 {
 	struct proc *p;
-	int error;
+	vm_offset_t ps_strings;
 
 	p = curproc;
 #ifdef SCTL_MASK32
 	if (req->flags & SCTL_MASK32) {
 		unsigned int val;
-		val = (unsigned int)p->p_psstrings;
-		error = SYSCTL_OUT(req, &val, sizeof(val));
-	} else
+		val = (unsigned int)PROC_PS_STRINGS(p);
+		return (SYSCTL_OUT(req, &val, sizeof(val)));
+	}
 #endif
-		error = SYSCTL_OUT(req, &p->p_psstrings,
-		   sizeof(p->p_psstrings));
-	return error;
+	ps_strings = PROC_PS_STRINGS(p);
+	return (SYSCTL_OUT(req, &ps_strings, sizeof(ps_strings)));
 }
 
 static int
 sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS)
-{
-	struct proc *p;
-	int error;
-
-	p = curproc;
-#ifdef SCTL_MASK32
-	if (req->flags & SCTL_MASK32) {
-		unsigned int val;
-		val = (unsigned int)p->p_usrstack;
-		error = SYSCTL_OUT(req, &val, sizeof(val));
-	} else
-#endif
-		error = SYSCTL_OUT(req, &p->p_usrstack,
-		    sizeof(p->p_usrstack));
-	return (error);
-}
-
-static int
-sysctl_kern_stacktop(SYSCTL_HANDLER_ARGS)
 {
 	struct proc *p;
 	int error;
@@ -380,6 +355,7 @@ kern_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 	    exec_args_get_begin_envv(args) - args->begin_argv);
 	AUDIT_ARG_ENVV(exec_args_get_begin_envv(args), args->envc,
 	    args->endp - exec_args_get_begin_envv(args));
+
 	return (do_execve(td, args, mac_p, oldvmspace));
 }
 
@@ -732,7 +708,7 @@ interpret:
 				vrele(newtextdvp);
 				newtextdvp = NULL;
 			}
-			NDFREE(&nd, NDF_ONLY_PNBUF);
+			NDFREE_PNBUF(&nd);
 			free(newbinname, M_PARGS);
 			newbinname = NULL;
 		}
@@ -774,6 +750,12 @@ interpret:
 	 */
 	error = (*p->p_sysent->sv_copyout_strings)(imgp, &stack_base);
 	if (error != 0) {
+		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
+		goto exec_fail_dealloc;
+	}
+
+	if (!(imgp->args->argc > 0)) {
+		error = EINVAL;
 		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
 		goto exec_fail_dealloc;
 	}
@@ -996,7 +978,7 @@ exec_fail_dealloc:
 		else
 			VOP_UNLOCK(imgp->vp);
 		if (args->fname != NULL)
-			NDFREE(&nd, NDF_ONLY_PNBUF);
+			NDFREE_PNBUF(&nd);
 		if (newtextdvp != NULL)
 			vrele(newtextdvp);
 		free(newbinname, M_PARGS);
@@ -1160,9 +1142,8 @@ exec_free_abi_mappings(struct proc *p)
 }
 
 /*
- * Destroy old address space, and allocate a new stack.
- *	The new stack is only sgrowsiz large because it is grown
- *	automatically on a page fault.
+ * Run down the current address space and install a new one.  Map the shared
+ * page.
  */
 int
 exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
@@ -1172,12 +1153,8 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	struct vmspace *vmspace = p->p_vmspace;
 	struct thread *td = curthread;
 	vm_object_t obj;
-	struct rlimit rlim_stack;
-	vm_offset_t sv_minuser, stack_addr;
+	vm_offset_t sv_minuser;
 	vm_map_t map;
-	u_long ssiz;
-	vm_prot_t stackprot;
-	vm_prot_t stackmaxprot;
 
 	imgp->vmspace_destroyed = true;
 	imgp->sysent = sv;
@@ -1203,13 +1180,8 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 		shmexit(vmspace);
 		pmap_remove_pages(vmspace_pmap(vmspace));
 		vm_map_remove(map, vm_map_min(map), vm_map_max(map));
-		/*
-		 * An exec terminates mlockall(MCL_FUTURE), ASLR state
-		 * must be re-evaluated.
-		 */
 		vm_map_lock(map);
-		vm_map_modflags(map, 0, MAP_WIREFUTURE | MAP_ASLR |
-		    MAP_ASLR_IGNSTART);
+		vm_map_modflags(map, 0, MAP_WIREFUTURE | MAP_ASLR_IGNSTART);
 		vm_map_unlock(map);
 	} else {
 		error = vmspace_exec(p, sv_minuser, sv->sv_maxuser);
@@ -1260,7 +1232,30 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 	}
 
-	/* Allocate a new stack */
+	return (sv->sv_onexec != NULL ? sv->sv_onexec(p, imgp) : 0);
+}
+
+/*
+ * Compute the stack size limit and map the main process stack.
+ */
+int
+exec_map_stack(struct image_params *imgp)
+{
+	struct rlimit rlim_stack;
+	struct sysentvec *sv;
+	struct proc *p;
+	vm_map_t map;
+	struct vmspace *vmspace;
+	vm_offset_t stack_addr;
+	u_long ssiz;
+	int error;
+	vm_prot_t stack_prot, stackmaxprot;
+
+	p = imgp->proc;
+	vmspace = p->p_vmspace;
+	map = &(vmspace->vm_map);
+	sv = p->p_sysent;
+
 	if (imgp->stack_sz != 0) {
 		ssiz = trunc_page(imgp->stack_sz);
 		PROC_LOCK(p);
@@ -1289,18 +1284,19 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	p->p_usrstack = stack_addr;
 	/* Calculate the stack's mapping address.  */
 	stack_addr -= ssiz;
-	stackprot = obj != NULL && imgp->stack_prot != 0 ? imgp->stack_prot : sv->sv_stackprot;
+	stack_prot = sv->sv_shared_page_obj != NULL && imgp->stack_prot != 0 ?
+	    imgp->stack_prot : sv->sv_stackprot;
 	stackmaxprot = VM_PROT_ALL;
 #ifdef PAX_NOEXEC
 	PROC_LOCK(p);
-	pax_noexec_nx(p, &stackprot, &stackmaxprot);
+	pax_noexec_nx(p, &stack_prot, &stackmaxprot);
 	PROC_UNLOCK(p);
 #endif
-	imgp->eff_stack_sz = lim_cur(curthread, RLIMIT_STACK);
-	if (ssiz < imgp->eff_stack_sz)
-		imgp->eff_stack_sz = ssiz;
+	imgp->stack_sz = lim_cur(curthread, RLIMIT_STACK);
+	if (ssiz < imgp->stack_sz)
+		imgp->stack_sz = ssiz;
 	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz,
-	    stackprot, stackmaxprot, MAP_STACK_GROWS_DOWN);
+	    stack_prot, stackmaxprot, MAP_STACK_GROWS_DOWN);
 	if (error != KERN_SUCCESS) {
 #ifdef PAX_ASLR
 		pax_log_aslr(p, PAX_LOG_DEFAULT,
@@ -1309,16 +1305,15 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 		return (vm_mmap_to_errno(error));
 	}
-	vmspace->vm_stkgap = 0;
 
 	/*
 	 * vm_ssize and vm_maxsaddr are somewhat antiquated concepts, but they
 	 * are still used to enforce the stack rlimit on the process stack.
 	 */
-	vmspace->vm_ssize = sgrowsiz >> PAGE_SHIFT;
 	vmspace->vm_maxsaddr = (char *)stack_addr;
+	vmspace->vm_ssize = sgrowsiz >> PAGE_SHIFT;
 
-	return (sv->sv_onexec != NULL ? sv->sv_onexec(p, imgp) : 0);
+	return (0);
 }
 
 /*
@@ -1652,21 +1647,6 @@ exec_args_get_begin_envv(struct image_args *args)
 	return (args->endp);
 }
 
-void
-exec_stackgap(struct image_params *imgp, uintptr_t *dp)
-{
-	struct proc *p = imgp->proc;
-
-	if (imgp->sysent->sv_stackgap == NULL ||
-	    (p->p_fctl0 & (NT_FREEBSD_FCTL_ASLR_DISABLE |
-	    NT_FREEBSD_FCTL_ASG_DISABLE)) != 0 ||
-	    (imgp->map_flags & MAP_ASLR) == 0) {
-		p->p_vmspace->vm_stkgap = 0;
-		return;
-	}
-	p->p_vmspace->vm_stkgap = imgp->sysent->sv_stackgap(imgp, dp);
-}
-
 /*
  * Copy strings out to the new process address space, constructing new arg
  * and env vector tables. Return a pointer to the base so that it can be used
@@ -1689,7 +1669,7 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	p = imgp->proc;
 	sysent = p->p_sysent;
 	szsigcode = 0;
-	arginfo = (struct ps_strings *)p->p_psstrings;
+	arginfo = (struct ps_strings *)PROC_PS_STRINGS(p);
 	p->p_sigcode_base = sysent->sv_sigcode_base;
 	imgp->ps_strings = arginfo;
 	destp =	(uintptr_t)arginfo;
@@ -1753,8 +1733,6 @@ exec_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	destp -= ARG_MAX - imgp->args->stringspace;
 	destp = rounddown2(destp, sizeof(void *));
 	ustringp = destp;
-
-	exec_stackgap(imgp, &destp);
 
 	if (imgp->auxargs) {
 		/*
