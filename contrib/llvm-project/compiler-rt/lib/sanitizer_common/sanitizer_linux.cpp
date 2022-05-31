@@ -2194,45 +2194,6 @@ void CheckASLR() {
            GetArgv()[0]);
     Die();
   }
-#elif SANITIZER_FREEBSD
-  int aslr_pie;
-  uptr len = sizeof(aslr_pie);
-#if SANITIZER_WORDSIZE == 64
-  if (UNLIKELY(internal_sysctlbyname("kern.elf64.aslr.pie_enable",
-      &aslr_pie, &len, NULL, 0) == -1)) {
-    // We're making things less 'dramatic' here since
-    // the OID is not necessarily guaranteed to be here
-    // just yet regarding FreeBSD release
-    return;
-  }
-<<<<<<< HEAD
-
-  if (aslr_pie > 0) {
-    Printf("This sanitizer is not compatible with enabled ASLR "
-           "and binaries compiled with PIE\n");
-    Die();
-  }
-#endif
-  // there might be 32 bits compat for 64 bits
-  if (UNLIKELY(internal_sysctlbyname("kern.elf32.aslr.pie_enable",
-      &aslr_pie, &len, NULL, 0) == -1)) {
-    return;
-  }
-
-  if (aslr_pie > 0) {
-    Printf("This sanitizer is not compatible with enabled ASLR "
-           "and binaries compiled with PIE\n");
-    Die();
-=======
-  if ((aslr_status & PROC_ASLR_ACTIVE) != 0) {
-    VReport(1, "This sanitizer is not compatible with enabled ASLR "
-               "and binaries compiled with PIE\n"
-               "ASLR will be disabled and the program re-executed.\n");
-    int aslr_ctl = PROC_ASLR_FORCE_DISABLE;
-    CHECK_NE(procctl(P_PID, 0, PROC_ASLR_CTL, &aslr_ctl), -1);
-    ReExec();
->>>>>>> origin/freebsd/13-stable/main
-  }
 #  elif SANITIZER_PPC64V2
   // Disable ASLR for Linux PPC64LE.
   int old_personality = personality(0xffffffff);
