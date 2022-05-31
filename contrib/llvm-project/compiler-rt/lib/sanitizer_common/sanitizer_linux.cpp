@@ -2205,6 +2205,7 @@ void CheckASLR() {
     // just yet regarding FreeBSD release
     return;
   }
+<<<<<<< HEAD
 
   if (aslr_pie > 0) {
     Printf("This sanitizer is not compatible with enabled ASLR "
@@ -2222,6 +2223,15 @@ void CheckASLR() {
     Printf("This sanitizer is not compatible with enabled ASLR "
            "and binaries compiled with PIE\n");
     Die();
+=======
+  if ((aslr_status & PROC_ASLR_ACTIVE) != 0) {
+    VReport(1, "This sanitizer is not compatible with enabled ASLR "
+               "and binaries compiled with PIE\n"
+               "ASLR will be disabled and the program re-executed.\n");
+    int aslr_ctl = PROC_ASLR_FORCE_DISABLE;
+    CHECK_NE(procctl(P_PID, 0, PROC_ASLR_CTL, &aslr_ctl), -1);
+    ReExec();
+>>>>>>> origin/freebsd/13-stable/main
   }
 #  elif SANITIZER_PPC64V2
   // Disable ASLR for Linux PPC64LE.
