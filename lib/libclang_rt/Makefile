@@ -6,12 +6,9 @@ SUBDIR+=	asan
 SUBDIR+=	asan-preinit
 SUBDIR+=	asan_cxx
 SUBDIR+=	asan_dynamic
-<<<<<<< HEAD
-=======
 SUBDIR+=	asan_static
 SUBDIR+=	cfi
 SUBDIR+=	cfi_diag
->>>>>>> origin/freebsd/13-stable/main
 SUBDIR+=	safestack
 SUBDIR+=	stats
 SUBDIR+=	stats_client
