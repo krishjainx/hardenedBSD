@@ -22,7 +22,6 @@ SRCS+=		sanitizer_common/sanitizer_libignore.cpp
 SRCS+=		sanitizer_common/sanitizer_linux.cpp
 SRCS+=		sanitizer_common/sanitizer_linux_libcdep.cpp
 SRCS+=		sanitizer_common/sanitizer_mutex.cpp
-SRCS+=		sanitizer_common/sanitizer_persistent_allocator.cpp
 SRCS+=		sanitizer_common/sanitizer_platform_limits_freebsd.cpp
 SRCS+=		sanitizer_common/sanitizer_platform_limits_linux.cpp
 SRCS+=		sanitizer_common/sanitizer_platform_limits_posix.cpp
@@ -37,10 +36,15 @@ SRCS+=		sanitizer_common/sanitizer_thread_registry.cpp
 SRCS+=		sanitizer_common/sanitizer_tls_get_addr.cpp
 SRCS+=		sanitizer_common/sanitizer_type_traits.cpp
 
+<<<<<<< HEAD
 .if ${MK_LLD_IS_LD} != "no" && ${MK_CLANG_IS_CC} != "no" # && ${MK_CROSS_DSO_CFI} == "no"
 CFLAGS+=	-flto
 CXXFLAGS+=	-flto
 LDFLAGS+=	-flto
 .endif
+=======
+FILESDIR=	${SANITIZER_SHAREDIR}
+FILES+=		cfi/cfi_ignorelist.txt
+>>>>>>> origin/freebsd/13-stable/main
 
 .include <bsd.lib.mk>

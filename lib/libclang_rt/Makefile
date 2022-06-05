@@ -6,6 +6,12 @@ SUBDIR+=	asan
 SUBDIR+=	asan-preinit
 SUBDIR+=	asan_cxx
 SUBDIR+=	asan_dynamic
+<<<<<<< HEAD
+=======
+SUBDIR+=	asan_static
+SUBDIR+=	cfi
+SUBDIR+=	cfi_diag
+>>>>>>> origin/freebsd/13-stable/main
 SUBDIR+=	safestack
 SUBDIR+=	stats
 SUBDIR+=	stats_client
@@ -21,6 +27,7 @@ SUBDIR+=	ubsan_standalone_cxx
 .if ${MACHINE_CPUARCH} == "amd64"
 SUBDIR+=	dd
 SUBDIR+=	fuzzer
+SUBDIR+=	fuzzer_interceptors
 SUBDIR+=	fuzzer_no_main
 SUBDIR+=	msan
 SUBDIR+=	msan_cxx

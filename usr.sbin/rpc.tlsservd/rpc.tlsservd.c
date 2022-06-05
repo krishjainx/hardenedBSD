@@ -146,7 +146,7 @@ main(int argc, char **argv)
 	 * TLS handshake.
 	 */
 	struct sockaddr_un sun;
-	int ch, debug, fd, oldmask;
+	int ch, fd, oldmask;
 	SVCXPRT *xprt;
 	struct timeval tm;
 	struct timezone tz;
@@ -181,7 +181,6 @@ main(int argc, char **argv)
 		rpctls_dnsname = hostname;
 	}
 
-	debug = 0;
 	rpctls_verbose = false;
 	while ((ch = getopt_long(argc, argv, "2C:D:dhl:n:mp:r:uvWw", longopts,
 	    NULL)) != -1) {
@@ -238,6 +237,8 @@ main(int argc, char **argv)
 			break;
 		default:
 			fprintf(stderr, "usage: %s "
+			    "[-2/--allowtls1_2] "
+			    "[-C/--ciphers available_ciphers] "
 			    "[-D/--certdir certdir] [-d/--debuglevel] "
 			    "[-h/--checkhost] "
 			    "[-l/--verifylocs CAfile] [-m/--mutualverf] "
@@ -571,14 +572,14 @@ rpctls_setup_ssl(const char *certdir)
 
 	if (rpctls_ciphers != NULL) {
 		/*
-		 * Set preferred ciphers, since KERN_TLS only supports a
+		 * Set available ciphers, since KERN_TLS only supports a
 		 * few of them.  Normally, not doing this should be ok,
 		 * since the library defaults will work.
 		 */
-		ret = SSL_CTX_set_cipher_list(ctx, rpctls_ciphers);
+		ret = SSL_CTX_set_ciphersuites(ctx, rpctls_ciphers);
 		if (ret == 0) {
 			rpctls_verbose_out("rpctls_setup_ssl: "
-			    "SSL_CTX_set_cipher_list failed: %s\n",
+			    "SSL_CTX_set_ciphersuites failed: %s\n",
 			    rpctls_ciphers);
 			SSL_CTX_free(ctx);
 			return (NULL);
