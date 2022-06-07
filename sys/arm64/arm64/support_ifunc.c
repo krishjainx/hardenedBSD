@@ -1,15 +1,8 @@
 /*-
- * Copyright (c) 2005 David Xu <davidxu@freebsd.org>
- * Copyright (c) 2015 Ruslan Bukin <br@bsdpad.com>
- * All rights reserved.
+ * Copyright (c) 2022 The FreeBSD Foundation
  *
- * Portions of this software were developed by SRI International and the
- * University of Cambridge Computer Laboratory under DARPA/AFRL contract
- * FA8750-10-C-0237 ("CTSRD"), as part of the DARPA CRASH research programme.
- *
- * Portions of this software were developed by the University of Cambridge
- * Computer Laboratory as part of the CTSRD Project, with support from the
- * UK Higher Education Innovation Fund (HEIF).
+ * This software was developed by Andrew Turner under sponsorship from
+ * the FreeBSD Foundation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,7 +16,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -31,31 +24,35 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-/*
- * Machine-dependent thread prototypes/definitions.
- */
-#ifndef _PTHREAD_MD_H_
-#define	_PTHREAD_MD_H_
+#include <sys/cdefs.h>
 
-#include <sys/types.h>
-#include <machine/tls.h>
+#include <sys/param.h>
 
-#define	CPU_SPINWAIT
+#include <machine/atomic.h>
+#include <machine/ifunc.h>
 
-/* For use in _Static_assert to check structs will fit in a page */
-#define	THR_PAGE_SIZE_MIN	PAGE_SIZE
+int casueword32_llsc(volatile uint32_t *, uint32_t, uint32_t *, uint32_t);
+int casueword32_lse(volatile uint32_t *, uint32_t, uint32_t *, uint32_t);
 
-static __inline struct pthread *
-_get_curthread(void)
+int casueword_llsc(volatile u_long *, u_long, u_long *, u_long);
+int casueword_lse(volatile u_long *, u_long, u_long *, u_long);
+
+DEFINE_IFUNC(, int, casueword32, (volatile uint32_t *base, uint32_t oldval,
+    uint32_t *oldvalp, uint32_t newval))
 {
+	if (lse_supported)
+		return (casueword32_lse);
 
-	if (_thr_initial)
-		return (_tcb_get()->tcb_thread);
-	return (NULL);
+	return (casueword32_llsc);
 }
 
-#endif /* _PTHREAD_MD_H_ */
+DEFINE_IFUNC(, int, casueword, (volatile u_long *base, u_long oldval,
+    u_long *oldvalp, u_long newval))
+{
+	if (lse_supported)
+		return (casueword_lse);
+
+	return (casueword_llsc);
+}
