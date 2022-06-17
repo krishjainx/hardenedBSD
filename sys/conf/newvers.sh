@@ -62,7 +62,7 @@ fi
 BRANCH="${BRANCH}-HBSD"
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
-VENDOR_VERSION=""
+VENDOR_VERSION="2.10"
 
 if [ -z "${SYSDIR}" ]; then
     SYSDIR=$(dirname $0)/..

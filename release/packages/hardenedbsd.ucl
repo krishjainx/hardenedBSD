@@ -2,7 +2,7 @@
 # $FreeBSD$
 #
 
-name = "HardenedBSD-%PKGNAME%"
+name = "%PKG_NAME_PREFIX%-%PKGNAME%"
 origin = "base"
 version = "%VERSION%"
 comment = "%COMMENT%"

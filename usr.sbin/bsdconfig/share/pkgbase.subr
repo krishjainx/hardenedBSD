@@ -1,0 +1,29 @@
+#!/bin/sh
+
+if [ ! "$_PKGBASE_SUBR" ]; then _PKGBASE_SUBR=1
+############################################################ FUNCTIONS
+
+# f_dprintf $format [$arguments ...]
+#
+# Sensible debug function. Override in ~/.bsdconfigrc if desired.
+# See /usr/share/examples/bsdconfig/bsdconfigrc for example.
+#
+# If $debug is set and non-NULL, prints DEBUG info using printf(1) syntax:
+#       + To $debugFile, if set and non-NULL
+#       + To standard output if $debugFile is either NULL or unset
+#       + To both if $debugFile begins with a single plus-sign (`+')
+#
+f_pkginstall() {
+    f_dprintf "%s: pkg_install: Installing package group \"%s\"" "$0" "$1"
+    list=$2
+    n=0
+    total=$(echo ${list} | wc -w)
+    for pkg in ${list}; do
+        percentage=$((100 * n/total))
+        dialog --backtitle "${vendor} Installer" --title "Installing $1 packages" --mixedgauge "Installing ${pkg}"  0 0 $percentage
+        pkg_install_log=$(pkg -o KERNEL_NAME=${kernel_name} -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} install ${pkg})  # >/dev/null 2>&1
+        n=$((n + 1))
+        f_dprintf "%s: pkg_install: %s (%s of %s) log: \n\n%s\n" "$0" "${pkg}" "$n" "$total" "${pkg_install_log}"
+    done
+}
+fi # ! $_PKGBASE_SUBR

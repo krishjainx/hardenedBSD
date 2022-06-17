@@ -233,14 +233,18 @@ disc1: packagesystem
 	echo kernels_autodetect=\"NO\" >> ${.TARGET}/boot/loader.conf
 	cp ${.CURDIR}/rc.local ${.TARGET}/etc
 .if defined(WITH_PKGBASE)
+	cp ${.CURDIR}/HardenedBSD-Base.conf ${.TARGET}/etc/pkg/
 	mkdir ${.TARGET}/conf
 .if defined(WITH_SERIAL)
 	cp ${.CURDIR}/config_serial.xml ${.TARGET}/conf/config.xml
 .else
 	cp ${.CURDIR}/config_vga.xml ${.TARGET}/conf/config.xml
 .endif
-	echo 'kernel="kernel.HARDENEDBSD"' >> ${.TARGET}/boot/loader.conf.local
-	echo 'module_path="kernel.HARDENEDBSD"' >> ${.TARGET}/boot/loader.conf
+    # remove pkg.conf files used during install
+	rm -f ${.TARGET}/etc/pkg/HardenedBSD.conf
+	rm -f ${.TARGET}/etc/pkg/HardenedBSD.tor.conf
+	echo 'kernel="kernel.HBSDFW"' >> ${.TARGET}/boot/loader.conf.local
+	echo 'module_path="kernel.HBSDFW"' >> ${.TARGET}/boot/loader.conf
 	echo 'boot_multicons="YES"' >> ${.TARGET}/boot/loader.conf.local
 	echo 'kern.cam.boot_delay="10000"' >> ${.TARGET}/boot/loader.conf.local
 .if defined(WITH_SERIAL)

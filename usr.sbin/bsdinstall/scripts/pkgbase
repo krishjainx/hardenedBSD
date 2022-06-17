@@ -26,6 +26,12 @@
 # $FreeBSD$
 #
 
+############################################################ INCLUDES
+
+BSDCFG_SHARE="/usr/share/bsdconfig"
+. $BSDCFG_SHARE/common.subr || exit 1
+f_include $BSDCFG_SHARE/pkgbase.subr || exit 1
+
 # Choose the sets to install
 
 #exec 3>&1
@@ -66,39 +72,53 @@
 install_base=yes
 install_kernel=yes
 vendor="HardenedBSD"
+kernel_name="HBSDFW"
 
-pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} update
+f_dprintf "%s: BSDINSTALL_CHROOT = %s" "$0" "${BSDINSTALL_CHROOT}"
 
-pkg_install() {
-	n=0
-	total=$(echo ${pkg_list} | wc -w)
-	for item in ${pkg_list}; do
-		percentage=$((100 * n/total))
-		dialog --backtitle "${vendor} Installer" --title "Installing $1 packages" --mixedgauge "Installing ${item}"  0 0 $percentage
-		pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} install ${item} >/dev/null 2>&1
-		n=$((n + 1))
-	done
-}
+pkg_update_log=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} update)
+
+f_dprintf "%s: pkg update log: \n%s\n" "$0" "${pkg_update_log}"
+
+#
+# This is the old pkg_install function and has been replaced with usr.sbin/bsdconfig/share/pkgbase.subr
+# which defines f_pkginstall()
+#
+# These comments can be safely removed
+
+#pkg_install() {
+    #f_dprintf "%s: pkg_install: Installing package group \"%s\"" "$0" "$1"
+	#n=0
+	#total=$(echo ${pkg_list} | wc -w)
+	#for item in ${pkg_list}; do
+        #f_dprintf "%s: pkg_install package: %s" "$0" "${item}"
+		#percentage=$((100 * n/total))
+		#dialog --backtitle "${vendor} Installer" --title "Installing $1 packages" --mixedgauge "Installing ${item}"  0 0 $percentage
+		#pkg_install_log=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} install ${item})  # >/dev/null 2>&1
+        #f_dprintf "%s: pkg_install: %s (%s of %s) log: \n\n%s\n" "$0" "${item}" "$n" "$total" "${pkg_install_log}"
+		#n=$((n + 1))
+	#done
+#}
 
 if [ "${install_base}" == "yes" ]; then
 	pkg_list="${vendor}-clibs ${vendor}-runtime"
-	pkg_install "Mandatory"
-	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-*' | grep -vE "\-kernel|\-lib32|\-debug|\-dev|\-profile" | awk '{print $1}')
-	pkg_install "Base"
+	f_pkginstall "Mandatory" "$pkg_list"
+	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g 'HardenedBSD-*' | grep -vE "\-kernel|\-lib32|\-debug|\-dev|\-profile" | awk '{print $1}')
+	f_pkginstall "Base" "$pkg_list"
 fi
 
 if [ "${install_kernel}" == "yes" ]; then
 	if [ "${install_debug}" == "yes" ]; then
-		pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-kernel-*' | awk '{print $1}')
+		pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g 'HardenedBSD-kernel-*' | awk '{print $1}')
 	else
-		pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-kernel-*' | grep -vE "\-debug" | awk '{print $1}')
-		pkg_install "kernel"
+		pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g 'HardenedBSD-kernel-*' | grep -vE "\-debug" | awk '{print $1}')
+		f_pkginstall "kernel" "$pkg_list"
 	fi
 fi
 
 if [ "${install_lib32}" == "yes" ]; then
 	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-*-lib32-*' | grep -vE "\-debug|\-dev|\-profile" | awk '{print $1}')
-	pkg_install "lib32"
+	f_pkginstall "lib32" "$pkg_list"
 fi
 
 if [ "${install_debug}" == "yes" ]; then
@@ -108,7 +128,7 @@ if [ "${install_debug}" == "yes" ]; then
 		mod="\-lib32|\-dev|\-profile"
 	fi
 	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-*-debug-*' | grep -vE "${mod}" | awk '{print $1}')
-	pkg_install "debug"
+	f_pkginstall "debug" "$pkg_list"
 fi
 
 if [ "${install_development}" == "yes" ]; then
@@ -118,7 +138,7 @@ if [ "${install_development}" == "yes" ]; then
 		mod="\-lib32|\-debug|\-profile"
 	fi
 	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-*-dev-*' | grep -vE "${mod}" | awk '{print $1}')
-	pkg_install "dev"
+	f_pkginstall "dev" "$pkg_list"
 fi
 
 if [ "${install_profiles}" == "yes" ]; then
@@ -128,10 +148,10 @@ if [ "${install_profiles}" == "yes" ]; then
 		mod="\-lib32|\-dev|\-debug"
 	fi
 	pkg_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-*-profile-*' | grep -vE "${mod}" | awk '{print $1}')
-	pkg_install "profile"
+	f_pkginstall "profile" "$pkg_list"
 fi
 
-kernel_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g '${vendor}-kernel-*' | grep -vE "\-debug" | awk '{print $1}')
+kernel_list=$(pkg -o ASSUME_ALWAYS_YES=yes -r ${BSDINSTALL_CHROOT} search -g 'HardenedBSD-kernel-*' | grep -vE "\-debug" | awk '{print $1}')
 if [ ! -z "${kernel_list}" ]; then
 	dialogarg=""
 	on=""

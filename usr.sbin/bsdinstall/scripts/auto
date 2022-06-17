@@ -144,7 +144,7 @@ dialog_workaround()
 f_dprintf "Began Installation at %s" "$( date )"
 
 PKGBASE_INSTALL=$(f_ispkgbase)
-VENDOR_INSTALL=0
+VENDOR_INSTALL=1
 
 rm -rf $BSDINSTALL_TMPETC
 mkdir $BSDINSTALL_TMPETC
