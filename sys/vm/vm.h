@@ -144,7 +144,7 @@ struct vm_reserv;
 typedef struct vm_reserv *vm_reserv_t;
 
 /*
- * Information passed from the machine-independant VM initialization code
+ * Information passed from the machine-independent VM initialization code
  * for use by machine-dependant code (mainly for MMU support)
  */
 struct kva_md_info {
@@ -153,6 +153,9 @@ struct kva_md_info {
 	vm_offset_t	clean_sva;
 	vm_offset_t	clean_eva;
 };
+
+#define VA_IS_CLEANMAP(va)					\
+	((va) >= kmi.clean_sva && (va) < kmi.clean_eva)
 
 extern struct kva_md_info	kmi;
 extern void vm_ksubmap_init(struct kva_md_info *);

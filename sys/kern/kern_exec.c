@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/acct.h>
 #include <sys/asan.h>
 #include <sys/capsicum.h>
+#include <sys/compressor.h>
 #include <sys/eventhandler.h>
 #include <sys/exec.h>
 #include <sys/fcntl.h>
@@ -57,6 +58,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/priv.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h>
+#include <sys/reg.h>
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
 #include <sys/sched.h>
@@ -91,8 +93,6 @@ __FBSDID("$FreeBSD$");
 #ifdef	HWPMC_HOOKS
 #include <sys/pmckern.h>
 #endif
-
-#include <machine/reg.h>
 
 #include <security/audit/audit.h>
 #include <security/mac/mac_framework.h>
@@ -149,7 +149,7 @@ SYSCTL_INT(_kern, OID_AUTO, disallow_high_osrel, CTLFLAG_RW,
     &disallow_high_osrel, 0,
     "Disallow execution of binaries built for higher version of the world");
 
-int core_dump_can_intr = 1;
+static int core_dump_can_intr = 1;
 SYSCTL_INT(_kern, OID_AUTO, core_dump_can_intr, CTLFLAG_RWTUN,
     &core_dump_can_intr, 0,
     "Core dumping interruptible with SIGKILL");
@@ -1153,9 +1153,8 @@ exec_free_abi_mappings(struct proc *p)
 }
 
 /*
- * Destroy old address space, and allocate a new stack.
- *	The new stack is only sgrowsiz large because it is grown
- *	automatically on a page fault.
+ * Run down the current address space and install a new one.  Map the shared
+ * page.
  */
 int
 exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
@@ -1165,12 +1164,8 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	struct vmspace *vmspace = p->p_vmspace;
 	struct thread *td = curthread;
 	vm_object_t obj;
-	struct rlimit rlim_stack;
-	vm_offset_t sv_minuser, stack_addr;
+	vm_offset_t sv_minuser;
 	vm_map_t map;
-	u_long ssiz;
-	vm_prot_t stackprot;
-	vm_prot_t stackmaxprot;
 
 	imgp->vmspace_destroyed = true;
 	imgp->sysent = sv;
@@ -1203,8 +1198,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 		 * must be re-evaluated.
 		 */
 		vm_map_lock(map);
-		vm_map_modflags(map, 0, MAP_WIREFUTURE | MAP_ASLR |
-		    MAP_ASLR_IGNSTART);
+		vm_map_modflags(map, 0, MAP_WIREFUTURE);
 		vm_map_unlock(map);
 	} else {
 		error = vmspace_exec(p, sv_minuser, sv->sv_maxuser);
@@ -1255,7 +1249,30 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 	}
 
-	/* Allocate a new stack */
+	return (0);
+}
+
+/*
+ * Compute the stack size limit and map the main process stack.
+ */
+int
+exec_map_stack(struct image_params *imgp)
+{
+	struct rlimit rlim_stack;
+	struct sysentvec *sv;
+	struct proc *p;
+	vm_map_t map;
+	struct vmspace *vmspace;
+	vm_offset_t stack_addr;
+	u_long ssiz;
+	int error;
+	vm_prot_t stack_prot, stackmaxprot;
+
+	p = imgp->proc;
+	vmspace = p->p_vmspace;
+	map = &(vmspace->vm_map);
+	sv = p->p_sysent;
+
 	if (imgp->stack_sz != 0) {
 		ssiz = trunc_page(imgp->stack_sz);
 		PROC_LOCK(p);
@@ -1284,19 +1301,19 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	p->p_usrstack = stack_addr;
 	/* Calculate the stack's mapping address.  */
 	stack_addr -= ssiz;
-	stackprot = obj != NULL && imgp->stack_prot != 0 ?
+	stack_prot = sv->sv_shared_page_obj != NULL && imgp->stack_prot != 0 ?
 	    imgp->stack_prot : sv->sv_stackprot;
 	stackmaxprot = VM_PROT_ALL;
 #ifdef PAX_NOEXEC
 	PROC_LOCK(p);
-	pax_noexec_nx(p, &stackprot, &stackmaxprot);
+	pax_noexec_nx(p, &stack_prot, &stackmaxprot);
 	PROC_UNLOCK(p);
 #endif
 	imgp->stack_sz = lim_cur(curthread, RLIMIT_STACK);
 	if (ssiz < imgp->stack_sz)
 		imgp->stack_sz = ssiz;
 	error = vm_map_stack(map, stack_addr, (vm_size_t)ssiz,
-	    stackprot, stackmaxprot, MAP_STACK_GROWS_DOWN);
+	    stack_prot, stackmaxprot, MAP_STACK_GROWS_DOWN);
 	if (error != KERN_SUCCESS) {
 #ifdef PAX_ASLR
 		pax_log_aslr(p, PAX_LOG_DEFAULT,
@@ -1310,8 +1327,8 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	 * vm_ssize and vm_maxsaddr are somewhat antiquated concepts, but they
 	 * are still used to enforce the stack rlimit on the process stack.
 	 */
-	vmspace->vm_ssize = sgrowsiz >> PAGE_SHIFT;
 	vmspace->vm_maxsaddr = (char *)stack_addr;
+	vmspace->vm_ssize = sgrowsiz >> PAGE_SHIFT;
 
 	return (0);
 }
@@ -2017,4 +2034,153 @@ exec_unregister(const struct execsw *execsw_arg)
 		free(execsw, M_TEMP);
 	execsw = newexecsw;
 	return (0);
+}
+
+/*
+ * Write out a core segment to the compression stream.
+ */
+static int
+compress_chunk(struct coredump_params *cp, char *base, char *buf, size_t len)
+{
+	size_t chunk_len;
+	int error;
+
+	while (len > 0) {
+		chunk_len = MIN(len, CORE_BUF_SIZE);
+
+		/*
+		 * We can get EFAULT error here.
+		 * In that case zero out the current chunk of the segment.
+		 */
+		error = copyin(base, buf, chunk_len);
+		if (error != 0)
+			bzero(buf, chunk_len);
+		error = compressor_write(cp->comp, buf, chunk_len);
+		if (error != 0)
+			break;
+		base += chunk_len;
+		len -= chunk_len;
+	}
+	return (error);
+}
+
+int
+core_write(struct coredump_params *cp, const void *base, size_t len,
+    off_t offset, enum uio_seg seg, size_t *resid)
+{
+
+	return (vn_rdwr_inchunks(UIO_WRITE, cp->vp, __DECONST(void *, base),
+	    len, offset, seg, IO_UNIT | IO_DIRECT | IO_RANGELOCKED,
+	    cp->active_cred, cp->file_cred, resid, cp->td));
+}
+
+int
+core_output(char *base, size_t len, off_t offset, struct coredump_params *cp,
+    void *tmpbuf)
+{
+	vm_map_t map;
+	struct mount *mp;
+	size_t resid, runlen;
+	int error;
+	bool success;
+
+	KASSERT((uintptr_t)base % PAGE_SIZE == 0,
+	    ("%s: user address %p is not page-aligned", __func__, base));
+
+	if (cp->comp != NULL)
+		return (compress_chunk(cp, base, tmpbuf, len));
+
+	map = &cp->td->td_proc->p_vmspace->vm_map;
+	for (; len > 0; base += runlen, offset += runlen, len -= runlen) {
+		/*
+		 * Attempt to page in all virtual pages in the range.  If a
+		 * virtual page is not backed by the pager, it is represented as
+		 * a hole in the file.  This can occur with zero-filled
+		 * anonymous memory or truncated files, for example.
+		 */
+		for (runlen = 0; runlen < len; runlen += PAGE_SIZE) {
+			if (core_dump_can_intr && curproc_sigkilled())
+				return (EINTR);
+			error = vm_fault(map, (uintptr_t)base + runlen,
+			    VM_PROT_READ, VM_FAULT_NOFILL, NULL);
+			if (runlen == 0)
+				success = error == KERN_SUCCESS;
+			else if ((error == KERN_SUCCESS) != success)
+				break;
+		}
+
+		if (success) {
+			error = core_write(cp, base, runlen, offset,
+			    UIO_USERSPACE, &resid);
+			if (error != 0) {
+				if (error != EFAULT)
+					break;
+
+				/*
+				 * EFAULT may be returned if the user mapping
+				 * could not be accessed, e.g., because a mapped
+				 * file has been truncated.  Skip the page if no
+				 * progress was made, to protect against a
+				 * hypothetical scenario where vm_fault() was
+				 * successful but core_write() returns EFAULT
+				 * anyway.
+				 */
+				runlen -= resid;
+				if (runlen == 0) {
+					success = false;
+					runlen = PAGE_SIZE;
+				}
+			}
+		}
+		if (!success) {
+			error = vn_start_write(cp->vp, &mp, V_WAIT);
+			if (error != 0)
+				break;
+			vn_lock(cp->vp, LK_EXCLUSIVE | LK_RETRY);
+			error = vn_truncate_locked(cp->vp, offset + runlen,
+			    false, cp->td->td_ucred);
+			VOP_UNLOCK(cp->vp);
+			vn_finished_write(mp);
+			if (error != 0)
+				break;
+		}
+	}
+	return (error);
+}
+
+/*
+ * Drain into a core file.
+ */
+int
+sbuf_drain_core_output(void *arg, const char *data, int len)
+{
+	struct coredump_params *cp;
+	struct proc *p;
+	int error, locked;
+
+	cp = arg;
+	p = cp->td->td_proc;
+
+	/*
+	 * Some kern_proc out routines that print to this sbuf may
+	 * call us with the process lock held. Draining with the
+	 * non-sleepable lock held is unsafe. The lock is needed for
+	 * those routines when dumping a live process. In our case we
+	 * can safely release the lock before draining and acquire
+	 * again after.
+	 */
+	locked = PROC_LOCKED(p);
+	if (locked)
+		PROC_UNLOCK(p);
+	if (cp->comp != NULL)
+		error = compressor_write(cp->comp, __DECONST(char *, data), len);
+	else
+		error = core_write(cp, __DECONST(void *, data), len, cp->offset,
+		    UIO_SYSSPACE, NULL);
+	if (locked)
+		PROC_LOCK(p);
+	if (error != 0)
+		return (-error);
+	cp->offset += len;
+	return (len);
 }

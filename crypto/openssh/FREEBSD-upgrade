@@ -80,7 +80,7 @@
     $ sh freebsd-post-merge.sh
 
     These tags are not used with git, but we will leave them in place as
-    long as svn-based FreeBSD 11.x and 12.x are supported.
+    long as svn-based FreeBSD 12.x is supported.
 
 0D) Run the configure script:
 
@@ -108,7 +108,11 @@
     tools/tools/nanobsd/rescue/Files/etc/ssh/ssh_config
     tools/tools/nanobsd/rescue/Files/etc/ssh/sshd_config
 
-13) Commit, and hunker down for the inevitable storm of complaints.
+13) Check for references to obsolete configuration options
+    (e.g., ChallengeResponseAuthentication in sshd_config) which
+    may exist in release/ scripts.
+
+14) Commit, and hunker down for the inevitable storm of complaints.
 
 
 

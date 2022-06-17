@@ -82,6 +82,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/pcpu.h>
 #include <sys/ptrace.h>
 #include <sys/reboot.h>
+#include <sys/reg.h>
 #include <sys/rwlock.h>
 #include <sys/sched.h>
 #include <sys/signalvar.h>
@@ -128,7 +129,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/pc/bios.h>
 #include <machine/pcb.h>
 #include <machine/proc.h>
-#include <machine/reg.h>
 #include <machine/sigframe.h>
 #include <machine/specialreg.h>
 #include <machine/trap.h>
@@ -168,6 +168,9 @@ extern u_int64_t hammer_time(u_int64_t, u_int64_t);
 static void cpu_startup(void *);
 SYSINIT(cpu, SI_SUB_CPU, SI_ORDER_FIRST, cpu_startup, NULL);
 
+/* Probe 8254 PIT and TSC. */
+static void native_clock_source_init(void);
+
 /* Preload data parse function */
 static caddr_t native_parse_preload_data(u_int64_t);
 
@@ -176,8 +179,8 @@ static void native_parse_memmap(caddr_t, vm_paddr_t *, int *);
 
 /* Default init_ops implementation. */
 struct init_ops init_ops = {
-	.parse_preload_data =	native_parse_preload_data,
-	.early_clock_source_init =	i8254_init,
+	.parse_preload_data =		native_parse_preload_data,
+	.early_clock_source_init =	native_clock_source_init,
 	.early_delay =			i8254_delay,
 	.parse_memmap =			native_parse_memmap,
 #ifdef SMP
@@ -818,7 +821,7 @@ add_efi_map_entries(struct efi_map_header *efihdr, vm_paddr_t *physmap,
 			continue;
 		}
 
-		if (!add_physmap_entry(p->md_phys, (p->md_pages * PAGE_SIZE),
+		if (!add_physmap_entry(p->md_phys, p->md_pages * EFI_PAGE_SIZE,
 		    physmap, physmap_idx))
 			break;
 	}
@@ -1170,6 +1173,13 @@ native_parse_preload_data(u_int64_t modulep)
 }
 
 static void
+native_clock_source_init(void)
+{
+	i8254_init();
+	tsc_init();
+}
+
+static void
 amd64_kdb_init(void)
 {
 	kdb_init();
@@ -1457,12 +1467,6 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	lidt(&r_idt);
 
 	/*
-	 * Initialize the clock before the console so that console
-	 * initialization can use DELAY().
-	 */
-	clock_init();
-
-	/*
 	 * Use vt(4) by default for UEFI boot (during the sc(4)/vt(4)
 	 * transition).
 	 * Once bootblocks have updated, we can test directly for
@@ -1489,6 +1493,13 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	    &x86_rngds_mitg_enable);
 
 	finishidentcpu();	/* Final stage of CPU initialization */
+
+	/*
+	 * Initialize the clock before the console so that console
+	 * initialization can use DELAY().
+	 */
+	clock_init();
+
 	initializecpu();	/* Initialize CPU registers */
 
 	amd64_bsp_ist_init(pc);

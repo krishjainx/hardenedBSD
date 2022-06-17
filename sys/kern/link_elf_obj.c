@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/mutex.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
+#include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/rwlock.h>
 #include <sys/sysctl.h>
@@ -62,6 +63,8 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
+
+#include <sys/pax.h>
 
 #include <sys/link_elf.h>
 
@@ -156,6 +159,12 @@ static long	link_elf_strtab_get(linker_file_t, caddr_t *);
 static int	elf_obj_lookup(linker_file_t lf, Elf_Size symidx, int deps,
 		    Elf_Addr *);
 
+static bool	link_elf_kmod_is_insecure(linker_file_t lf);
+static int	link_elf_detect_insecure_early(struct thread *td,
+		    struct vnode *vp, const char *filename);
+static int	link_elf_detect_insecure_late(struct thread *td,
+		    const char *filename, struct vnode *vp, linker_file_t lf);
+
 static kobj_method_t link_elf_methods[] = {
 	KOBJMETHOD(linker_lookup_symbol,	link_elf_lookup_symbol),
 	KOBJMETHOD(linker_lookup_debug_symbol,	link_elf_lookup_debug_symbol),
@@ -191,6 +200,45 @@ SYSCTL_BOOL(_debug, OID_AUTO, link_elf_obj_leak_locals,
 
 static int	relocate_file(elf_file_t ef);
 static void	elf_obj_cleanup_globals_cache(elf_file_t);
+
+static bool
+link_elf_kmod_is_insecure(linker_file_t lf)
+{
+	c_linker_sym_t insecure_sym;
+
+	return (link_elf_lookup_symbol(lf, "__insecure_kmod",
+	    &insecure_sym) != ENOENT);
+}
+
+static int
+link_elf_detect_insecure_early(struct thread *td, struct vnode *vp,
+    const char *filename)
+{
+
+	return (0);
+}
+
+static int
+link_elf_detect_insecure_late(struct thread *td, const char *filename,
+    struct vnode *vp, linker_file_t lf)
+{
+	pax_flag_t flags;
+
+	flags = pax_control_extattr_kmod(td, vp);
+	if ((flags & PAX_NOTE_PERMITKMOD) == PAX_NOTE_PERMITKMOD) {
+		return (0);
+	}
+
+	if ((flags & PAX_NOTE_FORBIDKMOD) == PAX_NOTE_FORBIDKMOD ||
+	    (link_elf_kmod_is_insecure(lf) && !pax_insecure_kmod())) {
+		pax_log_internal(td->td_proc, PAX_LOG_P_COMM,
+		    "Insecure kernel module load attempt rejected: %s",
+		    filename != NULL ? filename : "<unknown>");
+		return (EPERM);
+	}
+
+	return (0);
+}
 
 static void
 link_elf_error(const char *filename, const char *s)
@@ -728,6 +776,11 @@ link_elf_load_file(linker_class_t cls, const char *filename,
 	}
 #endif
 
+	error = link_elf_detect_insecure_early(td, nd->ni_vp, filename);
+	if (error != 0) {
+		goto out;
+	}
+
 	/* Read the elf header from the file. */
 	hdr = malloc(sizeof(*hdr), M_LINKER, M_WAITOK);
 	error = vn_rdwr(UIO_READ, nd->ni_vp, (void *)hdr, sizeof(*hdr), 0,
@@ -1198,6 +1251,11 @@ link_elf_load_file(linker_class_t cls, const char *filename,
 		    (u_long)mapbase, ef->address, (u_long)mapsize,
 		    (u_long)(vm_offset_t)ef->address + mapsize);
 		error = ENOMEM;
+		goto out;
+	}
+
+	error = link_elf_detect_insecure_late(td, filename, nd->ni_vp, lf);
+	if (error != 0) {
 		goto out;
 	}
 

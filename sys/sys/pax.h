@@ -32,7 +32,7 @@
 #ifndef	_SYS_PAX_H
 #define	_SYS_PAX_H
 
-#define	__HardenedBSD_version	1300061UL
+#define	__HardenedBSD_version	1300062UL
 
 #if defined(_KERNEL) || defined(_WANT_PRISON)
 typedef	uint32_t	pax_state_t;
@@ -125,6 +125,7 @@ bool pax_feature_simple_validate_state(pax_state_t *state);
  */
 int pax_control_acl_set_flags(struct thread *td, struct image_params *imgp, const pax_flag_t req_flags);
 int pax_control_extattr_parse_flags(struct thread *td, struct image_params *imgp);
+pax_flag_t pax_control_extattr_kmod(struct thread *td, struct vnode *vp);
 
 /*
  * ASLR related functions
@@ -225,6 +226,8 @@ int pax_hardening_init_prison(struct prison *pr, struct vfsoptlist *opts);
 #endif
 int pax_procfs_harden(struct thread *td);
 
+bool pax_insecure_kmod(void);
+
 #endif /* _KERNEL */
 
 #define	PAX_NOTE_PAGEEXEC	0x00000001
@@ -239,17 +242,20 @@ int pax_procfs_harden(struct thread *td);
 #define	PAX_NOTE_NOSHLIBRANDOM	0x00000200
 #define	PAX_NOTE_DISALLOWMAP32BIT	0x00000400
 #define	PAX_NOTE_NODISALLOWMAP32BIT	0x00000800
+#define PAX_NOTE_PERMITKMOD	0x00001000
+#define PAX_NOTE_FORBIDKMOD	0x00002000
 
 #define	PAX_NOTE_RESERVED0	0x40000000
 #define	PAX_NOTE_PREFER_ACL	0x80000000
 
 #define PAX_NOTE_ALL_ENABLED	\
     (PAX_NOTE_PAGEEXEC | PAX_NOTE_MPROTECT | PAX_NOTE_SEGVGUARD | \
-    PAX_NOTE_ASLR | PAX_NOTE_SHLIBRANDOM | PAX_NOTE_DISALLOWMAP32BIT)
+    PAX_NOTE_ASLR | PAX_NOTE_SHLIBRANDOM | PAX_NOTE_DISALLOWMAP32BIT | \
+    PAX_NOTE_PERMITKMOD)
 #define PAX_NOTE_ALL_DISABLED	\
     (PAX_NOTE_NOPAGEEXEC | PAX_NOTE_NOMPROTECT | \
     PAX_NOTE_NOSEGVGUARD | PAX_NOTE_NOASLR | PAX_NOTE_NOSHLIBRANDOM | \
-    PAX_NOTE_NODISALLOWMAP32BIT)
+    PAX_NOTE_NODISALLOWMAP32BIT | PAX_NOTE_FORBIDKMOD)
 #define PAX_NOTE_ALL	(PAX_NOTE_ALL_ENABLED | PAX_NOTE_ALL_DISABLED | PAX_NOTE_PREFER_ACL)
 
 #define	PAX_HARDENING_SHLIBRANDOM	0x00000100

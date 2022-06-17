@@ -420,6 +420,10 @@ netdump_configure(struct diocskerneldump_arg *conf, struct thread *td)
 		CURVNET_SET(vnet0);
 		ifp = ifunit_ref(conf->kda_iface);
 		CURVNET_RESTORE();
+		if (!DEBUGNET_SUPPORTED_NIC(ifp)) {
+			if_rele(ifp);
+			return (ENODEV);
+		}
 	} else
 		ifp = NULL;
 
@@ -466,9 +470,6 @@ netdump_ioctl(struct cdev *dev __unused, u_long cmd, caddr_t addr,
 	struct dumperinfo dumper;
 	uint8_t *encryptedkey;
 	int error;
-#ifdef COMPAT_FREEBSD11
-	u_int u;
-#endif
 #ifdef COMPAT_FREEBSD12
 	struct diocskerneldump_arg_freebsd12 *kda12;
 	struct netdump_conf_freebsd12 *conf12;
@@ -479,18 +480,6 @@ netdump_ioctl(struct cdev *dev __unused, u_long cmd, caddr_t addr,
 	NETDUMP_WLOCK();
 
 	switch (cmd) {
-#ifdef COMPAT_FREEBSD11
-	case DIOCSKERNELDUMP_FREEBSD11:
-		gone_in(13, "11.x ABI compatibility");
-		u = *(u_int *)addr;
-		if (u != 0) {
-			error = ENXIO;
-			break;
-		}
-		if (netdump_enabled())
-			netdump_unconfigure();
-		break;
-#endif
 #ifdef COMPAT_FREEBSD12
 		/*
 		 * Used by dumpon(8) in 12.x for clearing previous

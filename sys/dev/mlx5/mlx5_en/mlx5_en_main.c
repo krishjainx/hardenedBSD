@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2015-2021 Mellanox Technologies. All rights reserved.
+ * Copyright (c) 2022 NVIDIA corporation & affiliates.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1348,7 +1349,7 @@ mlx5e_enable_rq(struct mlx5e_rq *rq, struct mlx5e_rq_param *param)
 	if (priv->counter_set_id >= 0)
 		MLX5_SET(rqc, rqc, counter_set_id, priv->counter_set_id);
 	MLX5_SET(wq, wq, log_wq_pg_sz, rq->wq_ctrl.buf.page_shift -
-	    PAGE_SHIFT);
+	    MLX5_ADAPTER_PAGE_SHIFT);
 	MLX5_SET64(wq, wq, dbr_addr, rq->wq_ctrl.db.dma);
 
 	mlx5_fill_page_array(&rq->wq_ctrl.buf,
@@ -1568,13 +1569,13 @@ mlx5e_free_sq_db(struct mlx5e_sq *sq)
 	int x;
 
 	for (x = 0; x != wq_sz; x++) {
-		if (unlikely(sq->mbuf[x].p_refcount != NULL)) {
-			atomic_add_int(sq->mbuf[x].p_refcount, -1);
-			sq->mbuf[x].p_refcount = NULL;
-		}
 		if (sq->mbuf[x].mbuf != NULL) {
 			bus_dmamap_unload(sq->dma_tag, sq->mbuf[x].dma_map);
 			m_freem(sq->mbuf[x].mbuf);
+		}
+		if (sq->mbuf[x].mst != NULL) {
+			m_snd_tag_rele(sq->mbuf[x].mst);
+			sq->mbuf[x].mst = NULL;
 		}
 		bus_dmamap_destroy(sq->dma_tag, sq->mbuf[x].dma_map);
 	}
@@ -1764,7 +1765,7 @@ mlx5e_enable_sq(struct mlx5e_sq *sq, struct mlx5e_sq_param *param,
 	MLX5_SET(wq, wq, wq_type, MLX5_WQ_TYPE_CYCLIC);
 	MLX5_SET(wq, wq, uar_page, bfreg->index);
 	MLX5_SET(wq, wq, log_wq_pg_sz, sq->wq_ctrl.buf.page_shift -
-	    PAGE_SHIFT);
+	    MLX5_ADAPTER_PAGE_SHIFT);
 	MLX5_SET64(wq, wq, dbr_addr, sq->wq_ctrl.db.dma);
 
 	mlx5_fill_page_array(&sq->wq_ctrl.buf,
@@ -2052,7 +2053,7 @@ mlx5e_enable_cq(struct mlx5e_cq *cq, struct mlx5e_cq_param *param, int eq_ix)
 
 	MLX5_SET(cqc, cqc, c_eqn, eqn);
 	MLX5_SET(cqc, cqc, log_page_size, cq->wq_ctrl.buf.page_shift -
-	    PAGE_SHIFT);
+	    MLX5_ADAPTER_PAGE_SHIFT);
 	MLX5_SET64(cqc, cqc, dbr_addr, cq->wq_ctrl.db.dma);
 
 	err = mlx5_core_create_cq(cq->priv->mdev, mcq, in, inlen, out, sizeof(out));
@@ -2244,7 +2245,7 @@ mlx5e_open_channel(struct mlx5e_priv *priv,
 	struct epoch_tracker et;
 	int i, err;
 
-	/* zero non-persistant data */
+	/* zero non-persistent data */
 	MLX5E_ZERO(&c->rq, mlx5e_rq_zero_start);
 	for (i = 0; i != priv->num_tc; i++)
 		MLX5E_ZERO(&c->sq[i], mlx5e_sq_zero_start);

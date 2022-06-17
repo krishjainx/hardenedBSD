@@ -35,6 +35,7 @@
 
 #include <machine/elf.h>
 #include <sys/kobj.h>
+#include <sys/pax.h>
 
 #ifdef MALLOC_DECLARE
 MALLOC_DECLARE(M_LINKER);
@@ -104,6 +105,7 @@ struct linker_file {
     caddr_t		exidx_addr;	/* Unwind data index table start */
     size_t		exidx_size;	/* Unwind data index table size */
 #endif
+    pax_flag_t		pax_flags;
 };
 
 /*

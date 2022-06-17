@@ -34,6 +34,10 @@ _PRIVATELIBS=	\
 		unbound \
 		zstd
 
+# Let projects based on FreeBSD append to _PRIVATELIBS
+# by maintaining their own LOCAL_PRIVATELIBS list.
+_PRIVATELIBS+=	${LOCAL_PRIVATELIBS}
+
 _INTERNALLIBS=	\
 		amu \
 		bsnmptools \
@@ -43,6 +47,7 @@ _INTERNALLIBS=	\
 		fifolog \
 		ifconfig \
 		ipf \
+		iscsiutil \
 		lpr \
 		lua \
 		lutok \
@@ -76,6 +81,10 @@ _INTERNALLIBS=	\
 		wpatls \
 		wpautils \
 		wpawps
+
+# Let projects based on FreeBSD append to _INTERNALLIBS
+# by maintaining their own LOCAL_INTERNALLIBS list.
+_INTERNALLIBS+=	${LOCAL_INTERNALLIBS}
 
 _LIBRARIES=	\
 		${_PRIVATELIBS} \
@@ -380,8 +389,8 @@ _DP_heimbase=	pthread
 _DP_heimipcc=	heimbase roken pthread
 _DP_heimipcs=	heimbase roken pthread
 _DP_kafs5=	asn1 krb5 roken
-_DP_krb5+=	asn1 com_err crypt crypto hx509 roken wind heimbase heimipcc
-_DP_gssapi_krb5+=	gssapi krb5 crypto roken asn1 com_err
+_DP_krb5=	asn1 com_err crypt crypto hx509 roken wind heimbase heimipcc
+_DP_gssapi_krb5=	gssapi krb5 crypto roken asn1 com_err
 _DP_lzma=	md pthread
 _DP_ucl=	m
 _DP_vmmapi=	util
@@ -393,6 +402,8 @@ _DP_ztest=	geom m nvpair umem zpool pthread avl zfs_core spl zutil zfs uutil icp
 # The libc dependencies are not strictly needed but are defined to make the
 # assert happy.
 _DP_c=		compiler_rt
+# Use libssp_nonshared only on i386 and power*.  Other archs emit direct calls
+# to __stack_chk_fail, not __stack_chk_fail_local provided by libssp_nonshared.
 .if ${MK_SSP} != "no" && \
     (${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH:Mpower*} != "")
 _DP_c+=		ssp_nonshared
@@ -559,6 +570,9 @@ LIBIFCONFIG?=	${LIBIFCONFIGDIR}/libifconfig.a
 
 LIBIPFDIR=	${_LIB_OBJTOP}/sbin/ipf/libipf
 LIBIPF?=	${LIBIPFDIR}/libipf.a
+
+LIBISCSIUTILDIR=	${_LIB_OBJTOP}/lib/libiscsiutil
+LIBISCSIUTIL?=	${LIBISCSIUTILDIR}/libiscsiutil${PIE_SUFFIX}.a
 
 LIBTELNETDIR=	${_LIB_OBJTOP}/lib/libtelnet
 LIBTELNET?=	${LIBTELNETDIR}/libtelnet.a

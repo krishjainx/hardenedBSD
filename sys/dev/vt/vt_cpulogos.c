@@ -135,8 +135,8 @@ vtterm_draw_cpu_logos(struct vt_device *vd)
 
 	a = teken_get_curattr(&tm->tm_emulator);
 	if (vd->vd_driver->vd_drawrect)
-		vd->vd_driver->vd_drawrect(vd, 0, 0, vd->vd_width,
-		    vt_logo_sprite_height, 1, a->ta_bgcolor);
+		vd->vd_driver->vd_drawrect(vd, 0, 0, vd->vd_width - 1,
+		    vt_logo_sprite_height - 1, 1, a->ta_bgcolor);
 	/*
 	 * Blank is okay because we only ever draw beasties on full screen
 	 * refreshes.
@@ -221,12 +221,14 @@ vt_init_logos(void *dummy)
 	if (!vt_splash_cpu)
 		return;
 
-	tm = &vt_consterm;
-	vw = tm->tm_softc;
+	vd = &vt_consdev;
+	if (vd == NULL)
+		return;
+	vw = vd->vd_curwindow;
 	if (vw == NULL)
 		return;
-	vd = vw->vw_device;
-	if (vd == NULL)
+	tm = vw->vw_terminal;
+	if (tm == NULL)
 		return;
 	vf = vw->vw_font;
 	if (vf == NULL)

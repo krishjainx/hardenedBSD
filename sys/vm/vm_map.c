@@ -361,7 +361,6 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 #endif
 #endif
 
-	vm->vm_stkgap = 0;
 	return (vm);
 }
 
@@ -4288,7 +4287,6 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	vm2->vm_aslr_delta_map32bit = vm1->vm_aslr_delta_map32bit;
 #endif
 #endif
-	vm2->vm_stkgap = vm1->vm_stkgap;
 	vm_map_lock(old_map);
 	if (old_map->busy)
 		vm_map_wait_busy(old_map);
@@ -4306,7 +4304,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	}
 
 	new_map->anon_loc = old_map->anon_loc;
-	new_map->flags |= old_map->flags & (MAP_ASLR | MAP_ASLR_IGNSTART);
+	new_map->flags |= old_map->flags;
 
 	VM_MAP_ENTRY_FOREACH(old_entry, old_map) {
 		if ((old_entry->eflags & MAP_ENTRY_IS_SUB_MAP) != 0)

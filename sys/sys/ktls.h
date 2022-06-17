@@ -50,6 +50,8 @@ struct tls_record_layer {
 #define	TLS_CBC_IMPLICIT_IV_LEN	16
 
 /* Type values for the record layer */
+#define	TLS_RLTYPE_ALERT	21
+#define	TLS_RLTYPE_HANDSHAKE	22
 #define	TLS_RLTYPE_APP		23
 
 /*
@@ -223,6 +225,7 @@ int ktls_enable_tx(struct socket *so, struct tls_enable *en);
 void ktls_destroy(struct ktls_session *tls);
 void ktls_frame(struct mbuf *m, struct ktls_session *tls, int *enqueue_cnt,
     uint8_t record_type);
+bool ktls_permit_empty_frames(struct ktls_session *tls);
 void ktls_seq(struct sockbuf *sb, struct mbuf *m);
 void ktls_enqueue(struct mbuf *m, struct socket *so, int page_count);
 void ktls_enqueue_to_free(struct mbuf *m);

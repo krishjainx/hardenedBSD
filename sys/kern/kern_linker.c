@@ -35,27 +35,27 @@ __FBSDID("$FreeBSD$");
 #include "opt_pax.h"
 
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/sysproto.h>
-#include <sys/sysent.h>
-#include <sys/priv.h>
-#include <sys/proc.h>
-#include <sys/lock.h>
-#include <sys/mutex.h>
-#include <sys/sx.h>
-#include <sys/module.h>
-#include <sys/mount.h>
-#include <sys/linker.h>
 #include <sys/eventhandler.h>
 #include <sys/fcntl.h>
 #include <sys/jail.h>
+#include <sys/kernel.h>
 #include <sys/libkern.h>
+#include <sys/linker.h>
+#include <sys/lock.h>
+#include <sys/malloc.h>
+#include <sys/module.h>
+#include <sys/mount.h>
+#include <sys/mutex.h>
 #include <sys/namei.h>
-#include <sys/vnode.h>
+#include <sys/priv.h>
+#include <sys/proc.h>
+#include <sys/sx.h>
 #include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
+#include <sys/sysent.h>
+#include <sys/sysproto.h>
+#include <sys/vnode.h>
 
 #ifdef DDB
 #include <ddb/ddb.h>
@@ -446,6 +446,14 @@ linker_load_file(const char *filename, linker_file_t *result)
 		KLD_DPF(FILE, ("linker_load_file: trying to load %s\n",
 		    filename));
 		error = LINKER_LOAD_FILE(lc, filename, &lf);
+		/*
+		 * We'll get an EPERM when an attempt to load an
+		 * insecure kernel module is made, and loading
+		 * insecure modules is prohibited.
+		 */
+		if (error == EPERM) {
+			return (error);
+		}
 		/*
 		 * If we got something other than ENOENT, then it exists but
 		 * we cannot load it for some other reason.
@@ -1373,10 +1381,11 @@ kern_kldstat(struct thread *td, int fileid, struct kld_file_stat *stat)
 	stat->id = lf->id;
 #ifdef HARDEN_KLD
 	stat->address = NULL;
+	stat->size = 0;
 #else
 	stat->address = lf->address;
-#endif
 	stat->size = lf->size;
+#endif
 	/* Version 2 fields: */
 	namelen = strlen(lf->pathname) + 1;
 	if (namelen > sizeof(stat->pathname))
@@ -1475,10 +1484,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 		    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
 #ifdef HARDEN_KLD
 			lookup.symvalue = (uintptr_t) NULL;
+			lookup.symsize = 0;
 #else
 			lookup.symvalue = (uintptr_t) symval.value;
-#endif
 			lookup.symsize = symval.size;
+#endif
 			error = copyout(&lookup, uap->data, sizeof(lookup));
 		} else
 			error = ENOENT;
@@ -1488,10 +1498,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 			    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
 #ifdef HARDEN_KLD
 				lookup.symvalue = (uintptr_t)NULL;
+				lookup.symsize = 0;
 #else
 				lookup.symvalue = (uintptr_t)symval.value;
-#endif
 				lookup.symsize = symval.size;
+#endif
 				error = copyout(&lookup, uap->data,
 				    sizeof(lookup));
 				break;

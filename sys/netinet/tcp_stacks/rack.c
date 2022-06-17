@@ -304,8 +304,8 @@ static int32_t rack_gp_per_bw_mul_down = 4;	/* 4% */
 static int32_t rack_gp_rtt_maxmul = 3;		/* 3 x maxmin */
 static int32_t rack_gp_rtt_minmul = 1;		/* minrtt + (minrtt/mindiv) is lower rtt */
 static int32_t rack_gp_rtt_mindiv = 4;		/* minrtt + (minrtt * minmul/mindiv) is lower rtt */
-static int32_t rack_gp_decrease_per = 20;	/* 20% decrease in multipler */
-static int32_t rack_gp_increase_per = 2;	/* 2% increase in multipler */
+static int32_t rack_gp_decrease_per = 20;	/* 20% decrease in multiplier */
+static int32_t rack_gp_increase_per = 2;	/* 2% increase in multiplier */
 static int32_t rack_per_lower_bound = 50;	/* Don't allow to drop below this multiplier */
 static int32_t rack_per_upper_bound_ss = 0;	/* Don't allow SS to grow above this */
 static int32_t rack_per_upper_bound_ca = 0;	/* Don't allow CA to grow above this */
@@ -1112,7 +1112,7 @@ rack_init_sysctls(void)
 	    SYSCTL_CHILDREN(rack_timely),
 	    OID_AUTO, "rtt_max_mul", CTLFLAG_RW,
 	    &rack_gp_rtt_maxmul, 3,
-	    "Rack timely multipler of lowest rtt for rtt_max");
+	    "Rack timely multiplier of lowest rtt for rtt_max");
 	SYSCTL_ADD_S32(&rack_sysctl_ctx,
 	    SYSCTL_CHILDREN(rack_timely),
 	    OID_AUTO, "rtt_min_div", CTLFLAG_RW,
@@ -1142,12 +1142,12 @@ rack_init_sysctls(void)
 	    SYSCTL_CHILDREN(rack_timely),
 	    OID_AUTO, "upperboundss", CTLFLAG_RW,
 	    &rack_per_upper_bound_ss, 0,
-	    "Rack timely higest percentage we allow GP multiplier in SS to raise to (0 is no upperbound)");
+	    "Rack timely highest percentage we allow GP multiplier in SS to raise to (0 is no upperbound)");
 	SYSCTL_ADD_S32(&rack_sysctl_ctx,
 	    SYSCTL_CHILDREN(rack_timely),
 	    OID_AUTO, "upperboundca", CTLFLAG_RW,
 	    &rack_per_upper_bound_ca, 0,
-	    "Rack timely higest percentage we allow GP multiplier to CA raise to (0 is no upperbound)");
+	    "Rack timely highest percentage we allow GP multiplier to CA raise to (0 is no upperbound)");
 	SYSCTL_ADD_S32(&rack_sysctl_ctx,
 	    SYSCTL_CHILDREN(rack_timely),
 	    OID_AUTO, "dynamicgp", CTLFLAG_RW,
@@ -1499,13 +1499,13 @@ rack_init_sysctls(void)
 	    SYSCTL_CHILDREN(rack_attack),
 	    OID_AUTO, "move_none", CTLFLAG_RD,
 	    &rack_move_none,
-	    "Total number of SACK index reuse of postions under threshold");
+	    "Total number of SACK index reuse of positions under threshold");
 	rack_move_some = counter_u64_alloc(M_WAITOK);
 	SYSCTL_ADD_COUNTER_U64(&rack_sysctl_ctx,
 	    SYSCTL_CHILDREN(rack_attack),
 	    OID_AUTO, "move_some", CTLFLAG_RD,
 	    &rack_move_some,
-	    "Total number of SACK index reuse of postions over threshold");
+	    "Total number of SACK index reuse of positions over threshold");
 	rack_sack_attacks_detected = counter_u64_alloc(M_WAITOK);
 	SYSCTL_ADD_COUNTER_U64(&rack_sysctl_ctx,
 	    SYSCTL_CHILDREN(rack_attack),
@@ -3217,7 +3217,7 @@ rack_bw_can_be_raised(struct tcp_rack *rack, uint64_t cur_bw, uint64_t last_bw_e
 	 * rate to push us faster there is no sense of
 	 * increasing.
 	 *
-	 * We first caculate our actual pacing rate (ss or ca multipler
+	 * We first caculate our actual pacing rate (ss or ca multiplier
 	 * times our cur_bw).
 	 *
 	 * Then we take the last measured rate and multipy by our
@@ -3970,7 +3970,7 @@ rack_update_multiplier(struct tcp_rack *rack, int32_t timely_says, uint64_t last
 	    (rack->use_fixed_rate) ||
 	    (rack->in_probe_rtt) ||
 	    (rack->rc_always_pace == 0)) {
-		/* No dynamic GP multipler in play */
+		/* No dynamic GP multiplier in play */
 		return;
 	}
 	losses = rack->r_ctl.rc_loss_count - rack->r_ctl.rc_loss_at_start;
@@ -4137,7 +4137,7 @@ rack_make_timely_judgement(struct tcp_rack *rack, uint32_t rtt, int32_t rtt_diff
 	log_rtt_a_diff |= (uint32_t)rtt_diff;
 	if (rtt >= (get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) *
 		    rack_gp_rtt_maxmul)) {
-		/* Reduce the b/w multipler */
+		/* Reduce the b/w multiplier */
 		timely_says = 2;
 		log_mult = get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) * rack_gp_rtt_maxmul;
 		log_mult <<= 32;
@@ -4148,7 +4148,7 @@ rack_make_timely_judgement(struct tcp_rack *rack, uint32_t rtt, int32_t rtt_diff
 	} else if (rtt <= (get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) +
 			   ((get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) * rack_gp_rtt_minmul) /
 			    max(rack_gp_rtt_mindiv , 1)))) {
-		/* Increase the b/w multipler */
+		/* Increase the b/w multiplier */
 		log_mult = get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) +
 			((get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt) * rack_gp_rtt_minmul) /
 			 max(rack_gp_rtt_mindiv , 1));
@@ -4175,13 +4175,13 @@ rack_make_timely_judgement(struct tcp_rack *rack, uint32_t rtt, int32_t rtt_diff
 		if (rtt_diff <= 0) {
 			/*
 			 * Rttdiff is less than zero, increase the
-			 * b/w multipler (its 0 or negative)
+			 * b/w multiplier (its 0 or negative)
 			 */
 			timely_says = 0;
 			rack_log_timely(rack,  timely_says, log_mult,
 					get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt), log_rtt_a_diff, __LINE__, 6);
 		} else {
-			/* Reduce the b/w multipler */
+			/* Reduce the b/w multiplier */
 			timely_says = 1;
 			rack_log_timely(rack,  timely_says, log_mult,
 					get_filter_value_small(&rack->r_ctl.rc_gp_min_rtt), log_rtt_a_diff, __LINE__, 7);
@@ -4389,7 +4389,7 @@ rack_do_goodput_measurement(struct tcpcb *tp, struct tcp_rack *rack,
 		addpart = rack->r_ctl.num_measurements;
 		rack->r_ctl.num_measurements++;
 		if (rack->r_ctl.num_measurements >= RACK_REQ_AVG) {
-			/* We have collected enought to move forward */
+			/* We have collected enough to move forward */
 			rack->r_ctl.gp_bw /= (uint64_t)rack->r_ctl.num_measurements;
 		}
 		did_add = 3;
@@ -6093,7 +6093,7 @@ rack_clone_rsm(struct tcp_rack *rack, struct rack_sendmap *nrsm,
 	 * Now we need to find nrsm's new location in the mbuf chain
 	 * we basically calculate a new offset, which is soff +
 	 * how much is left in original rsm. Then we walk out the mbuf
-	 * chain to find the righ postion, it may be the same mbuf
+	 * chain to find the righ position, it may be the same mbuf
 	 * or maybe not.
 	 */
 	KASSERT(((rsm->m != NULL) ||
@@ -8406,7 +8406,7 @@ do_rest_ofb:
 			} else {
 				/*
 				 * The end goes beyond this guy
-				 * repostion the start to the
+				 * reposition the start to the
 				 * next block.
 				 */
 				start = rsm->r_end;
@@ -9563,7 +9563,7 @@ rack_check_bottom_drag(struct tcpcb *tp,
 		 *
 		 * This means we need to boost the b/w in
 		 * addition to any earlier boosting of
-		 * the multipler.
+		 * the multiplier.
 		 */
 		rack->rc_dragged_bottom = 1;
 		rack_validate_multipliers_at_or_above100(rack);
@@ -12126,7 +12126,7 @@ rack_init(struct tcpcb *tp)
 	if (tp->t_fb_ptr == NULL) {
 		/*
 		 * We need to allocate memory but cant. The INP and INP_INFO
-		 * locks and they are recusive (happens during setup. So a
+		 * locks and they are recursive (happens during setup. So a
 		 * scheme to drop the locks fails :(
 		 *
 		 */
@@ -12665,7 +12665,7 @@ rack_timer_audit(struct tcpcb *tp, struct tcp_rack *rack, struct sockbuf *sb)
 				return;
 		} else if (sbavail(&tp->t_inpcb->inp_socket->so_snd) && (tmr_up == PACE_TMR_RXT)) {
 			/*
-			 * if we hit enobufs then we would expect the possiblity
+			 * if we hit enobufs then we would expect the possibility
 			 * of nothing outstanding and the RXT up (and the hptsi timer).
 			 */
 			return;

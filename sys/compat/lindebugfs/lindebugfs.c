@@ -75,6 +75,8 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DEFINE(M_DFSINT, "debugfsint", "Linux debugfs internal");
 
+int __insecure_kmod = 1;
+
 static struct pfs_node *debugfs_root;
 
 #define DM_SYMLINK 0x1
@@ -117,7 +119,7 @@ static int
 debugfs_fill(PFS_FILL_ARGS)
 {
 	struct dentry_meta *d;
-	struct linux_file lf;
+	struct linux_file lf = {};
 	struct seq_file *sf;
 	struct vnode vn;
 	void *buf;
@@ -130,10 +132,15 @@ debugfs_fill(PFS_FILL_ARGS)
 	if ((rc = linux_set_current_flags(curthread, M_NOWAIT)))
 		return (rc);
 	vn.v_data = d->dm_data;
-	buf = uio->uio_iov[0].iov_base;
-	len = min(uio->uio_iov[0].iov_len, uio->uio_resid);
+	if (uio->uio_rw == UIO_READ) {
+		buf = uio->uio_iov[0].iov_base;
+		len = min(uio->uio_iov[0].iov_len, uio->uio_resid);
+	} else {
+		sbuf_finish(sb);
+		buf = sbuf_data(sb);
+		len = sbuf_len(sb);
+	}
 	off = 0;
-	lf.private_data = NULL;
 	rc = d->dm_fops->open(&vn, &lf);
 	if (rc < 0) {
 #ifdef INVARIANTS
@@ -147,12 +154,12 @@ debugfs_fill(PFS_FILL_ARGS)
 		if (d->dm_fops->read)
 			rc = d->dm_fops->read(&lf, NULL, len, &off);
 		else
-			rc = ENODEV;
+			rc = -ENODEV;
 	} else {
 		if (d->dm_fops->write)
 			rc = d->dm_fops->write(&lf, buf, len, &off);
 		else
-			rc = ENODEV;
+			rc = -ENODEV;
 	}
 	if (d->dm_fops->release)
 		d->dm_fops->release(&vn, &lf);

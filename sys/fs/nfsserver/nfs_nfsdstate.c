@@ -676,10 +676,11 @@ nfsrv_getclient(nfsquad_t clientid, int opflags, struct nfsclient **clpp,
 	 * Perform any operations specified by the opflags.
 	 */
 	if (opflags & CLOPS_CONFIRM) {
-		if (((nd->nd_flag & ND_NFSV41) != 0 &&
-		     clp->lc_confirm.lval[0] != confirm.lval[0]) ||
-		    ((nd->nd_flag & ND_NFSV41) == 0 &&
-		     clp->lc_confirm.qval != confirm.qval))
+		if ((nd->nd_flag & ND_NFSV41) != 0 &&
+		     clp->lc_confirm.lval[0] != confirm.lval[0])
+			error = NFSERR_SEQMISORDERED;
+		else if ((nd->nd_flag & ND_NFSV41) == 0 &&
+		     clp->lc_confirm.qval != confirm.qval)
 			error = NFSERR_STALECLIENTID;
 		else if (nfsrv_notsamecredname(nd, clp))
 			error = NFSERR_CLIDINUSE;
@@ -6645,6 +6646,8 @@ nfsv4_setcbsequence(struct nfsrv_descript *nd, struct nfsclient *clp,
 	bcopy(sessionid, tl, NFSX_V4SESSIONID);
 	tl += NFSX_V4SESSIONID / NFSX_UNSIGNED;
 	nd->nd_slotseq = tl;
+	nd->nd_slotid = *slotposp;
+	nd->nd_flag |= ND_HASSLOTID;
 	*tl++ = txdr_unsigned(slotseq);
 	*tl++ = txdr_unsigned(*slotposp);
 	*tl++ = txdr_unsigned(maxslot);

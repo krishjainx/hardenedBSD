@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/imgact_elf.h>
 #include <sys/pax.h>
 #include <sys/proc.h>
+#include <sys/reg.h>
 #include <sys/syscall.h>
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
@@ -68,6 +69,8 @@ static struct sysentvec elf_freebsd_sysvec = {
 	.sv_name	= "FreeBSD ELF32",
 #endif
 	.sv_coredump	= __elfN(coredump),
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = __elfN(prepare_notes),
 	.sv_imgact_try	= NULL,
 	.sv_minsigstksz	= MINSIGSTKSZ,
 	.sv_minuser	= VM_MIN_ADDRESS,
@@ -95,6 +98,8 @@ static struct sysentvec elf_freebsd_sysvec = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 
 static __ElfN(Brandinfo) freebsd_brand_info = {

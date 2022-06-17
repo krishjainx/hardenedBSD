@@ -374,7 +374,7 @@ int nfscl_mtofh(struct nfsrv_descript *, struct nfsfh **,
 int nfscl_postop_attr(struct nfsrv_descript *, struct nfsvattr *, int *,
     void *);
 int nfscl_wcc_data(struct nfsrv_descript *, vnode_t,
-    struct nfsvattr *, int *, int *, void *);
+    struct nfsvattr *, int *, int *, uint64_t *);
 int nfsm_loadattr(struct nfsrv_descript *, struct nfsvattr *);
 int nfscl_request(struct nfsrv_descript *, vnode_t,
          NFSPROC_T *, struct ucred *, void *);
@@ -470,7 +470,7 @@ int nfsrpc_readlink(vnode_t, struct uio *, struct ucred *,
 int nfsrpc_read(vnode_t, struct uio *, struct ucred *, NFSPROC_T *,
     struct nfsvattr *, int *, void *);
 int nfsrpc_write(vnode_t, struct uio *, int *, int *,
-    struct ucred *, NFSPROC_T *, struct nfsvattr *, int *, void *, int);
+    struct ucred *, NFSPROC_T *, struct nfsvattr *, int *, int, int);
 int nfsrpc_mknod(vnode_t, char *, int, struct vattr *, u_int32_t,
     enum vtype, struct ucred *, NFSPROC_T *, struct nfsvattr *,
     struct nfsvattr *, struct nfsfh **, int *, int *, void *);

@@ -134,7 +134,7 @@ static int nfsrpc_readrpc(vnode_t , struct uio *, struct ucred *,
     nfsv4stateid_t *, NFSPROC_T *, struct nfsvattr *, int *, void *);
 static int nfsrpc_writerpc(vnode_t , struct uio *, int *, int *,
     struct ucred *, nfsv4stateid_t *, NFSPROC_T *, struct nfsvattr *, int *,
-    void *);
+    int);
 static int nfsrpc_createv23(vnode_t , char *, int, struct vattr *,
     nfsquad_t, int, struct ucred *, NFSPROC_T *, struct nfsvattr *,
     struct nfsvattr *, struct nfsfh **, int *, int *, void *);
@@ -1060,8 +1060,12 @@ nfsrpc_setclient(struct nfsmount *nmp, struct nfsclclient *clp, int reclaim,
 			 * in-progress RPCs.
 			 */
 			tsep = NULL;
-			if (TAILQ_FIRST(&nmp->nm_sess) != NULL)
+			if (TAILQ_FIRST(&nmp->nm_sess) != NULL) {
 				tsep = NFSMNT_MDSSESSION(nmp);
+				if (tsep->nfsess_defunct == 0)
+					printf("nfsrpc_setclient: "
+					    "nfsess_defunct not set\n");
+			}
 			TAILQ_INSERT_HEAD(&nmp->nm_sess, dsp,
 			    nfsclds_list);
 			/*
@@ -1376,7 +1380,7 @@ nfsrpc_setattrrpc(vnode_t vp, struct vattr *vap,
 	if (error)
 		return (error);
 	if (nd->nd_flag & (ND_NFSV3 | ND_NFSV4))
-		error = nfscl_wcc_data(nd, vp, rnap, attrflagp, NULL, stuff);
+		error = nfscl_wcc_data(nd, vp, rnap, attrflagp, NULL, NULL);
 	if ((nd->nd_flag & (ND_NFSV4 | ND_NOMOREDATA)) == ND_NFSV4 && !error)
 		error = nfsrv_getattrbits(nd, &attrbits, NULL, NULL);
 	if (!(nd->nd_flag & ND_NFSV3) && !nd->nd_repstat && !error)
@@ -1710,7 +1714,7 @@ nfsmout:
 int
 nfsrpc_write(vnode_t vp, struct uio *uiop, int *iomode, int *must_commit,
     struct ucred *cred, NFSPROC_T *p, struct nfsvattr *nap, int *attrflagp,
-    void *stuff, int called_from_strategy)
+    int called_from_strategy, int ioflag)
 {
 	int error, expireret = 0, retrycnt, nostateid;
 	u_int32_t clidrev = 0;
@@ -1754,7 +1758,7 @@ nfsrpc_write(vnode_t vp, struct uio *uiop, int *iomode, int *must_commit,
 			error = 0;
 		else
 			error = nfsrpc_writerpc(vp, uiop, iomode, must_commit,
-			    newcred, &stateid, p, nap, attrflagp, stuff);
+			    newcred, &stateid, p, nap, attrflagp, ioflag);
 		if (error == NFSERR_STALESTATEID)
 			nfscl_initiate_recovery(nmp->nm_clp);
 		if (lckp != NULL)
@@ -1789,18 +1793,19 @@ nfsrpc_write(vnode_t vp, struct uio *uiop, int *iomode, int *must_commit,
 static int
 nfsrpc_writerpc(vnode_t vp, struct uio *uiop, int *iomode,
     int *must_commit, struct ucred *cred, nfsv4stateid_t *stateidp,
-    NFSPROC_T *p, struct nfsvattr *nap, int *attrflagp, void *stuff)
+    NFSPROC_T *p, struct nfsvattr *nap, int *attrflagp, int ioflag)
 {
 	u_int32_t *tl;
 	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
 	struct nfsnode *np = VTONFS(vp);
-	int error = 0, len, tsiz, rlen, commit, committed = NFSWRITE_FILESYNC;
-	int wccflag = 0, wsize;
+	int error = 0, len, rlen, commit, committed = NFSWRITE_FILESYNC;
+	int wccflag = 0;
 	int32_t backup;
-	struct nfsrv_descript nfsd;
-	struct nfsrv_descript *nd = &nfsd;
+	struct nfsrv_descript *nd;
 	nfsattrbit_t attrbits;
-	off_t tmp_off;
+	uint64_t tmp_off;
+	ssize_t tsiz, wsize;
+	bool do_append;
 
 	KASSERT(uiop->uio_iovcnt == 1, ("nfs: writerpc iovcnt > 1"));
 	*attrflagp = 0;
@@ -1812,14 +1817,31 @@ nfsrpc_writerpc(vnode_t vp, struct uio *uiop, int *iomode,
 		return (EFBIG);
 	}
 	wsize = nmp->nm_wsize;
+	do_append = false;
+	if ((ioflag & IO_APPEND) != 0 && NFSHASNFSV4(nmp) && !NFSHASPNFS(nmp))
+		do_append = true;
 	NFSUNLOCKMNT(nmp);
+	nd = malloc(sizeof(*nd), M_TEMP, M_WAITOK);
 	nd->nd_mrep = NULL;	/* NFSv2 sometimes does a write with */
 	nd->nd_repstat = 0;	/* uio_resid == 0, so the while is not done */
 	while (tsiz > 0) {
 		*attrflagp = 0;
 		len = (tsiz > wsize) ? wsize : tsiz;
-		NFSCL_REQSTART(nd, NFSPROC_WRITE, vp);
+		if (do_append)
+			NFSCL_REQSTART(nd, NFSPROC_APPENDWRITE, vp);
+		else
+			NFSCL_REQSTART(nd, NFSPROC_WRITE, vp);
 		if (nd->nd_flag & ND_NFSV4) {
+			if (do_append) {
+				NFSZERO_ATTRBIT(&attrbits);
+				NFSSETBIT_ATTRBIT(&attrbits, NFSATTRBIT_SIZE);
+				nfsrv_putattrbit(nd, &attrbits);
+				NFSM_BUILD(tl, uint32_t *, 2 * NFSX_UNSIGNED +
+				    NFSX_HYPER);
+				*tl++ = txdr_unsigned(NFSX_HYPER);
+				txdr_hyper(uiop->uio_offset, tl); tl += 2;
+				*tl = txdr_unsigned(NFSV4OP_WRITE);
+			}
 			nfsm_stateidtom(nd, stateidp, NFSSTATEID_PUTSTATEID);
 			NFSM_BUILD(tl, u_int32_t *, NFSX_HYPER+2*NFSX_UNSIGNED);
 			txdr_hyper(uiop->uio_offset, tl);
@@ -1878,9 +1900,11 @@ nfsrpc_writerpc(vnode_t vp, struct uio *uiop, int *iomode,
 			*tl = txdr_unsigned(NFSV4OP_GETATTR);
 			(void) nfsrv_putattrbit(nd, &attrbits);
 		}
-		error = nfscl_request(nd, vp, p, cred, stuff);
-		if (error)
+		error = nfscl_request(nd, vp, p, cred, NULL);
+		if (error) {
+			free(nd, M_TEMP);
 			return (error);
+		}
 		if (nd->nd_repstat) {
 			/*
 			 * In case the rpc gets retried, roll
@@ -1895,11 +1919,33 @@ nfsrpc_writerpc(vnode_t vp, struct uio *uiop, int *iomode,
 		}
 		if (nd->nd_flag & (ND_NFSV3 | ND_NFSV4)) {
 			error = nfscl_wcc_data(nd, vp, nap, attrflagp,
-			    &wccflag, stuff);
+			    &wccflag, &tmp_off);
 			if (error)
 				goto nfsmout;
 		}
+		if ((nd->nd_flag & (ND_NFSV4 | ND_NOMOREDATA)) ==
+		    (ND_NFSV4 | ND_NOMOREDATA) &&
+		    nd->nd_repstat == NFSERR_NOTSAME && do_append) {
+			/*
+			 * Verify of the file's size failed, so redo the
+			 * write using the file's size as returned in
+			 * the wcc attributes.
+			 */
+			if (tmp_off + tsiz <= nmp->nm_maxfilesize) {
+				do_append = false;
+				uiop->uio_offset = tmp_off;
+				m_freem(nd->nd_mrep);
+				nd->nd_mrep = NULL;
+				continue;
+			} else
+				nd->nd_repstat = EFBIG;
+		}
 		if (!nd->nd_repstat) {
+			if (do_append) {
+				/* Strip off the Write reply status. */
+				do_append = false;
+				NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			}
 			if (nd->nd_flag & (ND_NFSV3 | ND_NFSV4)) {
 				NFSM_DISSECT(tl, u_int32_t *, 2 * NFSX_UNSIGNED
 					+ NFSX_VERF);
@@ -1964,6 +2010,7 @@ nfsmout:
 	*iomode = committed;
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
+	free(nd, M_TEMP);
 	return (error);
 }
 
@@ -2026,7 +2073,7 @@ nfsrpc_mknod(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 	if (error)
 		return (error);
 	if (nd->nd_flag & ND_NFSV4)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (!nd->nd_repstat) {
 		if (nd->nd_flag & ND_NFSV4) {
 			NFSM_DISSECT(tl, u_int32_t *, 5 * NFSX_UNSIGNED);
@@ -2039,7 +2086,7 @@ nfsrpc_mknod(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 			goto nfsmout;
 	}
 	if (nd->nd_flag & ND_NFSV3)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (!error && nd->nd_repstat)
 		error = nd->nd_repstat;
 nfsmout:
@@ -2163,7 +2210,7 @@ nfsrpc_createv23(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 			goto nfsmout;
 	}
 	if (nd->nd_flag & ND_NFSV3)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (nd->nd_repstat != 0 && error == 0)
 		error = nd->nd_repstat;
 nfsmout:
@@ -2486,7 +2533,7 @@ tryagain:
 				nd->nd_flag |= ND_NOMOREDATA;
 			}
 		}
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	}
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
@@ -2633,8 +2680,7 @@ tryagain:
 			if (*(tl + 1))
 				nd->nd_flag |= ND_NOMOREDATA;
 		}
-		error = nfscl_wcc_data(nd, fdvp, fnap, fattrflagp, NULL,
-		    fstuff);
+		error = nfscl_wcc_data(nd, fdvp, fnap, fattrflagp, NULL, NULL);
 		/* and the second wcc attribute reply. */
 		if ((nd->nd_flag & (ND_NFSV4 | ND_NOMOREDATA)) == ND_NFSV4 &&
 		    !error) {
@@ -2644,7 +2690,7 @@ tryagain:
 		}
 		if (!error)
 			error = nfscl_wcc_data(nd, tdvp, tnap, tattrflagp,
-			    NULL, tstuff);
+			    NULL, NULL);
 	}
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
@@ -2694,7 +2740,7 @@ nfsrpc_link(vnode_t dvp, vnode_t vp, char *name, int namelen,
 		error = nfscl_postop_attr(nd, nap, attrflagp, dstuff);
 		if (!error)
 			error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp,
-			    NULL, dstuff);
+			    NULL, NULL);
 	} else if ((nd->nd_flag & (ND_NFSV4 | ND_NOMOREDATA)) == ND_NFSV4) {
 		/*
 		 * First, parse out the PutFH and Getattr result.
@@ -2707,7 +2753,7 @@ nfsrpc_link(vnode_t dvp, vnode_t vp, char *name, int namelen,
 		/*
 		 * Get the pre-op attributes.
 		 */
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	}
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
@@ -2754,13 +2800,13 @@ nfsrpc_symlink(vnode_t dvp, char *name, int namelen, const char *target,
 	if (error)
 		return (error);
 	if (nd->nd_flag & ND_NFSV4)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if ((nd->nd_flag & ND_NFSV3) && !error) {
 		if (!nd->nd_repstat)
 			error = nfscl_mtofh(nd, nfhpp, nnap, attrflagp);
 		if (!error)
 			error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp,
-			    NULL, dstuff);
+			    NULL, NULL);
 	}
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
@@ -2824,7 +2870,7 @@ nfsrpc_mkdir(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 	if (error)
 		return (error);
 	if (nd->nd_flag & ND_NFSV4)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (!nd->nd_repstat && !error) {
 		if (nd->nd_flag & ND_NFSV4) {
 			NFSM_DISSECT(tl, u_int32_t *, 5 * NFSX_UNSIGNED);
@@ -2842,7 +2888,7 @@ nfsrpc_mkdir(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 		}
 	}
 	if ((nd->nd_flag & ND_NFSV3) && !error)
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
 nfsmout:
@@ -2878,7 +2924,7 @@ nfsrpc_rmdir(vnode_t dvp, char *name, int namelen, struct ucred *cred,
 	if (error)
 		return (error);
 	if (nd->nd_flag & (ND_NFSV3 | ND_NFSV4))
-		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, dstuff);
+		error = nfscl_wcc_data(nd, dvp, dnap, dattrflagp, NULL, NULL);
 	if (nd->nd_repstat && !error)
 		error = nd->nd_repstat;
 	m_freem(nd->nd_mrep);
@@ -3928,7 +3974,7 @@ nfsrpc_commit(vnode_t vp, u_quad_t offset, int cnt, struct ucred *cred,
 	error = nfscl_request(nd, vp, p, cred, stuff);
 	if (error)
 		return (error);
-	error = nfscl_wcc_data(nd, vp, nap, attrflagp, NULL, stuff);
+	error = nfscl_wcc_data(nd, vp, nap, attrflagp, NULL, NULL);
 	if (!error && !nd->nd_repstat) {
 		NFSM_DISSECT(tl, u_int32_t *, NFSX_VERF);
 		NFSLOCKMNT(nmp);
@@ -6723,6 +6769,7 @@ start_writedsmir(void *arg, int pending)
 	    drpc->fhp, drpc->m, drpc->vers, drpc->minorvers, drpc->cred,
 	    drpc->p);
 	drpc->done = 1;
+	crfree(drpc->cred);
 	NFSCL_DEBUG(4, "start_writedsmir: err=%d\n", drpc->err);
 }
 
@@ -6750,7 +6797,7 @@ nfsio_writedsmir(vnode_t vp, int *iomode, int *must_commit,
 	drpc->m = m;
 	drpc->vers = vers;
 	drpc->minorvers = minorvers;
-	drpc->cred = cred;
+	drpc->cred = crhold(cred);
 	drpc->p = p;
 	drpc->inprog = 0;
 	ret = EIO;
@@ -6758,9 +6805,11 @@ nfsio_writedsmir(vnode_t vp, int *iomode, int *must_commit,
 		ret = nfs_pnfsio(start_writedsmir, drpc);
 		NFSCL_DEBUG(4, "nfsio_writedsmir: nfs_pnfsio=%d\n", ret);
 	}
-	if (ret != 0)
+	if (ret != 0) {
 		error = nfsrpc_writedsmir(vp, iomode, &drpc->must_commit,
 		    stateidp, dsp, off, len, fhp, m, vers, minorvers, cred, p);
+		crfree(drpc->cred);
+	}
 	NFSCL_DEBUG(4, "nfsio_writedsmir: error=%d\n", error);
 	return (error);
 }
@@ -6908,6 +6957,7 @@ start_commitds(void *arg, int pending)
 	    drpc->dsp, drpc->fhp, drpc->vers, drpc->minorvers, drpc->cred,
 	    drpc->p);
 	drpc->done = 1;
+	crfree(drpc->cred);
 	NFSCL_DEBUG(4, "start_commitds: err=%d\n", drpc->err);
 }
 
@@ -6930,7 +6980,7 @@ nfsio_commitds(vnode_t vp, uint64_t offset, int cnt, struct nfsclds *dsp,
 	drpc->fhp = fhp;
 	drpc->vers = vers;
 	drpc->minorvers = minorvers;
-	drpc->cred = cred;
+	drpc->cred = crhold(cred);
 	drpc->p = p;
 	drpc->inprog = 0;
 	ret = EIO;
@@ -6938,9 +6988,11 @@ nfsio_commitds(vnode_t vp, uint64_t offset, int cnt, struct nfsclds *dsp,
 		ret = nfs_pnfsio(start_commitds, drpc);
 		NFSCL_DEBUG(4, "nfsio_commitds: nfs_pnfsio=%d\n", ret);
 	}
-	if (ret != 0)
+	if (ret != 0) {
 		error = nfsrpc_commitds(vp, offset, cnt, dsp, fhp, vers,
 		    minorvers, cred, p);
+		crfree(drpc->cred);
+	}
 	NFSCL_DEBUG(4, "nfsio_commitds: error=%d\n", error);
 	return (error);
 }
@@ -7047,11 +7099,12 @@ start_adviseds(void *arg, int pending)
 	    drpc->advise, drpc->dsp, drpc->fhp, drpc->vers, drpc->minorvers,
 	    drpc->cred, drpc->p);
 	drpc->done = 1;
+	crfree(drpc->cred);
 	NFSCL_DEBUG(4, "start_adviseds: err=%d\n", drpc->err);
 }
 
 /*
- * Set up the commit DS mirror call for the pNFS I/O thread.
+ * Set up the advise DS mirror call for the pNFS I/O thread.
  */
 static int
 nfsio_adviseds(vnode_t vp, uint64_t offset, int cnt, int advise,
@@ -7070,7 +7123,7 @@ nfsio_adviseds(vnode_t vp, uint64_t offset, int cnt, int advise,
 	drpc->fhp = fhp;
 	drpc->vers = vers;
 	drpc->minorvers = minorvers;
-	drpc->cred = cred;
+	drpc->cred = crhold(cred);
 	drpc->p = p;
 	drpc->inprog = 0;
 	ret = EIO;
@@ -7078,9 +7131,11 @@ nfsio_adviseds(vnode_t vp, uint64_t offset, int cnt, int advise,
 		ret = nfs_pnfsio(start_adviseds, drpc);
 		NFSCL_DEBUG(4, "nfsio_adviseds: nfs_pnfsio=%d\n", ret);
 	}
-	if (ret != 0)
+	if (ret != 0) {
 		error = nfsrpc_adviseds(vp, offset, cnt, advise, dsp, fhp, vers,
 		    minorvers, cred, p);
+		crfree(drpc->cred);
+	}
 	NFSCL_DEBUG(4, "nfsio_adviseds: error=%d\n", error);
 	return (error);
 }
@@ -8060,7 +8115,7 @@ nfsrpc_createlayout(vnode_t dvp, char *name, int namelen, struct vattr *vap,
 	}
 	if (nd->nd_repstat != 0 && error == 0)
 		error = nd->nd_repstat;
-	if (error == NFSERR_STALECLIENTID || error == NFSERR_BADSESSION)
+	if (error == NFSERR_STALECLIENTID)
 		nfscl_initiate_recovery(owp->nfsow_clp);
 nfsmout:
 	NFSCL_DEBUG(4, "eo nfsrpc_createlayout err=%d\n", error);

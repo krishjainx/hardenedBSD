@@ -96,6 +96,13 @@ const struct pax_feature_entry pax_features[] = {
 			[enable]  = "hbsd.pax.disallow_map32bit",
 		},
 	},
+	{
+		.feature = "insecure_kmod",
+		.extattr = {
+			[disable] = "hbsd.hardening.permit_kmod",
+			[enable] = "hbsd.hardening.forbid_kmod",
+		},
+	},
 	/* Terminating NULL entry, DO NOT REMOVE! */
 	{NULL, {0, 0}}
 };

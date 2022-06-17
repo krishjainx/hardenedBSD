@@ -30,7 +30,7 @@ LIB32CPUFLAGS=	-march=${COMPAT_CPUTYPE}
 .endif
 .if ${COMPAT_COMPILER_TYPE} == gcc
 .else
-LIB32CPUFLAGS+=	-target x86_64-unknown-freebsd13.0
+LIB32CPUFLAGS+=	-target x86_64-unknown-freebsd13.1
 .endif
 LIB32CPUFLAGS+=	-m32
 LIB32_MACHINE=	i386
@@ -51,7 +51,7 @@ LIB32CPUFLAGS=	-mcpu=${COMPAT_CPUTYPE}
 .if ${COMPAT_COMPILER_TYPE} == "gcc"
 LIB32CPUFLAGS+=	-m32
 .else
-LIB32CPUFLAGS+=	-target powerpc-unknown-freebsd13.0
+LIB32CPUFLAGS+=	-target powerpc-unknown-freebsd13.1
 .endif
 
 LIB32_MACHINE=	powerpc
@@ -69,9 +69,9 @@ LIB32CPUFLAGS=	-march=${COMPAT_CPUTYPE}
 .endif
 .else
 .if ${COMPAT_ARCH:Mmips64el*} != ""
-LIB32CPUFLAGS=  -target mipsel-unknown-freebsd13.0
+LIB32CPUFLAGS=  -target mipsel-unknown-freebsd13.1
 .else
-LIB32CPUFLAGS=  -target mips-unknown-freebsd13.0
+LIB32CPUFLAGS=  -target mips-unknown-freebsd13.1
 .endif
 .endif
 LIB32CPUFLAGS+= -mabi=32
@@ -109,9 +109,9 @@ LIBSOFTWMAKEFLAGS=        -DCOMPAT_SOFTFP
 # In the program linking case, select LIBCOMPAT
 .if defined(NEED_COMPAT)
 .ifndef HAS_COMPAT
-.warning NEED_COMPAT defined, but no LIBCOMPAT is available (COMPAT_ARCH == ${COMPAT_ARCH}
+.warning NEED_COMPAT defined, but no LIBCOMPAT is available (COMPAT_ARCH == ${COMPAT_ARCH})
 .elif !${HAS_COMPAT:M${NEED_COMPAT}} && ${NEED_COMPAT} != "any"
-.error NEED_COMPAT (${NEED_COMPAT}) defined, but not in HAS_COMPAT ($HAS_COMPAT)
+.error NEED_COMPAT (${NEED_COMPAT}) defined, but not in HAS_COMPAT (${HAS_COMPAT})
 .elif ${NEED_COMPAT} == "any"
 .endif
 .ifdef WANT_COMPAT
@@ -127,7 +127,6 @@ _LIBCOMPAT:=	${HAS_COMPAT:[1]}
 _LIBCOMPAT:=	${WANT_COMPAT}
 .endif
 .endif
-
 
 # -------------------------------------------------------------------
 # Generic code for each type.

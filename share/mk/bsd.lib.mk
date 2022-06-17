@@ -106,13 +106,6 @@ CFLAGS+=	-mretpoline
 CXXFLAGS+=	-mretpoline
 .endif
 
-.if defined(MK_UNINIT_AUTOINIT) && ${MK_UNINIT_AUTOINIT} != "no"
-CFLAGS+=	-ftrivial-auto-var-init=zero
-CFLAGS+=	-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
-CXXFLAGS+=	-ftrivial-auto-var-init=zero
-CXXFLAGS+=	-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
-.endif
-
 .if defined(MK_PIE)
 # Ports will not have MK_PIE defined and the following logic requires
 # it be defined.

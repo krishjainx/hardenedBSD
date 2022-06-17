@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2015,2020 HardenedBSD
+# Copyright (c) 2015,2020,2021 HardenedBSD
 # Author: Shawn Webb <shawn.webb@hardenedbsd.org>
 #
 # This work originally sponsored by G2, Inc
@@ -43,6 +43,7 @@ dnssec_key="/usr/share/keys/hbsd-update/trusted/dnssec.key"
 revoke_dir="/usr/share/keys/hbsd-update/revoked"
 
 fetchonly=0
+downloadonly=0
 ignorever=0
 install_src=0
 integriforce=1
@@ -118,6 +119,7 @@ usage() {
 	debug_print "\t-c config\tUse a non-default config file"
 	debug_print "\t-d\t\tDo not use DNSSEC validation"
 	debug_print "\t-f\t\tFetch only"
+	debug_print "\t-F\t\tDownload only"
 	debug_print "\t-h\t\tShow this help screen"
 	debug_print "\t-I\t\tInteractively remove obsolete files"
 	debug_print "\t-i\t\tIgnore version check"
@@ -128,9 +130,9 @@ usage() {
 	debug_print "\t-n\t\tDo not install kernel"
 	debug_print "\t-o\t\tDo not remove obsolete files/directories"
 	debug_print "\t-R\t\tUse system nameserver for the DNS-based version check"
-	debug_print "\t-r path\tBootstrap root directory <path>"
+	debug_print "\t-r path\t\tBootstrap root directory <path>"
 	debug_print "\t-s\t\tInstall sources (if present)"
-	debug_print "\t-t tmpdir\tTemporary directory"
+	debug_print "\t-t tmpdir\tTemporary directory (example: /root/tmp)"
 	debug_print "\t-U\t\tAllow unsigned updates"
 	debug_print "\t-v version\tUse a different version"
 	debug_print "\t-V\t\tVerbose output"
@@ -143,6 +145,10 @@ sigint_handler() {
 	destroybe=0
 	if [ ! -z "${1}" ]; then
 		destroybe=${1}
+	fi
+
+	if [ ${downloadonly} = 1 ]; then
+		exit 0
 	fi
 
 	debug_print "[-] Caught SIGINT. Cleaning up."
@@ -396,11 +402,16 @@ fetch_update() {
 		fi
 
 		if [ ${verbose} -gt 0 ]; then
-			debug_print "[*] Verified hash: ${filehash} = ${pubhash}"
+			debug_print "[*] Verified hash: ${filehash}\n  [+] Remote hash: ${pubhash}"
 		fi
 	fi
 
-	# Step 3: Untar the update archive
+	# Step 3: Check whether to continue
+	if [ ${downloadonly} = 1 ]; then
+		exit 0
+	fi
+
+	# Step 4: Untar the update archive
 	${TAR} -xf ${tmpdir}/update.tar \
 		-C ${tmpdir}
 	res=${?}
@@ -422,7 +433,7 @@ check_pubkey_validity() {
 
 	updatehash=$(${SHA256} -q ${tmpdir}/pubkey.pem)
 
-	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f); do
+	for f in $(${FIND} ${mountpoint}/usr/share/keys/hbsd-update/revoked -type f -print 2>/dev/null); do
 		filehash=$(${SHA256} -q ${f})
 		if [ "${filehash}" = "${updatehash}" ]; then
 			echo "[-] This update has been signed with a revoked key." >&2
@@ -634,12 +645,13 @@ apply_base() {
 	dirs="/bin /sbin /lib /libexec /usr/bin /usr/sbin /usr/lib"
 
 	if [ ${verbose} -gt 0 ]; then
-		debug_print "[*] Applying base"
+		debug_print "\n[*] Applying base"
 	fi
 
 	for dir in ${dirs}; do
 		if [ -d ${mountpoint}/${dir} ]; then
-			${CHFLAGS} -R noschg ${mountpoint}/${dir}
+			#FIX-ME: empty:  flags ("schg" is not "none"
+			${CHFLAGS} -R noschg ${mountpoint}/${dir} 2> /dev/null
 			res=${?}
 			if [ ${res} -gt 0 ]; then
 				return ${res}
@@ -650,6 +662,7 @@ apply_base() {
 	${TAR} -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		--exclude ./boot \
+		--exclude ./boot/efi \
 		-C ${mountpoint}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -658,7 +671,7 @@ apply_base() {
 
 	boottmp=$(env TMPDIR=${tmpdir} ${MKTEMP} -d)
 	[ ! -d ${mountpoint}/boot ] && mkdir ${mountpoint}/boot
-	${TAR} -xpf ${tmpdir}/base.txz --include ./boot -C ${boottmp}
+	${TAR} -xpf ${tmpdir}/base.txz --include ./boot --exclude ./boot/efi -C ${boottmp}
 	${TAR} -c -C ${boottmp}/boot -f - . | \
 		(cd ${mountpoint}/boot; ${TAR} -xpf -)
 	res=${?}
@@ -889,7 +902,7 @@ remove_obsolete() {
 		for file in $(cat ${tmpdir}/ObsoleteFiles.txt); do
 			if [ -f ${mountpoint}/${file} ]; then
 				if [ ${interactive} -gt 0 ]; then
-					read -p "Remove ${mountpoint}/${file} (Y/n)? " val
+					read -p "Remove ${mountpoint}${file} (Y/n)? " val
 					case "${val}" in
 						[Nn]*)
 							continue
@@ -898,7 +911,7 @@ remove_obsolete() {
 				fi
 
 				if [ ${verbose} -gt 0 ]; then
-					debug_print "    [+] Removing ${mountpoint}/${file}"
+					debug_print "    [+] Removing ${mountpoint}${file}"
 				fi
 
 				rm -f ${mountpoint}/${file}
@@ -910,7 +923,7 @@ remove_obsolete() {
 		for file in $(cat ${tmpdir}/ObsoleteDirs.txt); do
 			if [ -e ${mountpoint}/${file} ]; then
 				if [ ${verbose} -gt 0 ]; then
-					debug_print "    [+] Removing ${mountpoint}/${file}"
+					debug_print "    [+] Removing ${mountpoint}${file}"
 				fi
 
 				rm -rf ${mountpoint}/${file}
@@ -1119,7 +1132,7 @@ main() {
 	local_kernel=""
 	no_kernel=0
 
-	while getopts '46dfhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
+	while getopts '46dfFhimnosBCDITUVb:c:j:K:k:r:Rt:u:v:' opt; do
 		case "${opt}" in
 			4)
 				force_ipv4="yes"
@@ -1147,6 +1160,9 @@ main() {
 				;;
 			f)
 				fetchonly=1
+				;;
+			F)
+				downloadonly=1
 				;;
 			i)
 				ignorever=1
@@ -1248,6 +1264,12 @@ main() {
 		fi
 		cleanup
 		exit 1
+	fi
+
+	if [ ${downloadonly} = 1 ]; then
+		debug_print "[*] Download the latest update in ${tmpdir}"
+		fetch_update
+		exit 0
 	fi
 
 	check_version

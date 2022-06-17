@@ -32,6 +32,7 @@
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/elf.h>
 #include <sys/exec.h>
 #include <sys/imgact.h>
 #include <sys/malloc.h>
@@ -39,6 +40,7 @@
 #include <sys/proc.h>
 #include <sys/namei.h>
 #include <sys/fcntl.h>
+#include <sys/reg.h>
 #include <sys/sysent.h>
 #include <sys/imgact_elf.h>
 #include <sys/jail.h>
@@ -72,6 +74,9 @@ struct sysentvec elf64_freebsd_sysvec_v1 = {
 	.sv_szsigcode	= &szsigcode64,
 	.sv_name	= "FreeBSD ELF64",
 	.sv_coredump	= __elfN(coredump),
+	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = __elfN(prepare_notes),
 	.sv_imgact_try	= NULL,
 	.sv_minsigstksz	= MINSIGSTKSZ,
 	.sv_minuser	= VM_MIN_ADDRESS,
@@ -99,6 +104,8 @@ struct sysentvec elf64_freebsd_sysvec_v1 = {
 	.sv_hwcap2	= &cpu_features2,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 
 struct sysentvec elf64_freebsd_sysvec_v2 = {
@@ -111,6 +118,9 @@ struct sysentvec elf64_freebsd_sysvec_v2 = {
 	.sv_szsigcode	= &szsigcode64,
 	.sv_name	= "FreeBSD ELF64 V2",
 	.sv_coredump	= __elfN(coredump),
+	.sv_elf_core_osabi = ELFOSABI_FREEBSD,
+	.sv_elf_core_abi_vendor = FREEBSD_ABI_VENDOR,
+	.sv_elf_core_prepare_notes = __elfN(prepare_notes),
 	.sv_imgact_try	= NULL,
 	.sv_minsigstksz	= MINSIGSTKSZ,
 	.sv_minuser	= VM_MIN_ADDRESS,
@@ -139,6 +149,8 @@ struct sysentvec elf64_freebsd_sysvec_v2 = {
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 	.sv_onexec_old	= exec_onexec_old,
 	.sv_onexit	= exit_onexit,
+	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
+	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
 };
 
 static boolean_t ppc64_elfv1_header_match(struct image_params *params,

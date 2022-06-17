@@ -197,7 +197,7 @@ extern void	nd6_setmtu(struct ifnet *);
  *  - BRIDGE_RT_LOCK, for any change to bridge_rtnodes
  *  - BRIDGE_LOCK, for any other change
  *
- * The BRIDGE_LOCK is a sleepable lock, because it is held accross ioctl()
+ * The BRIDGE_LOCK is a sleepable lock, because it is held across ioctl()
  * calls to bridge member interfaces and these ioctl()s can sleep.
  * The BRIDGE_RT_LOCK is a non-sleepable mutex, because it is sometimes
  * required while we're in NET_EPOCH and then we're not allowed to sleep.
@@ -2164,7 +2164,7 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 				used = 1;
 				mc = m;
 			} else {
-				mc = m_copypacket(m, M_NOWAIT);
+				mc = m_dup(m, M_NOWAIT);
 				if (mc == NULL) {
 					if_inc_counter(bifp, IFCOUNTER_OERRORS, 1);
 					continue;
@@ -2725,7 +2725,7 @@ bridge_span(struct bridge_softc *sc, struct mbuf *m)
 		if ((dst_if->if_drv_flags & IFF_DRV_RUNNING) == 0)
 			continue;
 
-		mc = m_copypacket(m, M_NOWAIT);
+		mc = m_dup(m, M_NOWAIT);
 		if (mc == NULL) {
 			if_inc_counter(sc->sc_ifp, IFCOUNTER_OERRORS, 1);
 			continue;

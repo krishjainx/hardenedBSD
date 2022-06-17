@@ -61,20 +61,29 @@ FEATURE(hbsd_hardening, "Various hardening features.");
 static int pax_procfs_harden_global = PAX_FEATURE_SIMPLE_ENABLED;
 static int pax_randomize_pids_global = PAX_FEATURE_SIMPLE_ENABLED;
 static int pax_init_hardening_global = PAX_FEATURE_SIMPLE_ENABLED;
+static int pax_insecure_kmod_global = PAX_FEATURE_SIMPLE_DISABLED;
 #else
 static int pax_procfs_harden_global = PAX_FEATURE_SIMPLE_DISABLED;
 static int pax_randomize_pids_global = PAX_FEATURE_SIMPLE_DISABLED;
 static int pax_init_hardening_global = PAX_FEATURE_SIMPLE_DISABLED;
+static int pax_insecure_kmod_global = PAX_FEATURE_SIMPLE_ENABLED;
 #endif
 
 TUNABLE_INT("hardening.procfs_harden", &pax_procfs_harden_global);
 TUNABLE_INT("hardening.randomize_pids", &pax_randomize_pids_global);
+TUNABLE_INT("hardening.insecure_kmod", &pax_insecure_kmod_global);
 
 #ifdef PAX_SYSCTLS
 SYSCTL_HBSD_2STATE(pax_procfs_harden_global, pr_hbsd.hardening.procfs_harden,
     _hardening, procfs_harden,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE,
     "Harden procfs, disabling write of /proc/pid/mem");
+#endif
+
+#ifdef PAX_SYSCTLS
+SYSCTL_HBSD_2STATE_GLOBAL(pax_insecure_kmod_global, _hardening, insecure_kmod,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE,
+    "Enable loading of inecure kernel modules");
 #endif
 
 #if 0
@@ -84,6 +93,13 @@ SYSCTL_JAIL_PARAM(hardening, procfs_harden,
     "disabling write of /proc/pid/mem");
 #endif
 #endif
+
+bool
+pax_insecure_kmod(void)
+{
+
+	return (pax_insecure_kmod_global == PAX_FEATURE_SIMPLE_ENABLED);
+}
 
 static void
 pax_hardening_sysinit(void)

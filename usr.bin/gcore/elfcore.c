@@ -89,8 +89,6 @@ typedef struct reg32   elfcore_gregset_t;
 typedef struct prpsinfo32 elfcore_prpsinfo_t;
 typedef struct prstatus32 elfcore_prstatus_t;
 typedef struct ptrace_lwpinfo32 elfcore_lwpinfo_t;
-static void elf_convert_gregset(elfcore_gregset_t *rd, struct reg *rs);
-static void elf_convert_fpregset(elfcore_fpregset_t *rd, struct fpreg *rs);
 static void elf_convert_lwpinfo(struct ptrace_lwpinfo32 *pld,
     struct ptrace_lwpinfo *pls);
 #else
@@ -99,8 +97,6 @@ typedef gregset_t  elfcore_gregset_t;
 typedef prpsinfo_t elfcore_prpsinfo_t;
 typedef prstatus_t elfcore_prstatus_t;
 typedef struct ptrace_lwpinfo elfcore_lwpinfo_t;
-#define elf_convert_gregset(d,s)	*d = *s
-#define elf_convert_fpregset(d,s)	*d = *s
 #define	elf_convert_lwpinfo(d,s)	*d = *s
 #endif
 
@@ -111,14 +107,9 @@ static void cb_size_segment(struct map_entry *, void *);
 static void each_dumpable_segment(struct map_entry *, segment_callback,
     void *closure);
 static void elf_detach(void);	/* atexit() handler. */
-static void *elf_note_fpregset(void *, size_t *);
 static void *elf_note_prpsinfo(void *, size_t *);
-static void *elf_note_prstatus(void *, size_t *);
 static void *elf_note_thrmisc(void *, size_t *);
 static void *elf_note_ptlwpinfo(void *, size_t *);
-#if defined(__arm__)
-static void *elf_note_arm_vfp(void *, size_t *);
-#endif
 #if defined(__i386__) || defined(__amd64__)
 static void *elf_note_x86_xstate(void *, size_t *);
 #endif
@@ -139,6 +130,7 @@ static void elf_puthdr(int, pid_t, struct map_entry *, void *, size_t, size_t,
     size_t, int);
 static void elf_putnote(int, notefunc_t, void *, struct sbuf *);
 static void elf_putnotes(pid_t, struct sbuf *, size_t *);
+static void elf_putregnote(int, lwpid_t, struct sbuf *);
 static void freemap(struct map_entry *);
 static struct map_entry *readmap(pid_t);
 static void *procstat_sysctl(void *, int, size_t, size_t *sizep);
@@ -242,7 +234,7 @@ elf_coredump(int efd, int fd, pid_t pid)
 	/* Put notes. */
 	elf_putnotes(pid, sb, &notesz);
 	/* Align up to a page boundary for the program segments. */
-	sbuf_end_section(sb, -1, PAGE_SIZE, 0);
+	sbuf_end_section(sb, -1, getpagesize(), 0);
 	if (sbuf_finish(sb) != 0)
 		err(1, "sbuf_finish");
 	hdr = sbuf_data(sb);
@@ -303,15 +295,17 @@ cb_put_phdr(struct map_entry *entry, void *closure)
 {
 	struct phdr_closure *phc = (struct phdr_closure *)closure;
 	Elf_Phdr *phdr = phc->phdr;
+	size_t page_size;
 
-	phc->offset = round_page(phc->offset);
+	page_size = getpagesize();
+	phc->offset = roundup2(phc->offset, page_size);
 
 	phdr->p_type = PT_LOAD;
 	phdr->p_offset = phc->offset;
 	phdr->p_vaddr = entry->start;
 	phdr->p_paddr = 0;
 	phdr->p_filesz = phdr->p_memsz = entry->end - entry->start;
-	phdr->p_align = PAGE_SIZE;
+	phdr->p_align = page_size;
 	phdr->p_flags = 0;
 	if (entry->protection & VM_PROT_READ)
 		phdr->p_flags |= PF_R;
@@ -376,14 +370,18 @@ elf_putnotes(pid_t pid, struct sbuf *sb, size_t *sizep)
 	elf_putnote(NT_PRPSINFO, elf_note_prpsinfo, &pid, sb);
 
 	for (i = 0; i < threads; ++i) {
-		elf_putnote(NT_PRSTATUS, elf_note_prstatus, tids + i, sb);
-		elf_putnote(NT_FPREGSET, elf_note_fpregset, tids + i, sb);
+		elf_putregnote(NT_PRSTATUS, tids[i], sb);
+		elf_putregnote(NT_FPREGSET, tids[i], sb);
 		elf_putnote(NT_THRMISC, elf_note_thrmisc, tids + i, sb);
 		elf_putnote(NT_PTLWPINFO, elf_note_ptlwpinfo, tids + i, sb);
-#if defined(__arm__)
-		elf_putnote(NT_ARM_VFP, elf_note_arm_vfp, tids + i, sb);
+#if defined(__aarch64__) || defined(__arm__)
+		elf_putregnote(NT_ARM_TLS, tids[i], sb);
+#endif
+#if (defined(ELFCORE_COMPAT_32) && defined(__aarch64__)) || defined(__arm__)
+		elf_putregnote(NT_ARM_VFP, tids[i], sb);
 #endif
 #if defined(__i386__) || defined(__amd64__)
+		elf_putregnote(NT_X86_SEGBASES, tids[i], sb);
 		elf_putnote(NT_X86_XSTATE, elf_note_x86_xstate, tids + i, sb);
 #endif
 #if defined(__powerpc__)
@@ -412,6 +410,40 @@ elf_putnotes(pid_t pid, struct sbuf *sb, size_t *sizep)
 		err(1, "sbuf_end_section");
 	free(tids);
 	*sizep = size;
+}
+
+/*
+ * Emit one register set note section to sbuf.
+ */
+static void
+elf_putregnote(int type, lwpid_t tid, struct sbuf *sb)
+{
+	Elf_Note note;
+	struct iovec iov;
+	ssize_t old_len;
+
+	iov.iov_base = NULL;
+	iov.iov_len = 0;
+	if (ptrace(PT_GETREGSET, tid, (void *)&iov, type) != 0)
+		return;
+	iov.iov_base = calloc(1, iov.iov_len);
+	if (iov.iov_base == NULL)
+		errx(1, "out of memory");
+	if (ptrace(PT_GETREGSET, tid, (void *)&iov, type) != 0)
+		errx(1, "failed to fetch register set %d", type);
+
+	note.n_namesz = 8; /* strlen("FreeBSD") + 1 */
+	note.n_descsz = iov.iov_len;
+	note.n_type = type;
+
+	sbuf_bcat(sb, &note, sizeof(note));
+	sbuf_start_section(sb, &old_len);
+	sbuf_bcat(sb, "FreeBSD", note.n_namesz);
+	sbuf_end_section(sb, old_len, sizeof(Elf32_Size), 0);
+	sbuf_start_section(sb, &old_len);
+	sbuf_bcat(sb, iov.iov_base, iov.iov_len);
+	sbuf_end_section(sb, old_len, sizeof(Elf32_Size), 0);
+	free(iov.iov_base);
 }
 
 /*
@@ -652,48 +684,6 @@ elf_note_prpsinfo(void *arg, size_t *sizep)
 
 	*sizep = sizeof(*psinfo);
 	return (psinfo);
-}
-
-static void *
-elf_note_prstatus(void *arg, size_t *sizep)
-{
-	lwpid_t tid;
-	elfcore_prstatus_t *status;
-	struct reg greg;
-
-	tid = *(lwpid_t *)arg;
-	status = calloc(1, sizeof(*status));
-	if (status == NULL)
-		errx(1, "out of memory");
-	status->pr_version = PRSTATUS_VERSION;
-	status->pr_statussz = sizeof(*status);
-	status->pr_gregsetsz = sizeof(elfcore_gregset_t);
-	status->pr_fpregsetsz = sizeof(elfcore_fpregset_t);
-	status->pr_osreldate = __FreeBSD_version;
-	status->pr_pid = tid;
-	ptrace(PT_GETREGS, tid, (void *)&greg, 0);
-	elf_convert_gregset(&status->pr_reg, &greg);
-
-	*sizep = sizeof(*status);
-	return (status);
-}
-
-static void *
-elf_note_fpregset(void *arg, size_t *sizep)
-{
-	lwpid_t tid;
-	elfcore_fpregset_t *fpregset;
-	fpregset_t fpreg;
-
-	tid = *(lwpid_t *)arg;
-	fpregset = calloc(1, sizeof(*fpregset));
-	if (fpregset == NULL)
-		errx(1, "out of memory");
-	ptrace(PT_GETFPREGS, tid, (void *)&fpreg, 0);
-	elf_convert_fpregset(fpregset, &fpreg);
-
-	*sizep = sizeof(*fpregset);
-	return (fpregset);
 }
 
 static void *

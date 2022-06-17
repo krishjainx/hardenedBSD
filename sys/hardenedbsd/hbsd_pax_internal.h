@@ -65,6 +65,36 @@
 		return (0);						\
 	}
 
+#define SYSCTL_HBSD_2STATE_GLOBAL(g_status, parent, name, access, desc)	\
+	static int sysctl ## parent ## _ ## name (SYSCTL_HANDLER_ARGS);	\
+	SYSCTL_PROC(parent, OID_AUTO, name, access, 			\
+	    NULL, 0, sysctl ## parent ## _ ## name, "I",		\
+	    desc " status: "				\
+	    "0 - disabled, "						\
+	    "1 - enabled");						\
+									\
+	static int							\
+	sysctl ## parent ## _ ## name (SYSCTL_HANDLER_ARGS)		\
+	{								\
+		int err, val;						\
+									\
+		val = g_status;						\
+		err = sysctl_handle_int(oidp, &val, sizeof(int), req);	\
+		if (err || (req->newptr == NULL))			\
+			return (err);					\
+									\
+		switch (val) {						\
+		case PAX_FEATURE_SIMPLE_DISABLED:			\
+		case PAX_FEATURE_SIMPLE_ENABLED:			\
+			g_status = val;					\
+			break;						\
+		default:						\
+			return (EINVAL);				\
+		}							\
+									\
+		return (0);						\
+	}
+
 #define SYSCTL_HBSD_4STATE(g_status, pr_status, parent, name, access)	\
 	static int sysctl ## parent ## _ ## name (SYSCTL_HANDLER_ARGS);	\
 	SYSCTL_PROC(parent, OID_AUTO, name, access, 			\

@@ -2152,7 +2152,7 @@ pksignal(struct proc *p, int sig, ksiginfo_t *ksi)
 
 /* Utility function for finding a thread to send signal event to. */
 int
-sigev_findtd(struct proc *p ,struct sigevent *sigev, struct thread **ttd)
+sigev_findtd(struct proc *p, struct sigevent *sigev, struct thread **ttd)
 {
 	struct thread *td;
 
@@ -3460,9 +3460,9 @@ sigexit(struct thread *td, int sig)
 		if (coredump(td) == 0)
 			sig |= WCOREFLAG;
 		if (kern_logsigexit)
-			log(LOG_INFO,
-			    "pid %d (%s), jid %d, uid %d: exited on "
-			    "signal %d%s\n", p->p_pid, p->p_comm,
+			pax_log_internal(p, PAX_LOG_DEFAULT,
+			    "%s (jid %d, uid %d) exited on "
+			    "signal %d%s", p->p_comm,
 			    p->p_ucred->cr_prison->pr_id,
 			    td->td_ucred->cr_uid,
 			    sig &~ WCOREFLAG,

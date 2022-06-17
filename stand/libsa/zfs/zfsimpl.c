@@ -139,6 +139,7 @@ static const char *features_for_read[] = {
 	"com.intel:allocation_classes",
 	"org.freebsd:zstd_compress",
 	"com.delphix:bookmark_written",
+	"com.delphix:head_errlog",
 	NULL
 };
 
@@ -2347,6 +2348,19 @@ dnode_read(const spa_t *spa, const dnode_phys_t *dnode, off_t offset,
 		printf("ZFS: I/O error - blocks larger than %llu are not "
 		    "supported\n", SPA_MAXBLOCKSIZE);
 		return (EIO);
+	}
+
+	/*
+	 * Handle odd block sizes, mirrors dmu_read_impl().  Data can't exist
+	 * past the first block, so we'll clip the read to the portion of the
+	 * buffer within bsize and zero out the remainder.
+	 */
+	if (dnode->dn_maxblkid == 0) {
+		size_t newbuflen;
+
+		newbuflen = offset > bsize ? 0 : MIN(buflen, bsize - offset);
+		bzero((char *)buf + newbuflen, buflen - newbuflen);
+		buflen = newbuflen;
 	}
 
 	/*

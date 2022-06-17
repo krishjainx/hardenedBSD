@@ -43,6 +43,8 @@ __FBSDID("$FreeBSD$");
 #include <compat/linux/linux_mib.h>
 #include <compat/linux/linux_util.h>
 
+int __insecure_kmod = 1;
+
 SET_DECLARE(linux_device_handler_set, struct linux_device_handler);
 
 TAILQ_HEAD(, linux_ioctl_handler_element) linux_ioctl_handlers =

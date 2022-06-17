@@ -33,6 +33,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
+#include <sys/bio.h>
 #include <sys/condvar.h>
 #include <sys/conf.h>
 #include <sys/endian.h>
@@ -1060,6 +1061,24 @@ iscsi_pdu_handle_task_response(struct icl_pdu *response)
 }
 
 static void
+iscsi_pdu_get_data_csio(struct icl_pdu *response, size_t pdu_offset,
+    struct ccb_scsiio *csio, size_t oreceived, size_t data_segment_len)
+{
+	switch (csio->ccb_h.flags & CAM_DATA_MASK) {
+	case CAM_DATA_BIO:
+		icl_pdu_get_bio(response, pdu_offset,
+		    (struct bio *)csio->data_ptr, oreceived, data_segment_len);
+		break;
+	case CAM_DATA_VADDR:
+		icl_pdu_get_data(response, pdu_offset,
+		    csio->data_ptr + oreceived, data_segment_len);
+		break;
+	default:
+		__assert_unreachable();
+	}
+}
+
+static void
 iscsi_pdu_handle_data_in(struct icl_pdu *response)
 {
 	struct iscsi_bhs_data_in *bhsdi;
@@ -1137,7 +1156,7 @@ iscsi_pdu_handle_data_in(struct icl_pdu *response)
 		iscsi_outstanding_remove(is, io);
 	ISCSI_SESSION_UNLOCK(is);
 
-	icl_pdu_get_data(response, 0, csio->data_ptr + oreceived, data_segment_len);
+	iscsi_pdu_get_data_csio(response, 0, csio, oreceived, data_segment_len);
 
 	/*
 	 * XXX: Check F.
@@ -1188,6 +1207,22 @@ iscsi_pdu_handle_logout_response(struct icl_pdu *response)
 	icl_pdu_free(response);
 }
 
+static int
+iscsi_pdu_append_data_csio(struct icl_pdu *request, struct ccb_scsiio *csio,
+    size_t off, size_t len, int how)
+{
+	switch (csio->ccb_h.flags & CAM_DATA_MASK) {
+	case CAM_DATA_BIO:
+		return (icl_pdu_append_bio(request,
+			(struct bio *)csio->data_ptr, off, len, how));
+	case CAM_DATA_VADDR:
+		return (icl_pdu_append_data(request, csio->data_ptr + off, len,
+		    how));
+	default:
+		__assert_unreachable();
+	}
+}
+
 static void
 iscsi_pdu_handle_r2t(struct icl_pdu *response)
 {
@@ -1229,7 +1264,7 @@ iscsi_pdu_handle_r2t(struct icl_pdu *response)
 	off = ntohl(bhsr2t->bhsr2t_buffer_offset);
 	if (off > csio->dxfer_len) {
 		ISCSI_SESSION_WARN(is, "target requested invalid offset "
-		    "%zd, buffer is is %d; reconnecting", off, csio->dxfer_len);
+		    "%zd, buffer is %d; reconnecting", off, csio->dxfer_len);
 		icl_pdu_free(response);
 		iscsi_session_reconnect(is);
 		return;
@@ -1282,8 +1317,8 @@ iscsi_pdu_handle_r2t(struct icl_pdu *response)
 		    bhsr2t->bhsr2t_target_transfer_tag;
 		bhsdo->bhsdo_datasn = htonl(datasn);
 		bhsdo->bhsdo_buffer_offset = htonl(off);
-		error = icl_pdu_append_data(request, csio->data_ptr + off, len,
-		    M_NOWAIT);
+		error = iscsi_pdu_append_data_csio(request, csio, off, len,
+		    M_NOWAIT | ICL_NOCOPY);
 		if (error != 0) {
 			ISCSI_SESSION_WARN(is, "failed to allocate memory; "
 			    "reconnecting");
@@ -2387,7 +2422,8 @@ iscsi_action_scsiio(struct iscsi_session *is, union ccb *ccb)
 			len = is->is_conn->ic_max_send_data_segment_length;
 		}
 
-		error = icl_pdu_append_data(request, csio->data_ptr, len, M_NOWAIT);
+		error = iscsi_pdu_append_data_csio(request, csio, 0, len,
+		    M_NOWAIT | ICL_NOCOPY);
 		if (error != 0) {
 			iscsi_outstanding_remove(is, io);
 			icl_pdu_free(request);

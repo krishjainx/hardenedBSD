@@ -1921,7 +1921,7 @@ linux_capset(struct thread *td, struct linux_capset_args *uap)
 int
 linux_prctl(struct thread *td, struct linux_prctl_args *args)
 {
-	int error = 0, max_size;
+	int error = 0, max_size, arg;
 	struct proc *p = td->td_proc;
 	char comm[LINUX_MAX_COMM_LEN];
 	int pdeath_signal, trace_state;
@@ -2052,8 +2052,10 @@ linux_prctl(struct thread *td, struct linux_prctl_args *args)
 		error = EINVAL;
 		break;
 	case LINUX_PR_SET_NO_NEW_PRIVS:
-		linux_msg(td, "unsupported prctl PR_SET_NO_NEW_PRIVS");
-		error = EINVAL;
+		arg = args->arg2 == 1 ?
+		    PROC_NO_NEW_PRIVS_ENABLE : PROC_NO_NEW_PRIVS_DISABLE;
+		error = kern_procctl(td, P_PID, p->p_pid,
+		    PROC_NO_NEW_PRIVS_CTL, &arg);
 		break;
 	case LINUX_PR_SET_PTRACER:
 		linux_msg(td, "unsupported prctl PR_SET_PTRACER");
@@ -2170,6 +2172,11 @@ linux_sched_getparam(struct thread *td,
 	return (error);
 }
 
+static const struct cpuset_copy_cb copy_set = {
+	.cpuset_copyin = copyin,
+	.cpuset_copyout = copyout
+};
+
 /*
  * Get affinity of a process.
  */
@@ -2190,7 +2197,8 @@ linux_sched_getaffinity(struct thread *td,
 	PROC_UNLOCK(tdt->td_proc);
 
 	error = kern_cpuset_getaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID,
-	    tdt->td_tid, sizeof(cpuset_t), (cpuset_t *)args->user_mask_ptr);
+	    tdt->td_tid, sizeof(cpuset_t), (cpuset_t *)args->user_mask_ptr,
+	    &copy_set);
 	if (error == 0)
 		td->td_retval[0] = sizeof(cpuset_t);
 
@@ -2216,7 +2224,8 @@ linux_sched_setaffinity(struct thread *td,
 	PROC_UNLOCK(tdt->td_proc);
 
 	return (kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID,
-	    tdt->td_tid, sizeof(cpuset_t), (cpuset_t *) args->user_mask_ptr));
+	    tdt->td_tid, sizeof(cpuset_t), (cpuset_t *) args->user_mask_ptr,
+	    &copy_set));
 }
 
 struct linux_rlimit64 {

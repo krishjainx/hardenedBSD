@@ -223,7 +223,7 @@ struct vm_map {
  * vm_flags_t values
  */
 #define MAP_WIREFUTURE		0x01	/* wire all future pages */
-#define	MAP_BUSY_WAKEUP		0x02
+#define	MAP_BUSY_WAKEUP		0x02	/* thread(s) waiting on busy state */
 #define	MAP_IS_SUB_MAP		0x04	/* has parent */
 #define	MAP_ASLR		0x08	/* enabled ASLR */
 #define	MAP_ASLR_IGNSTART	0x10
