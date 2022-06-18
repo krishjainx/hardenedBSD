@@ -40,11 +40,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
-<<<<<<< HEAD
 #include <sys/mutex.h>
 #include <sys/pax.h>
-=======
->>>>>>> origin/freebsd/13-stable/main
 #include <sys/proc.h>
 #include <sys/stddef.h>
 #include <sys/signalvar.h>
@@ -161,14 +158,10 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	argarray = pos = malloc(LINUX_AT_COUNT * sizeof(*pos), M_TEMP,
 	    M_WAITOK | M_ZERO);
 
-<<<<<<< HEAD
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
 	    imgp->proc->p_shared_page_base);
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, linux_vsyscall);
-=======
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR, linux_vdso_base);
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, __kernel_vsyscall);
->>>>>>> origin/freebsd/13-stable/main
 	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, cpu_feature);
 
 	/*
@@ -840,12 +833,8 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_schedtail	= linux_schedtail,
 	.sv_thread_detach = linux_thread_detach,
 	.sv_trap	= NULL,
-<<<<<<< HEAD
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
-	.sv_onexec	= linux_on_exec,
-=======
 	.sv_onexec	= linux_on_exec_vmspace,
->>>>>>> origin/freebsd/13-stable/main
 	.sv_onexit	= linux_on_exit,
 	.sv_ontdexit	= linux_thread_dtor,
 	.sv_setid_allowed = &linux_setid_allowed_query,

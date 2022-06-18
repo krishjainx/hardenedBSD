@@ -165,14 +165,8 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	    M_WAITOK | M_ZERO);
 
 	issetugid = imgp->proc->p_flag & P_SUGID ? 1 : 0;
-<<<<<<< HEAD
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, linux32_vsyscall);
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
 	    imgp->proc->p_shared_page_base);
-=======
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO, __kernel_vsyscall);
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR, linux_vdso_base);
->>>>>>> origin/freebsd/13-stable/main
 	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, cpu_feature);
 	AUXARGS_ENTRY(pos, AT_PAGESZ, args->pagesz);
 
@@ -710,11 +704,7 @@ linux_copyout_strings(struct image_params *imgp, uintptr_t *stack_base)
 	char canary[LINUX_AT_RANDOM_LEN];
 	size_t execpath_len;
 
-<<<<<<< HEAD
-	arginfo = (struct linux32_ps_strings *)(imgp->proc->p_psstrings);
-=======
 	arginfo = (struct linux32_ps_strings *)PROC_PS_STRINGS(imgp->proc);
->>>>>>> origin/freebsd/13-stable/main
 	destp = (uintptr_t)arginfo;
 
 	if (imgp->execpath != NULL && imgp->auxargs != NULL) {
@@ -898,14 +888,9 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_shared_page_len = PAGE_SIZE,
 	.sv_schedtail	= linux_schedtail,
 	.sv_thread_detach = linux_thread_detach,
-<<<<<<< HEAD
-	.sv_trap	= NULL,	
 	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
-	.sv_onexec	= linux_on_exec,
-=======
 	.sv_trap	= NULL,
 	.sv_onexec	= linux_on_exec_vmspace,
->>>>>>> origin/freebsd/13-stable/main
 	.sv_onexit	= linux_on_exit,
 	.sv_ontdexit	= linux_thread_dtor,
 	.sv_setid_allowed = &linux_setid_allowed_query,

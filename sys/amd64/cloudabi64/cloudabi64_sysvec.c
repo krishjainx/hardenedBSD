@@ -215,11 +215,8 @@ static struct sysentvec cloudabi64_elf_sysvec = {
 	.sv_fetch_syscall_args	= cloudabi64_fetch_syscall_args,
 	.sv_syscallnames	= cloudabi64_syscallnames,
 	.sv_schedtail		= cloudabi64_schedtail,
-<<<<<<< HEAD
 	.sv_pax_aslr_init	= pax_aslr_init_vmspace,
-=======
 	.sv_set_fork_retval	= x86_set_fork_retval,
->>>>>>> origin/freebsd/13-stable/main
 };
 
 INIT_SYSENTVEC(elf_sysvec, &cloudabi64_elf_sysvec);

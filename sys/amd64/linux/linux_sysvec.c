@@ -236,12 +236,8 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	    M_WAITOK | M_ZERO);
 
 	issetugid = p->p_flag & P_SUGID ? 1 : 0;
-<<<<<<< HEAD
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
 	    imgp->proc->p_shared_page_base);
-=======
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR, linux_vdso_base);
->>>>>>> origin/freebsd/13-stable/main
 	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, cpu_feature);
 	AUXARGS_ENTRY(pos, AT_PAGESZ, args->pagesz);
 	AUXARGS_ENTRY(pos, LINUX_AT_CLKTCK, stclohz);
@@ -742,12 +738,8 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_schedtail	= linux_schedtail,
 	.sv_thread_detach = linux_thread_detach,
 	.sv_trap	= linux_vsyscall,
-<<<<<<< HEAD
 	.sv_pax_aslr_init = pax_aslr_init_vmspace,
-	.sv_onexec	= linux_on_exec,
-=======
 	.sv_onexec	= linux_on_exec_vmspace,
->>>>>>> origin/freebsd/13-stable/main
 	.sv_onexit	= linux_on_exit,
 	.sv_ontdexit	= linux_thread_dtor,
 	.sv_setid_allowed = &linux_setid_allowed_query,

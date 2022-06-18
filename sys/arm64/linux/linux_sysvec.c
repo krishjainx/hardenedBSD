@@ -187,13 +187,9 @@ linux_copyout_auxargs(struct image_params *imgp, uintptr_t base)
 	    M_WAITOK | M_ZERO);
 
 	issetugid = p->p_flag & P_SUGID ? 1 : 0;
-<<<<<<< HEAD
 	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR,
 	    imgp->proc->p_shared_page_base);
-=======
-	AUXARGS_ENTRY(pos, LINUX_AT_SYSINFO_EHDR, linux_vdso_base);
 	AUXARGS_ENTRY(pos, LINUX_AT_MINSIGSTKSZ, LINUX_MINSIGSTKSZ);
->>>>>>> origin/freebsd/13-stable/main
 	AUXARGS_ENTRY(pos, LINUX_AT_HWCAP, *imgp->sysent->sv_hwcap);
 	AUXARGS_ENTRY(pos, AT_PAGESZ, args->pagesz);
 	AUXARGS_ENTRY(pos, LINUX_AT_CLKTCK, stclohz);
