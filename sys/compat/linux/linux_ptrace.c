@@ -39,10 +39,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/sx.h>
 #include <sys/syscallsubr.h>
 
-#include <machine/pcb.h>
-
-#include <amd64/linux/linux.h>
-#include <amd64/linux/linux_proto.h>
+#include <machine/../linux/linux.h>
+#include <machine/../linux/linux_proto.h>
 #include <compat/linux/linux_emul.h>
 #include <compat/linux/linux_errno.h>
 #include <compat/linux/linux_misc.h>
@@ -107,8 +105,6 @@ __FBSDID("$FreeBSD$");
 #define LINUX_PTRACE_PEEKUSER_CS	136
 #define LINUX_PTRACE_PEEKUSER_DS	184
 
-#define	LINUX_ARCH_AMD64		0xc000003e
-
 static int
 map_signum(int lsig, int *bsigp)
 {
@@ -168,153 +164,6 @@ linux_ptrace_status(struct thread *td, pid_t pid, int status)
 	return (status);
 }
 
-struct linux_pt_reg {
-	l_ulong	r15;
-	l_ulong	r14;
-	l_ulong	r13;
-	l_ulong	r12;
-	l_ulong	rbp;
-	l_ulong	rbx;
-	l_ulong	r11;
-	l_ulong	r10;
-	l_ulong	r9;
-	l_ulong	r8;
-	l_ulong	rax;
-	l_ulong	rcx;
-	l_ulong	rdx;
-	l_ulong	rsi;
-	l_ulong	rdi;
-	l_ulong	orig_rax;
-	l_ulong	rip;
-	l_ulong	cs;
-	l_ulong	eflags;
-	l_ulong	rsp;
-	l_ulong	ss;
-};
-
-struct syscall_info {
-	uint8_t op;
-	uint32_t arch;
-	uint64_t instruction_pointer;
-	uint64_t stack_pointer;
-	union {
-		struct {
-			uint64_t nr;
-			uint64_t args[6];
-		} entry;
-		struct {
-			int64_t rval;
-			uint8_t is_error;
-		} exit;
-		struct {
-			uint64_t nr;
-			uint64_t args[6];
-			uint32_t ret_data;
-		} seccomp;
-	};
-};
-
-/*
- * Translate amd64 ptrace registers between Linux and FreeBSD formats.
- * The translation is pretty straighforward, for all registers but
- * orig_rax on Linux side and r_trapno and r_err in FreeBSD.
- */
-static void
-map_regs_to_linux(struct reg *b_reg, struct linux_pt_reg *l_reg)
-{
-
-	l_reg->r15 = b_reg->r_r15;
-	l_reg->r14 = b_reg->r_r14;
-	l_reg->r13 = b_reg->r_r13;
-	l_reg->r12 = b_reg->r_r12;
-	l_reg->rbp = b_reg->r_rbp;
-	l_reg->rbx = b_reg->r_rbx;
-	l_reg->r11 = b_reg->r_r11;
-	l_reg->r10 = b_reg->r_r10;
-	l_reg->r9 = b_reg->r_r9;
-	l_reg->r8 = b_reg->r_r8;
-	l_reg->rax = b_reg->r_rax;
-	l_reg->rcx = b_reg->r_rcx;
-	l_reg->rdx = b_reg->r_rdx;
-	l_reg->rsi = b_reg->r_rsi;
-	l_reg->rdi = b_reg->r_rdi;
-	l_reg->orig_rax = b_reg->r_rax;
-	l_reg->rip = b_reg->r_rip;
-	l_reg->cs = b_reg->r_cs;
-	l_reg->eflags = b_reg->r_rflags;
-	l_reg->rsp = b_reg->r_rsp;
-	l_reg->ss = b_reg->r_ss;
-}
-
-void
-bsd_to_linux_regset(struct reg *b_reg, struct linux_pt_regset *l_regset)
-{
-
-	l_regset->r15 = b_reg->r_r15;
-	l_regset->r14 = b_reg->r_r14;
-	l_regset->r13 = b_reg->r_r13;
-	l_regset->r12 = b_reg->r_r12;
-	l_regset->rbp = b_reg->r_rbp;
-	l_regset->rbx = b_reg->r_rbx;
-	l_regset->r11 = b_reg->r_r11;
-	l_regset->r10 = b_reg->r_r10;
-	l_regset->r9 = b_reg->r_r9;
-	l_regset->r8 = b_reg->r_r8;
-	l_regset->rax = b_reg->r_rax;
-	l_regset->rcx = b_reg->r_rcx;
-	l_regset->rdx = b_reg->r_rdx;
-	l_regset->rsi = b_reg->r_rsi;
-	l_regset->rdi = b_reg->r_rdi;
-	l_regset->orig_rax = b_reg->r_rax;
-	l_regset->rip = b_reg->r_rip;
-	l_regset->cs = b_reg->r_cs;
-	l_regset->eflags = b_reg->r_rflags;
-	l_regset->rsp = b_reg->r_rsp;
-	l_regset->ss = b_reg->r_ss;
-	l_regset->fs_base = 0;
-	l_regset->gs_base = 0;
-	l_regset->ds = b_reg->r_ds;
-	l_regset->es = b_reg->r_es;
-	l_regset->fs = b_reg->r_fs;
-	l_regset->gs = b_reg->r_gs;
-}
-
-static void
-map_regs_from_linux(struct reg *b_reg, struct linux_pt_reg *l_reg)
-{
-	b_reg->r_r15 = l_reg->r15;
-	b_reg->r_r14 = l_reg->r14;
-	b_reg->r_r13 = l_reg->r13;
-	b_reg->r_r12 = l_reg->r12;
-	b_reg->r_r11 = l_reg->r11;
-	b_reg->r_r10 = l_reg->r10;
-	b_reg->r_r9 = l_reg->r9;
-	b_reg->r_r8 = l_reg->r8;
-	b_reg->r_rdi = l_reg->rdi;
-	b_reg->r_rsi = l_reg->rsi;
-	b_reg->r_rbp = l_reg->rbp;
-	b_reg->r_rbx = l_reg->rbx;
-	b_reg->r_rdx = l_reg->rdx;
-	b_reg->r_rcx = l_reg->rcx;
-	b_reg->r_rax = l_reg->rax;
-
-	/*
-	 * XXX: Are zeroes the right thing to put here?
-	 */
-	b_reg->r_trapno = 0;
-	b_reg->r_fs = 0;
-	b_reg->r_gs = 0;
-	b_reg->r_err = 0;
-	b_reg->r_es = 0;
-	b_reg->r_ds = 0;
-
-	b_reg->r_rip = l_reg->rip;
-	b_reg->r_cs = l_reg->cs;
-	b_reg->r_rflags = l_reg->eflags;
-	b_reg->r_rsp = l_reg->rsp;
-	b_reg->r_ss = l_reg->ss;
-}
-
 static int
 linux_ptrace_peek(struct thread *td, pid_t pid, void *addr, void *data)
 {
@@ -342,6 +191,7 @@ linux_ptrace_peekuser(struct thread *td, pid_t pid, void *addr, void *data)
 		return (error);
 
 	switch ((uintptr_t)addr) {
+#ifdef __amd64__
 	case LINUX_PTRACE_PEEKUSER_ORIG_RAX:
 		val = b_reg.r_rax;
 		break;
@@ -354,6 +204,7 @@ linux_ptrace_peekuser(struct thread *td, pid_t pid, void *addr, void *data)
 	case LINUX_PTRACE_PEEKUSER_DS:
 		val = b_reg.r_ds;
 		break;
+#endif /* __amd64__ */
 	default:
 		linux_msg(td, "PTRACE_PEEKUSER offset %ld not implemented; "
 		    "returning EINVAL", (uintptr_t)addr);
@@ -465,39 +316,20 @@ linux_ptrace_getsiginfo(struct thread *td, pid_t pid, l_ulong data)
 static int
 linux_ptrace_getregs(struct thread *td, pid_t pid, void *data)
 {
-	struct ptrace_lwpinfo lwpinfo;
 	struct reg b_reg;
-	struct linux_pt_reg l_reg;
+	struct linux_pt_regset l_regset;
 	int error;
 
 	error = kern_ptrace(td, PT_GETREGS, pid, &b_reg, 0);
 	if (error != 0)
 		return (error);
 
-	map_regs_to_linux(&b_reg, &l_reg);
-
-	error = kern_ptrace(td, PT_LWPINFO, pid, &lwpinfo, sizeof(lwpinfo));
-	if (error != 0) {
-		linux_msg(td, "PT_LWPINFO failed with error %d", error);
+	bsd_to_linux_regset(&b_reg, &l_regset);
+	error = linux_ptrace_getregs_machdep(td, pid, &l_regset);
+	if (error != 0)
 		return (error);
-	}
-	if (lwpinfo.pl_flags & PL_FLAG_SCE) {
-		/*
-		 * The strace(1) utility depends on RAX being set to -ENOSYS
-		 * on syscall entry; otherwise it loops printing those:
-		 *
-		 * [ Process PID=928 runs in 64 bit mode. ]
-		 * [ Process PID=928 runs in x32 mode. ]
-		 */
-		l_reg.rax = -38; /* -ENOSYS */
 
-		/*
-		 * Undo the mangling done in exception.S:fast_syscall_common().
-		 */
-		l_reg.r10 = l_reg.rcx;
-	}
-
-	error = copyout(&l_reg, (void *)data, sizeof(l_reg));
+	error = copyout(&l_regset, (void *)data, sizeof(l_regset));
 	return (error);
 }
 
@@ -505,13 +337,13 @@ static int
 linux_ptrace_setregs(struct thread *td, pid_t pid, void *data)
 {
 	struct reg b_reg;
-	struct linux_pt_reg l_reg;
+	struct linux_pt_regset l_regset;
 	int error;
 
-	error = copyin(data, &l_reg, sizeof(l_reg));
+	error = copyin(data, &l_regset, sizeof(l_regset));
 	if (error != 0)
 		return (error);
-	map_regs_from_linux(&b_reg, &l_reg);
+	linux_to_bsd_regset(&b_reg, &l_regset);
 	error = kern_ptrace(td, PT_SETREGS, pid, &b_reg, 0);
 	return (error);
 }
@@ -519,11 +351,9 @@ linux_ptrace_setregs(struct thread *td, pid_t pid, void *data)
 static int
 linux_ptrace_getregset_prstatus(struct thread *td, pid_t pid, l_ulong data)
 {
-	struct ptrace_lwpinfo lwpinfo;
 	struct reg b_reg;
 	struct linux_pt_regset l_regset;
 	struct iovec iov;
-	struct pcb *pcb;
 	size_t len;
 	int error;
 
@@ -537,34 +367,10 @@ linux_ptrace_getregset_prstatus(struct thread *td, pid_t pid, l_ulong data)
 	if (error != 0)
 		return (error);
 
-	pcb = td->td_pcb;
-	if (td == curthread)
-		update_pcb_bases(pcb);
-
 	bsd_to_linux_regset(&b_reg, &l_regset);
-	l_regset.fs_base = pcb->pcb_fsbase;
-	l_regset.gs_base = pcb->pcb_gsbase;
-
-	error = kern_ptrace(td, PT_LWPINFO, pid, &lwpinfo, sizeof(lwpinfo));
-	if (error != 0) {
-		linux_msg(td, "PT_LWPINFO failed with error %d", error);
+	error = linux_ptrace_getregs_machdep(td, pid, &l_regset);
+	if (error != 0)
 		return (error);
-	}
-	if (lwpinfo.pl_flags & PL_FLAG_SCE) {
-		/*
-		 * Undo the mangling done in exception.S:fast_syscall_common().
-		 */
-		l_regset.r10 = l_regset.rcx;
-	}
-
-	if (lwpinfo.pl_flags & (PL_FLAG_SCE | PL_FLAG_SCX)) {
-		/*
-		 * In Linux, the syscall number - passed to the syscall
-		 * as rax - is preserved in orig_rax; rax gets overwritten
-		 * with syscall return value.
-		 */
-		l_regset.orig_rax = lwpinfo.pl_syscall_code;
-	}
 
 	len = MIN(iov.iov_len, sizeof(l_regset));
 	error = copyout(&l_regset, (void *)iov.iov_base, len);
@@ -688,9 +494,7 @@ linux_ptrace_get_syscall_info(struct thread *td, pid_t pid,
 	if (error != 0)
 		return (error);
 
-	si.arch = LINUX_ARCH_AMD64;
-	si.instruction_pointer = b_reg.r_rip;
-	si.stack_pointer = b_reg.r_rsp;
+	linux_ptrace_get_syscall_info_machdep(&b_reg, &si);
 
 	len = MIN(len, sizeof(si));
 	error = copyout(&si, (void *)data, len);

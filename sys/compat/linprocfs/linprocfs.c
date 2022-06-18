@@ -80,6 +80,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vmmeter.h>
 #include <sys/vnode.h>
 #include <sys/bus.h>
+#include <sys/uio.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -104,6 +105,7 @@ __FBSDID("$FreeBSD$");
 #endif /* __i386__ || __amd64__ */
 
 #include <compat/linux/linux.h>
+#include <compat/linux/linux_emul.h>
 #include <compat/linux/linux_mib.h>
 #include <compat/linux/linux_misc.h>
 #include <compat/linux/linux_util.h>
@@ -1040,7 +1042,7 @@ linprocfs_doprocstatus(PFS_FILL_ARGS)
 
 	sx_slock(&proctree_lock);
 	PROC_LOCK(p);
-	td2 = FIRST_THREAD_IN_PROC(p); /* XXXKSE pretend only one thread */
+	td2 = FIRST_THREAD_IN_PROC(p);
 
 	if (P_SHOULDSTOP(p)) {
 		state = "T (stopped)";
@@ -1277,7 +1279,6 @@ linprocfs_doprocmaps(PFS_FILL_ARGS)
 	char *name = "", *freename = NULL;
 	const char *l_map_str;
 	ino_t ino;
-	int ref_count, shadow_count, flags;
 	int error;
 	struct vnode *vp;
 	struct vattr vat;
@@ -1331,9 +1332,6 @@ linprocfs_doprocmaps(PFS_FILL_ARGS)
 				vref(vp);
 			if (lobj != obj)
 				VM_OBJECT_RUNLOCK(lobj);
-			flags = obj->flags;
-			ref_count = obj->ref_count;
-			shadow_count = obj->shadow_count;
 			VM_OBJECT_RUNLOCK(obj);
 			if (vp != NULL) {
 				vn_fullpath(vp, &name, &freename);
@@ -1342,15 +1340,21 @@ linprocfs_doprocmaps(PFS_FILL_ARGS)
 				ino = vat.va_fileid;
 				vput(vp);
 			} else if (SV_PROC_ABI(p) == SV_ABI_LINUX) {
+<<<<<<< HEAD
 				if (e_start == p->p_shared_page_base)
+=======
+				/*
+				 * sv_shared_page_base pointed out to the
+				 * FreeBSD sharedpage, PAGE_SIZE is a size
+				 * of it. The vDSO page is above.
+				 */
+				if (e_start == p->p_sysent->sv_shared_page_base +
+				    PAGE_SIZE)
+>>>>>>> origin/freebsd/13-stable/main
 					name = vdso_str;
 				if (e_end == p->p_usrstack)
 					name = stack_str;
 			}
-		} else {
-			flags = 0;
-			ref_count = 0;
-			shadow_count = 0;
 		}
 
 		/*
@@ -1888,6 +1892,24 @@ linprocfs_douuid(PFS_FILL_ARGS)
 }
 
 /*
+ * Filler function for proc/sys/kernel/random/boot_id
+ */
+static int
+linprocfs_doboot_id(PFS_FILL_ARGS)
+{
+       static bool firstboot = 1;
+       static struct uuid uuid;
+
+       if (firstboot) {
+               kern_uuidgen(&uuid, 1);
+               firstboot = 0;
+       }
+       sbuf_printf_uuid(sb, &uuid);
+       sbuf_printf(sb, "\n");
+       return(0);
+}
+
+/*
  * Filler function for proc/pid/auxv
  */
 static int
@@ -1932,6 +1954,47 @@ linprocfs_doauxv(PFS_FILL_ARGS)
 		error = uiomove(sbuf_data(asb) + uio->uio_offset, buflen, uio);
 	sbuf_delete(asb);
 	return (error);
+}
+
+/*
+ * Filler function for proc/self/oom_score_adj
+ */
+static int
+linprocfs_do_oom_score_adj(PFS_FILL_ARGS)
+{
+	struct linux_pemuldata *pem;
+	long oom;
+
+	pem = pem_find(p);
+	if (pem == NULL || uio == NULL)
+		return (EOPNOTSUPP);
+	if (uio->uio_rw == UIO_READ) {
+		sbuf_printf(sb, "%d\n", pem->oom_score_adj);
+	} else {
+		sbuf_trim(sb);
+		sbuf_finish(sb);
+		oom = strtol(sbuf_data(sb), NULL, 10);
+		if (oom < LINUX_OOM_SCORE_ADJ_MIN ||
+		    oom > LINUX_OOM_SCORE_ADJ_MAX)
+			return (EINVAL);
+		pem->oom_score_adj = oom;
+	}
+	return (0);
+}
+
+/*
+ * Filler function for proc/sys/vm/max_map_count
+ *
+ * Maximum number of active map areas, on Linux this limits the number
+ * of vmaps per mm struct. We don't limit mappings, return a suitable
+ * large value.
+ */
+static int
+linprocfs_domax_map_cnt(PFS_FILL_ARGS)
+{
+
+	sbuf_printf(sb, "%d\n", INT32_MAX);
+	return (0);
 }
 
 /*
@@ -2020,6 +2083,8 @@ linprocfs_init(PFS_INIT_ARGS)
 	    NULL, &procfs_candebug, NULL, PFS_RD|PFS_RAWRD);
 	pfs_create_file(dir, "limits", &linprocfs_doproclimits,
 	    NULL, NULL, NULL, PFS_RD);
+	pfs_create_file(dir, "oom_score_adj", &linprocfs_do_oom_score_adj,
+	    procfs_attr_rw, &procfs_candebug, NULL, PFS_RDWR);
 
 	/* /proc/<pid>/task/... */
 	dir = pfs_create_dir(dir, "task", linprocfs_dotaskattr, NULL, NULL, 0);
@@ -2069,10 +2134,14 @@ linprocfs_init(PFS_INIT_ARGS)
 	dir = pfs_create_dir(dir, "random", NULL, NULL, NULL, 0);
 	pfs_create_file(dir, "uuid", &linprocfs_douuid,
 	    NULL, NULL, NULL, PFS_RD);
+	pfs_create_file(dir, "boot_id", &linprocfs_doboot_id,
+	    NULL, NULL, NULL, PFS_RD);
 
 	/* /proc/sys/vm/.... */
 	dir = pfs_create_dir(sys, "vm", NULL, NULL, NULL, 0);
 	pfs_create_file(dir, "min_free_kbytes", &linprocfs_dominfree,
+	    NULL, NULL, NULL, PFS_RD);
+	pfs_create_file(dir, "max_map_count", &linprocfs_domax_map_cnt,
 	    NULL, NULL, NULL, PFS_RD);
 
 	return (0);

@@ -87,7 +87,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/timex.h>
 #include <sys/unistd.h>
 #include <sys/ucontext.h>
-#include <sys/umtx.h>
 #include <sys/vnode.h>
 #include <sys/wait.h>
 #include <sys/ipc.h>
@@ -405,7 +404,7 @@ freebsd32_exec_copyin_args(struct image_args *args, const char *fname,
 		if (error != 0)
 			goto err_exit;
 	}
-			
+
 	/*
 	 * extract environment strings
 	 */
@@ -3303,7 +3302,7 @@ freebsd32_cpuset_getaffinity(struct thread *td,
     struct freebsd32_cpuset_getaffinity_args *uap)
 {
 
-	return (kern_cpuset_getaffinity(td, uap->level, uap->which,
+	return (user_cpuset_getaffinity(td, uap->level, uap->which,
 	    PAIR32TO64(id_t,uap->id), uap->cpusetsize, uap->mask,
 	    &cpuset_copy32_cb));
 }
@@ -3313,7 +3312,7 @@ freebsd32_cpuset_setaffinity(struct thread *td,
     struct freebsd32_cpuset_setaffinity_args *uap)
 {
 
-	return (kern_cpuset_setaffinity(td, uap->level, uap->which,
+	return (user_cpuset_setaffinity(td, uap->level, uap->which,
 	    PAIR32TO64(id_t,uap->id), uap->cpusetsize, uap->mask,
 	    &cpuset_copy32_cb));
 }

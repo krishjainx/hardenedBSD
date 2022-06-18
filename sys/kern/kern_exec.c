@@ -73,7 +73,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysent.h>
 #include <sys/sysproto.h>
 #include <sys/timers.h>
-#include <sys/umtx.h>
+#include <sys/umtxvar.h>
 #include <sys/vnode.h>
 #include <sys/wait.h>
 #ifdef KTRACE
@@ -407,6 +407,7 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 #endif
 	int error, i, orig_osrel;
 	uint32_t orig_fctl0;
+	Elf_Brandinfo *orig_brandinfo;
 	size_t freepath_size;
 	static const char fexecv_proc_title[] = "(fexecv)";
 #ifdef PAX
@@ -445,6 +446,7 @@ do_execve(struct thread *td, struct image_args *args, struct mac *mac_p,
 	oldcred = p->p_ucred;
 	orig_osrel = p->p_osrel;
 	orig_fctl0 = p->p_fctl0;
+	orig_brandinfo = p->p_elf_brandinfo;
 
 #ifdef MAC
 	error = mac_execve_enter(imgp, mac_p);
@@ -559,6 +561,7 @@ interpret:
 
 	imgp->proc->p_osrel = 0;
 	imgp->proc->p_fctl0 = 0;
+	imgp->proc->p_elf_brandinfo = NULL;
 
 	/*
 	 * Implement image setuid/setgid.
@@ -974,6 +977,7 @@ exec_fail_dealloc:
 	if (error != 0) {
 		p->p_osrel = orig_osrel;
 		p->p_fctl0 = orig_fctl0;
+		p->p_elf_brandinfo = orig_brandinfo;
 	}
 
 	if (imgp->firstpage != NULL)
@@ -1173,8 +1177,6 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	if (p->p_sysent->sv_onexec_old != NULL)
 		p->p_sysent->sv_onexec_old(td);
 	itimers_exec(p);
-	if (sv->sv_onexec != NULL)
-		sv->sv_onexec(p, imgp);
 
 	EVENTHANDLER_DIRECT_INVOKE(process_exec, p, imgp);
 
@@ -1249,7 +1251,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 #endif
 	}
 
-	return (0);
+	return (sv->sv_onexec != NULL ? sv->sv_onexec(p, imgp) : 0);
 }
 
 /*

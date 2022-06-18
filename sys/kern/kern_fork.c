@@ -538,6 +538,7 @@ do_fork(struct thread *td, struct fork_req *fr, struct proc *p2, struct thread *
 	p2->p_fd = fd;
 	p2->p_fdtol = fdtol;
 	p2->p_pd = pd;
+	p2->p_elf_brandinfo = p1->p_elf_brandinfo;
 
 	if (p1->p_flag2 & P2_INHERIT_PROTECTED) {
 		p2->p_flag |= P_PROTECTED;
@@ -761,7 +762,7 @@ do_fork(struct thread *td, struct fork_req *fr, struct proc *p2, struct thread *
 	if ((p1->p_ptevents & PTRACE_FORK) != 0) {
 		sx_xlock(&proctree_lock);
 		PROC_LOCK(p2);
-		
+
 		/*
 		 * p1->p_ptevents & p1->p_pptr are protected by both
 		 * process and proctree locks for modifications,

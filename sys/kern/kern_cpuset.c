@@ -34,6 +34,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_ddb.h"
+#include "opt_ktrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +63,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/interrupt.h>
 #include <sys/vmmeter.h>
+#include <sys/ktrace.h>
 
 #include <vm/uma.h>
 #include <vm/vm.h>
@@ -1886,32 +1888,26 @@ int
 sys_cpuset_getaffinity(struct thread *td, struct cpuset_getaffinity_args *uap)
 {
 
-	return (kern_cpuset_getaffinity(td, uap->level, uap->which,
+	return (user_cpuset_getaffinity(td, uap->level, uap->which,
 	    uap->id, uap->cpusetsize, uap->mask, &copy_set));
 }
 
 int
 kern_cpuset_getaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
-    id_t id, size_t cpusetsize, cpuset_t *maskp, const struct cpuset_copy_cb *cb)
+    id_t id, size_t cpusetsize, cpuset_t *mask)
 {
 	struct thread *ttd;
 	struct cpuset *nset;
 	struct cpuset *set;
 	struct proc *p;
-	cpuset_t *mask;
 	int error;
-	size_t size;
 
-	if (cpusetsize < sizeof(cpuset_t) || cpusetsize > CPU_MAXSIZE / NBBY)
-		return (ERANGE);
 	error = cpuset_check_capabilities(td, level, which, id);
 	if (error != 0)
 		return (error);
-	size = cpusetsize;
-	mask = malloc(size, M_TEMP, M_WAITOK | M_ZERO);
 	error = cpuset_which(which, id, &p, &ttd, &set);
-	if (error)
-		goto out;
+	if (error != 0)
+		return (error);
 	switch (level) {
 	case CPU_LEVEL_ROOT:
 	case CPU_LEVEL_CPUSET:
@@ -1929,8 +1925,7 @@ kern_cpuset_getaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
 		case CPU_WHICH_INTRHANDLER:
 		case CPU_WHICH_ITHREAD:
 		case CPU_WHICH_DOMAIN:
-			error = EINVAL;
-			goto out;
+			return (EINVAL);
 		}
 		if (level == CPU_LEVEL_ROOT)
 			nset = cpuset_refroot(set);
@@ -1978,8 +1973,50 @@ kern_cpuset_getaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
 		cpuset_rel(set);
 	if (p)
 		PROC_UNLOCK(p);
-	if (error == 0)
+	if (error == 0) {
+		if (cpusetsize < howmany(CPU_FLS(mask), NBBY))
+			return (ERANGE);
+#ifdef KTRACE
+		if (KTRPOINT(td, KTR_STRUCT))
+			ktrcpuset(mask, cpusetsize);
+#endif
+	}
+	return (error);
+}
+
+int
+user_cpuset_getaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
+    id_t id, size_t cpusetsize, cpuset_t *maskp, const struct cpuset_copy_cb *cb)
+{
+	cpuset_t *mask;
+	size_t size;
+	int error;
+
+	mask = malloc(sizeof(cpuset_t), M_TEMP, M_WAITOK | M_ZERO);
+	size = min(cpusetsize, sizeof(cpuset_t));
+	error = kern_cpuset_getaffinity(td, level, which, id, size, mask);
+	if (error == 0) {
 		error = cb->cpuset_copyout(mask, maskp, size);
+		if (error != 0)
+			goto out;
+		if (cpusetsize > size) {
+			char *end;
+			char *cp;
+			int rv;
+
+			end = cp = (char *)&maskp->__bits;
+			end += cpusetsize;
+			cp += size;
+			while (cp != end) {
+				rv = subyte(cp, 0);
+				if (rv == -1) {
+					error = EFAULT;
+					goto out;
+				}
+				cp++;
+			}
+		}
+	}
 out:
 	free(mask, M_TEMP);
 	return (error);
@@ -1998,51 +2035,29 @@ int
 sys_cpuset_setaffinity(struct thread *td, struct cpuset_setaffinity_args *uap)
 {
 
-	return (kern_cpuset_setaffinity(td, uap->level, uap->which,
+	return (user_cpuset_setaffinity(td, uap->level, uap->which,
 	    uap->id, uap->cpusetsize, uap->mask, &copy_set));
 }
 
 int
 kern_cpuset_setaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
-    id_t id, size_t cpusetsize, const cpuset_t *maskp,
-    const struct cpuset_copy_cb *cb)
+    id_t id, cpuset_t *mask)
 {
 	struct cpuset *nset;
 	struct cpuset *set;
 	struct thread *ttd;
 	struct proc *p;
-	cpuset_t *mask;
 	int error;
 
-	if (cpusetsize < sizeof(cpuset_t) || cpusetsize > CPU_MAXSIZE / NBBY)
-		return (ERANGE);
+#ifdef KTRACE
+	if (KTRPOINT(td, KTR_STRUCT))
+		ktrcpuset(mask, sizeof(cpuset_t));
+#endif
 	error = cpuset_check_capabilities(td, level, which, id);
 	if (error != 0)
 		return (error);
-	mask = malloc(cpusetsize, M_TEMP, M_WAITOK | M_ZERO);
-	error = cb->cpuset_copyin(maskp, mask, cpusetsize);
-	if (error)
-		goto out;
-	/*
-	 * Verify that no high bits are set.
-	 */
-	if (cpusetsize > sizeof(cpuset_t)) {
-		char *end;
-		char *cp;
-
-		end = cp = (char *)&mask->__bits;
-		end += cpusetsize;
-		cp += sizeof(cpuset_t);
-		while (cp != end)
-			if (*cp++ != 0) {
-				error = EINVAL;
-				goto out;
-			}
-	}
-	if (CPU_EMPTY(mask)) {
-		error = EDEADLK;
-		goto out;
-	}
+	if (CPU_EMPTY(mask))
+		return (EDEADLK);
 	switch (level) {
 	case CPU_LEVEL_ROOT:
 	case CPU_LEVEL_CPUSET:
@@ -2064,8 +2079,7 @@ kern_cpuset_setaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
 		case CPU_WHICH_INTRHANDLER:
 		case CPU_WHICH_ITHREAD:
 		case CPU_WHICH_DOMAIN:
-			error = EINVAL;
-			goto out;
+			return (EINVAL);
 		}
 		if (level == CPU_LEVEL_ROOT)
 			nset = cpuset_refroot(set);
@@ -2105,6 +2119,47 @@ kern_cpuset_setaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
 		error = EINVAL;
 		break;
 	}
+	return (error);
+}
+
+int
+user_cpuset_setaffinity(struct thread *td, cpulevel_t level, cpuwhich_t which,
+    id_t id, size_t cpusetsize, const cpuset_t *maskp, const struct cpuset_copy_cb *cb)
+{
+	cpuset_t *mask;
+	int error;
+	size_t size;
+
+	size = min(cpusetsize, sizeof(cpuset_t));
+	mask = malloc(sizeof(cpuset_t), M_TEMP, M_WAITOK | M_ZERO);
+	error = cb->cpuset_copyin(maskp, mask, size);
+	if (error)
+		goto out;
+	/*
+	 * Verify that no high bits are set.
+	 */
+	if (cpusetsize > sizeof(cpuset_t)) {
+		const char *end, *cp;
+		int val;
+		end = cp = (const char *)&maskp->__bits;
+		end += cpusetsize;
+		cp += sizeof(cpuset_t);
+
+		while (cp != end) {
+			val = fubyte(cp);
+			if (val == -1) {
+				error = EFAULT;
+				goto out;
+			}
+			if (val != 0) {
+				error = EINVAL;
+				goto out;
+			}
+			cp++;
+		}
+	}
+	error = kern_cpuset_setaffinity(td, level, which, id, mask);
+
 out:
 	free(mask, M_TEMP);
 	return (error);

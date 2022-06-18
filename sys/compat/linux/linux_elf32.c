@@ -1,7 +1,13 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * Copyright (C) 2018 Turing Robotic Industries Inc.
+ * Copyright (c) 2021 Edward Tomasz Napierala <trasz@FreeBSD.org>
+ * Copyright (c) 2002 Doug Rabson
+ * All rights reserved.
+ *
+ * This software was developed by the University of Cambridge Computer
+ * Laboratory as part of the CHERI for Hypervisors and Operating Systems
+ * (CHaOS) project, funded by EPSRC grant EP/V000292/1.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,34 +29,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include <sys/param.h>
-#include <sys/kernel.h>
-#include <sys/sdt.h>
-#include <sys/proc.h>
-#include <sys/ptrace.h>
-
-#include <arm64/linux/linux.h>
-#include <arm64/linux/linux_proto.h>
-#include <compat/linux/linux_dtrace.h>
-
-/* DTrace init */
-LIN_SDT_PROVIDER_DECLARE(LINUX_DTRACE);
-
-/* DTrace probes */
-LIN_SDT_PROBE_DEFINE0(ptrace, linux_ptrace, todo);
-
-int
-linux_ptrace(struct thread *td, struct linux_ptrace_args *uap)
-{
-
-	/* LINUXTODO: implement arm64 linux_ptrace */
-	LIN_SDT_PROBE0(ptrace, linux_ptrace, todo);
-	return (EDOOFUS);
-}
+#define __ELF_WORD_SIZE 32
+#include <compat/linux/linux_elf.c>

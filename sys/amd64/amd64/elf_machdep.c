@@ -62,7 +62,6 @@ extern char _binary_elf_vdso_so_1_size;
 struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_size	= SYS_MAXSYSCALL,
 	.sv_table	= sysent,
-	.sv_transtrap	= NULL,
 	.sv_fixup	= __elfN(freebsd_fixup),
 	.sv_sendsig	= sendsig,
 	.sv_sigcode	= _binary_elf_vdso_so_1_start,
@@ -101,12 +100,12 @@ struct sysentvec elf64_freebsd_sysvec_la48 = {
 	.sv_onexit	= exit_onexit,
 	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
 	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
+	.sv_set_fork_retval = x86_set_fork_retval,
 };
 
 struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_size	= SYS_MAXSYSCALL,
 	.sv_table	= sysent,
-	.sv_transtrap	= NULL,
 	.sv_fixup	= __elfN(freebsd_fixup),
 	.sv_sendsig	= sendsig,
 	.sv_sigcode	= _binary_elf_vdso_so_1_start,
@@ -144,6 +143,7 @@ struct sysentvec elf64_freebsd_sysvec_la57 = {
 	.sv_onexit	= exit_onexit,
 	.sv_regset_begin = SET_BEGIN(__elfN(regset)),
 	.sv_regset_end  = SET_LIMIT(__elfN(regset)),
+	.sv_set_fork_retval=  x86_set_fork_retval,
 };
 
 static void
