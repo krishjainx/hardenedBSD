@@ -66,7 +66,7 @@ TAGS+=	lib32
 
 .if defined(NO_ROOT)
 .if !defined(TAGS) || ! ${TAGS:Mpackage=*}
-TAGS+=		package=${PACKAGE:Uruntime}
+TAGS+=		package=${PACKAGE:Uutilities}
 .endif
 TAG_ARGS=	-T ${TAGS:[*]:S/ /,/g}
 .endif
@@ -76,6 +76,16 @@ TAG_ARGS=	-T ${TAGS:[*]:S/ /,/g}
 CFLAGS+= ${DEBUG_FILES_CFLAGS}
 CXXFLAGS+= ${DEBUG_FILES_CFLAGS}
 CTFFLAGS+= -g
+.endif
+
+# clang currently defaults to dynamic TLS for mips64 object files without -fPIC
+.if ${MACHINE_ARCH:Mmips64*} && ${COMPILER_TYPE} == "clang"
+STATIC_CFLAGS+= -ftls-model=initial-exec
+STATIC_CXXFLAGS+= -ftls-model=initial-exec
+.endif
+
+.if ${MACHINE_CPUARCH} == "riscv" && ${LINKER_FEATURES:Mriscv-relaxations} == ""
+CFLAGS += -mno-relax
 .endif
 
 .include <bsd.libnames.mk>
@@ -427,7 +437,7 @@ _libinstall:
 	    ${_INSTALLFLAGS} lib${LIB_PRIVATE}${LIB}.a ${DESTDIR}${_LIBDIR}/
 .endif
 .if ${MK_PROFILE} != "no" && defined(LIB) && !empty(LIB)
-	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},profile} -C -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
+	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},development} -C -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
 	    ${_INSTALLFLAGS} lib${LIB_PRIVATE}${LIB}_p.a ${DESTDIR}${_LIBDIR}/
 .endif
 .if defined(SHLIB_NAME)
@@ -448,7 +458,7 @@ _libinstall:
 	    ${_INSTALLFLAGS} ${SHLIB_LINK:R}.ld \
 	    ${DESTDIR}${_LIBDIR}/${SHLIB_LINK}
 .for _SHLIB_LINK_LINK in ${SHLIB_LDSCRIPT_LINKS}
-	${INSTALL_LIBSYMLINK} ${SHLIB_LINK} ${DESTDIR}${_LIBDIR}/${_SHLIB_LINK_LINK}
+	${INSTALL_LIBSYMLINK} ${TAG_ARGS} ${SHLIB_LINK} ${DESTDIR}${_LIBDIR}/${_SHLIB_LINK_LINK}
 .endfor
 .else
 .if ${_SHLIBDIR} == ${_LIBDIR}

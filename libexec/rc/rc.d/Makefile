@@ -4,14 +4,13 @@
 
 CONFDIR=	/etc/rc.d
 CONFGROUPS=	CONFS
-#PACKAGE=rc
+CONFSPACKAGE=	rc
 
 CONFS=	DAEMON \
 	FILESYSTEMS \
 	LOGIN \
 	NETWORKING \
 	SERVERS \
-	abi \
 	addswap \
 	adjkerntz \
 	bgfsck \
@@ -50,6 +49,7 @@ CONFS=	DAEMON \
 	kldxref \
 	${_kpasswdd} \
 	ldconfig \
+	linux \
 	local \
 	localpkg \
 	lockd \
@@ -76,6 +76,7 @@ CONFS=	DAEMON \
 	nsswitch \
 	ntpdate \
 	${_opensm} \
+	os-release \
 	pf \
 	pflog \
 	pfsync \
@@ -106,6 +107,7 @@ CONFS=	DAEMON \
 	swaplate \
 	sysctl \
 	syslogd \
+	sysvipc \
 	tmp \
 	ugidfw \
 	${_utx} \
@@ -327,7 +329,6 @@ ZFS+=		zfs
 ZFS+=		zfsbe
 ZFS+=		zfsd
 ZFS+=		zvol
-ZFSPACKAGE=	zfs
 .endif
 
 .for fg in ${CONFGROUPS}

@@ -1088,6 +1088,7 @@ netisr_dispatch_src(u_int proto, uintptr_t source, struct mbuf *m)
 	int dosignal, error;
 	u_int cpuid, dispatch_policy;
 
+	NET_EPOCH_ASSERT();
 	KASSERT(proto < NETISR_MAXPROT,
 	    ("%s: invalid proto %u", __func__, proto));
 #ifdef NETISR_LOCKING
@@ -1244,7 +1245,7 @@ netisr_start_swi(u_int cpuid, struct pcpu *pc)
 	nwsp->nws_cpu = cpuid;
 	snprintf(swiname, sizeof(swiname), "netisr %u", cpuid);
 	error = swi_add(&nwsp->nws_intr_event, swiname, swi_net, nwsp,
-	    SWI_NET, INTR_MPSAFE, &nwsp->nws_swi_cookie);
+	    SWI_NET, INTR_TYPE_NET | INTR_MPSAFE, &nwsp->nws_swi_cookie);
 	if (error)
 		panic("%s: swi_add %d", __func__, error);
 	pc->pc_netisr = nwsp->nws_intr_event;

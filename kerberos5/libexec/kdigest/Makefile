@@ -10,6 +10,8 @@ SRCS=	kdigest.c \
 	kdigest-commands.c \
 	kdigest-commands.h
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CLEANFILES=	kdigest-commands.h kdigest-commands.c
 
 kdigest-commands.h: kdigest-commands.in

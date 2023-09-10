@@ -1,13 +1,12 @@
 # $FreeBSD$
 
-PKGCONFBRANCH?=	latest
-CONFS=		FreeBSD.conf.${PKGCONFBRANCH} HardenedBSD.conf
-CONFSNAME=	FreeBSD.conf
-CONFSDIR=	/etc/pkg
-CONFSMODE=	644
 PROG=	pkg
 SRCS=	pkg.c dns_utils.c config.c
 MAN=	pkg.7
+
+CONFS=		HardenedBSD.conf HardenedBSD.tor.conf
+CONFSDIR=	/etc/pkg
+CONFSMODE=	644
 
 CFLAGS+=-I${SRCTOP}/contrib/libucl/include
 .PATH:	${SRCTOP}/contrib/libucl/include

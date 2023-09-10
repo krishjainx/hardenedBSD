@@ -72,8 +72,6 @@ __FBSDID("$FreeBSD$");
 
 boolean_t ofw_cpu_reg(phandle_t node, u_int, cell_t *);
 
-extern struct pcpu __pcpu[];
-
 uint32_t __riscv_boot_ap[MAXCPU];
 
 static enum {
@@ -187,7 +185,7 @@ static void
 release_aps(void *dummy __unused)
 {
 	cpuset_t mask;
-	int cpu, i;
+	int i;
 
 	if (mp_ncpus == 1)
 		return;
@@ -206,13 +204,8 @@ release_aps(void *dummy __unused)
 	sbi_send_ipi(mask.__bits);
 
 	for (i = 0; i < 2000; i++) {
-		if (smp_started) {
-			for (cpu = 0; cpu <= mp_maxid; cpu++) {
-				if (CPU_ABSENT(cpu))
-					continue;
-			}
+		if (smp_started)
 			return;
-		}
 		DELAY(1000);
 	}
 
@@ -259,8 +252,10 @@ init_secondary(uint64_t hart)
 	/* Enable software interrupts */
 	riscv_unmask_ipi();
 
+#ifndef EARLY_AP_STARTUP
 	/* Start per-CPU event timers. */
 	cpu_initclocks_ap();
+#endif
 
 	/* Enable external (PLIC) interrupts */
 	csr_set(sie, SIE_SEIE);

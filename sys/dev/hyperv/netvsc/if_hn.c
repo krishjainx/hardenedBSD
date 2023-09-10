@@ -1506,7 +1506,7 @@ hn_vf_rss_fixup(struct hn_softc *sc, bool reconf)
 	strlcpy(ifrk.ifrk_name, vf_ifp->if_xname, sizeof(ifrk.ifrk_name));
 	error = vf_ifp->if_ioctl(vf_ifp, SIOCGIFRSSKEY, (caddr_t)&ifrk);
 	if (error) {
-		if_printf(ifp, "%s SIOCGRSSKEY failed: %d\n",
+		if_printf(ifp, "%s SIOCGIFRSSKEY failed: %d\n",
 		    vf_ifp->if_xname, error);
 		goto done;
 	}
@@ -2362,7 +2362,8 @@ hn_attach(device_t dev)
 	 */
 
 	ifp->if_baudrate = IF_Gbps(10);
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
+	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST |
+	    IFF_NEEDSEPOCH;
 	ifp->if_ioctl = hn_ioctl;
 	ifp->if_init = hn_init;
 #ifdef HN_IFSTART_SUPPORT

@@ -360,7 +360,7 @@ mwl_attach(uint16_t devid, struct mwl_softc *sc)
 	taskqueue_start_threads(&sc->sc_tq, 1, PI_NET,
 		"%s taskq", device_get_nameunit(sc->sc_dev));
 
-	TASK_INIT(&sc->sc_rxtask, 0, mwl_rx_proc, sc);
+	NET_TASK_INIT(&sc->sc_rxtask, 0, mwl_rx_proc, sc);
 	TASK_INIT(&sc->sc_radartask, 0, mwl_radar_proc, sc);
 	TASK_INIT(&sc->sc_chanswitchtask, 0, mwl_chanswitch_proc, sc);
 	TASK_INIT(&sc->sc_bawatchdogtask, 0, mwl_bawatchdog_proc, sc);
@@ -2608,6 +2608,7 @@ cvtrssi(uint8_t ssi)
 static void
 mwl_rx_proc(void *arg, int npending)
 {
+	struct epoch_tracker et;
 	struct mwl_softc *sc = arg;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct mwl_rxbuf *bf;
@@ -2796,6 +2797,8 @@ mwl_rx_proc(void *arg, int npending)
 		/* dispatch */
 		ni = ieee80211_find_rxnode(ic,
 		    (const struct ieee80211_frame_min *) wh);
+
+		NET_EPOCH_ENTER(et);
 		if (ni != NULL) {
 			mn = MWL_NODE(ni);
 #ifdef MWL_ANT_INFO_SUPPORT
@@ -2811,6 +2814,7 @@ mwl_rx_proc(void *arg, int npending)
 			ieee80211_free_node(ni);
 		} else
 			(void) ieee80211_input_all(ic, m, rssi, nf);
+		NET_EPOCH_EXIT(et);
 rx_next:
 		/* NB: ignore ENOMEM so we process more descriptors */
 		(void) mwl_rxbuf_init(sc, bf);

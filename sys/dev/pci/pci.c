@@ -100,8 +100,6 @@ static void		pci_assign_interrupt(device_t bus, device_t dev,
 static int		pci_add_map(device_t bus, device_t dev, int reg,
 			    struct resource_list *rl, int force, int prefetch);
 static int		pci_probe(device_t dev);
-static int		pci_attach(device_t dev);
-static int		pci_detach(device_t dev);
 static void		pci_load_vendor_data(void);
 static int		pci_describe_parse_line(char **ptr, int *vendor,
 			    int *device, char **desc);
@@ -277,13 +275,6 @@ static const struct pci_quirk pci_quirks[] = {
 	{ 0x74501022, PCI_QUIRK_DISABLE_MSI,	0,	0 },
 
 	/*
-	 * MSI-X allocation doesn't work properly for devices passed through
-	 * by VMware up to at least ESXi 5.1.
-	 */
-	{ 0x079015ad, PCI_QUIRK_DISABLE_MSIX,	0,	0 }, /* PCI/PCI-X */
-	{ 0x07a015ad, PCI_QUIRK_DISABLE_MSIX,	0,	0 }, /* PCIe */
-
-	/*
 	 * Some virtualization environments emulate an older chipset
 	 * but support MSI just fine.  QEMU uses the Intel 82440.
 	 */
@@ -447,18 +438,18 @@ pci_find_bsf(uint8_t bus, uint8_t slot, uint8_t func)
 device_t
 pci_find_dbsf(uint32_t domain, uint8_t bus, uint8_t slot, uint8_t func)
 {
-	struct pci_devinfo *dinfo;
+	struct pci_devinfo *dinfo = NULL;
 
 	STAILQ_FOREACH(dinfo, &pci_devq, pci_links) {
 		if ((dinfo->cfg.domain == domain) &&
 		    (dinfo->cfg.bus == bus) &&
 		    (dinfo->cfg.slot == slot) &&
 		    (dinfo->cfg.func == func)) {
-			return (dinfo->cfg.dev);
+			break;
 		}
 	}
 
-	return (NULL);
+	return (dinfo != NULL ? dinfo->cfg.dev : NULL);
 }
 
 /* Find a device_t by vendor/device ID */
@@ -4373,7 +4364,7 @@ pci_attach_common(device_t dev)
 	return (0);
 }
 
-static int
+int
 pci_attach(device_t dev)
 {
 	int busno, domain, error;
@@ -4394,7 +4385,7 @@ pci_attach(device_t dev)
 	return (bus_generic_attach(dev));
 }
 
-static int
+int
 pci_detach(device_t dev)
 {
 #ifdef PCI_RES_BUS

@@ -57,6 +57,7 @@ __FBSDID("$FreeBSD$");
 #include <cam/cam_periph.h>
 #include <cam/cam_debug.h>
 #include <cam/cam_sim.h>
+#include <cam/cam_xpt_internal.h>	/* For KASSERTs only */
 
 #include <cam/scsi/scsi_all.h>
 #include <cam/scsi/scsi_message.h>
@@ -402,7 +403,9 @@ retry:
 	}
 	xpt_unlock_buses();
 	sbuf_finish(&local_sb);
-	sbuf_cpy(sb, sbuf_data(&local_sb));
+	if (sbuf_len(sb) != 0)
+		sbuf_cat(sb, ",");
+	sbuf_cat(sb, sbuf_data(&local_sb));
 	sbuf_delete(&local_sb);
 	return (count);
 }
@@ -679,6 +682,10 @@ camperiphfree(struct cam_periph *periph)
 	cam_periph_assert(periph, MA_OWNED);
 	KASSERT(periph->periph_allocating == 0, ("%s%d: freed while allocating",
 	    periph->periph_name, periph->unit_number));
+	KASSERT(periph->path->device->ccbq.dev_active == 0,
+	    ("%s%d: freed with %d active CCBs\n",
+		periph->periph_name, periph->unit_number,
+		periph->path->device->ccbq.dev_active));
 	for (p_drv = periph_drivers; *p_drv != NULL; p_drv++) {
 		if (strcmp((*p_drv)->driver_name, periph->periph_name) == 0)
 			break;
@@ -784,6 +791,7 @@ cam_periph_mapmem(union ccb *ccb, struct cam_periph_map_info *mapinfo,
 	u_int8_t **data_ptrs[CAM_PERIPH_MAXMAPS];
 	u_int32_t lengths[CAM_PERIPH_MAXMAPS];
 	u_int32_t dirs[CAM_PERIPH_MAXMAPS];
+	bool misaligned[CAM_PERIPH_MAXMAPS];
 
 	bzero(mapinfo, sizeof(*mapinfo));
 	if (maxmap == 0)
@@ -895,6 +903,12 @@ cam_periph_mapmem(union ccb *ccb, struct cam_periph_map_info *mapinfo,
 	 * have to unmap any previously mapped buffers.
 	 */
 	for (i = 0; i < numbufs; i++) {
+		if (lengths[i] > maxmap) {
+			printf("cam_periph_mapmem: attempt to map %lu bytes, "
+			       "which is greater than %lu\n",
+			       (long)(lengths[i]), (u_long)maxmap);
+			return (E2BIG);
+		}
 
 		/*
 		 * The userland data pointer passed in may not be page
@@ -904,15 +918,8 @@ cam_periph_mapmem(union ccb *ccb, struct cam_periph_map_info *mapinfo,
 		 * whatever extra space is necessary to make it to the page
 		 * boundary.
 		 */
-		if ((lengths[i] +
-		    (((vm_offset_t)(*data_ptrs[i])) & PAGE_MASK)) > maxmap){
-			printf("cam_periph_mapmem: attempt to map %lu bytes, "
-			       "which is greater than %lu\n",
-			       (long)(lengths[i] +
-			       (((vm_offset_t)(*data_ptrs[i])) & PAGE_MASK)),
-			       (u_long)maxmap);
-			return(E2BIG);
-		}
+		misaligned[i] = (lengths[i] +
+		    (((vm_offset_t)(*data_ptrs[i])) & PAGE_MASK) > MAXPHYS);
 	}
 
 	/*
@@ -936,7 +943,7 @@ cam_periph_mapmem(union ccb *ccb, struct cam_periph_map_info *mapinfo,
 		 * small allocations malloc is backed by UMA, and so much
 		 * cheaper on SMP systems.
 		 */
-		if (lengths[i] <= periph_mapmem_thresh &&
+		if ((lengths[i] <= periph_mapmem_thresh || misaligned[i]) &&
 		    ccb->ccb_h.func_code != XPT_MMC_IO) {
 			*data_ptrs[i] = malloc(lengths[i], M_CAMPERIPH,
 			    M_WAITOK);
@@ -1426,6 +1433,14 @@ camperiphdone(struct cam_periph *periph, union ccb *done_ccb)
 			xpt_async(AC_INQ_CHANGED, done_ccb->ccb_h.path, NULL);
 	}
 
+	/* If we tried long wait and still failed, remember that. */
+	if ((periph->flags & CAM_PERIPH_RECOVERY_WAIT) &&
+	    (done_ccb->csio.cdb_io.cdb_bytes[0] == TEST_UNIT_READY)) {
+		periph->flags &= ~CAM_PERIPH_RECOVERY_WAIT;
+		if (error != 0 && done_ccb->ccb_h.retry_count == 0)
+			periph->flags |= CAM_PERIPH_RECOVERY_WAIT_FAILED;
+	}
+
 	/*
 	 * After recovery action(s) completed, return to the original CCB.
 	 * If the recovery CCB has failed, considering its own possible
@@ -1781,7 +1796,9 @@ camperiphscsisenseerror(union ccb *ccb, union ccb **orig,
 			 */
 			int retries;
 
-			if ((err_action & SSQ_MANY) != 0) {
+			if ((err_action & SSQ_MANY) != 0 && (periph->flags &
+			     CAM_PERIPH_RECOVERY_WAIT_FAILED) == 0) {
+				periph->flags |= CAM_PERIPH_RECOVERY_WAIT;
 				*action_string = "Polling device for readiness";
 				retries = 120;
 			} else {

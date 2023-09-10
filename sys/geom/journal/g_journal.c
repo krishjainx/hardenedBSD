@@ -746,6 +746,7 @@ g_journal_start(struct bio *bp)
 			return;
 		}
 		/* FALLTHROUGH */
+	case BIO_SPEEDUP:
 	case BIO_DELETE:
 	default:
 		g_io_deliver(bp, EOPNOTSUPP);
@@ -2653,7 +2654,7 @@ g_journal_shutdown(void *arg, int howto __unused)
 	struct g_class *mp;
 	struct g_geom *gp, *gp2;
 
-	if (panicstr != NULL)
+	if (KERNEL_PANICKED())
 		return;
 	mp = arg;
 	g_topology_lock();
@@ -2874,7 +2875,7 @@ g_journal_do_switch(struct g_class *classp)
 		save = curthread_pflags_set(TDP_SYNCIO);
 
 		GJ_TIMER_START(1, &bt);
-		vfs_msync(mp, MNT_NOWAIT);
+		vfs_periodic(mp, MNT_NOWAIT);
 		GJ_TIMER_STOP(1, &bt, "Msync time of %s", mountpoint);
 
 		GJ_TIMER_START(1, &bt);

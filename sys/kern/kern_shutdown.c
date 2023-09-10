@@ -220,8 +220,9 @@ SYSCTL_INT(_kern, OID_AUTO, kerneldump_gzlevel, CTLFLAG_RWTUN,
  * to indicate that the kernel has already called panic.
  */
 const char *panicstr;
+bool __read_frequently panicked;
 
-int dumping;				/* system is dumping */
+int __read_mostly dumping;		/* system is dumping */
 int rebooting;				/* system is rebooting */
 /*
  * Used to serialize between sysctl kern.shutdown.dumpdevname and list
@@ -512,21 +513,21 @@ kern_reroot(void)
 	error = vfs_busy(mp, MBF_NOWAIT);
 	if (error != 0) {
 		vfs_ref(mp);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = vfs_busy(mp, 0);
 		vn_lock(vp, LK_SHARED | LK_RETRY);
 		vfs_rel(mp);
 		if (error != 0) {
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 			return (ENOENT);
 		}
-		if (vp->v_iflag & VI_DOOMED) {
-			VOP_UNLOCK(vp, 0);
+		if (VN_IS_DOOMED(vp)) {
+			VOP_UNLOCK(vp);
 			vfs_unbusy(mp);
 			return (ENOENT);
 		}
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	/*
 	 * Remove the filesystem containing currently-running executable
@@ -594,6 +595,9 @@ shutdown_halt(void *junk, int howto)
 		printf("\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
+
+		wdog_kern_pat(WD_TO_NEVER);
+
 		switch (cngetc()) {
 		case -1:		/* No console, just die */
 			cpu_halt();
@@ -712,7 +716,7 @@ SYSCTL_INT(_debug_kassert, OID_AUTO, do_log, KASSERT_RWTUN,
     &kassert_do_log, 0,
     "If warn_only is enabled, log (1) or do not log (0) assertion violations");
 
-SYSCTL_INT(_debug_kassert, OID_AUTO, warnings, KASSERT_RWTUN,
+SYSCTL_INT(_debug_kassert, OID_AUTO, warnings, CTLFLAG_RD | CTLFLAG_STATS,
     &kassert_warnings, 0, "number of KASSERTs that have been triggered");
 
 SYSCTL_INT(_debug_kassert, OID_AUTO, log_panic_at, KASSERT_RWTUN,
@@ -872,6 +876,7 @@ vpanic(const char *fmt, va_list ap)
 	else {
 		bootopt |= RB_DUMP;
 		panicstr = fmt;
+		panicked = true;
 		newpanic = 1;
 	}
 
@@ -1268,6 +1273,20 @@ cleanup:
 	free_single_dumper(newdi);
 	return (error);
 }
+
+#ifdef DDB
+void
+dumper_ddb_insert(struct dumperinfo *newdi)
+{
+	TAILQ_INSERT_HEAD(&dumper_configs, newdi, di_next);
+}
+
+void
+dumper_ddb_remove(struct dumperinfo *di)
+{
+	TAILQ_REMOVE(&dumper_configs, di, di_next);
+}
+#endif
 
 static bool
 dumper_config_match(const struct dumperinfo *di, const char *devname,

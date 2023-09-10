@@ -165,6 +165,7 @@ _LIBRARIES=	\
 		smb \
 		ssl \
 		ssp_nonshared \
+		stats \
 		stdthreads \
 		supcplusplus \
 		sysdecode \
@@ -237,7 +238,7 @@ LIBVERIEXEC?=	${LIBVERIEXECDIR}/libveriexec${PIE_SUFFIX}.a
 # Each library's LIBADD needs to be duplicated here for static linkage of
 # 2nd+ order consumers.  Auto-generating this would be better.
 _DP_80211=	sbuf bsdxml
-_DP_archive=	z bz2 lzma bsdxml
+_DP_archive=	z bz2 lzma bsdxml zstd
 _DP_zstd=	pthread
 .if ${MK_BLACKLIST} != "no"
 _DP_blacklist+=	pthread
@@ -354,9 +355,11 @@ _DP_xo=		util
 # The libc dependencies are not strictly needed but are defined to make the
 # assert happy.
 _DP_c=		compiler_rt
-.if ${MK_SSP} != "no"
+.if ${MK_SSP} != "no" && \
+    (${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH:Mpower*} != "")
 _DP_c+=		ssp_nonshared
 .endif
+_DP_stats=	sbuf pthread
 _DP_stdthreads=	pthread
 _DP_tacplus=	md
 _DP_panel=	ncurses
@@ -465,76 +468,77 @@ DPADD+=		${DPADD_${_l}}
 LDADD+=		${LDADD_${_l}}
 .endfor
 
+_LIB_OBJTOP?=	${OBJTOP}
 # INTERNALLIB definitions.
-LIBELFTCDIR=	${OBJTOP}/lib/libelftc
+LIBELFTCDIR=	${_LIB_OBJTOP}/lib/libelftc
 LIBELFTC?=	${LIBELFTCDIR}/libelftc.a
 
-LIBPEDIR=	${OBJTOP}/lib/libpe
+LIBPEDIR=	${_LIB_OBJTOP}/lib/libpe
 LIBPE?=		${LIBPEDIR}/libpe.a
 
-LIBOPENBSDDIR=	${OBJTOP}/lib/libopenbsd
+LIBOPENBSDDIR=	${_LIB_OBJTOP}/lib/libopenbsd
 LIBOPENBSD?=	${LIBOPENBSDDIR}/libopenbsd.a
 
-LIBSMDIR=	${OBJTOP}/lib/libsm
+LIBSMDIR=	${_LIB_OBJTOP}/lib/libsm
 LIBSM?=		${LIBSMDIR}/libsm.a
 
-LIBSMDBDIR=	${OBJTOP}/lib/libsmdb
+LIBSMDBDIR=	${_LIB_OBJTOP}/lib/libsmdb
 LIBSMDB?=	${LIBSMDBDIR}/libsmdb.a
 
-LIBSMUTILDIR=	${OBJTOP}/lib/libsmutil
+LIBSMUTILDIR=	${_LIB_OBJTOP}/lib/libsmutil
 LIBSMUTIL?=	${LIBSMUTILDIR}/libsmutil.a
 
-LIBNETBSDDIR?=	${OBJTOP}/lib/libnetbsd
+LIBNETBSDDIR?=	${_LIB_OBJTOP}/lib/libnetbsd
 LIBNETBSD?=	${LIBNETBSDDIR}/libnetbsd.a
 
-LIBVERSDIR?=	${OBJTOP}/kerberos5/lib/libvers
+LIBVERSDIR?=	${_LIB_OBJTOP}/kerberos5/lib/libvers
 LIBVERS?=	${LIBVERSDIR}/libvers.a
 
-LIBSLDIR=	${OBJTOP}/kerberos5/lib/libsl
+LIBSLDIR=	${_LIB_OBJTOP}/kerberos5/lib/libsl
 LIBSL?=		${LIBSLDIR}/libsl.a
 
-LIBIFCONFIGDIR=	${OBJTOP}/lib/libifconfig
+LIBIFCONFIGDIR=	${_LIB_OBJTOP}/lib/libifconfig
 LIBIFCONFIG?=	${LIBIFCONFIGDIR}/libifconfig.a
 
-LIBIPFDIR=	${OBJTOP}/sbin/ipf/libipf
+LIBIPFDIR=	${_LIB_OBJTOP}/sbin/ipf/libipf
 LIBIPF?=	${LIBIPFDIR}/libipf.a
 
-LIBTELNETDIR=	${OBJTOP}/lib/libtelnet
+LIBTELNETDIR=	${_LIB_OBJTOP}/lib/libtelnet
 LIBTELNET?=	${LIBTELNETDIR}/libtelnet.a
 
-LIBCRONDIR=	${OBJTOP}/usr.sbin/cron/lib
+LIBCRONDIR=	${_LIB_OBJTOP}/usr.sbin/cron/lib
 LIBCRON?=	${LIBCRONDIR}/libcron.a
 
-LIBNTPDIR=	${OBJTOP}/usr.sbin/ntp/libntp
+LIBNTPDIR=	${_LIB_OBJTOP}/usr.sbin/ntp/libntp
 LIBNTP?=	${LIBNTPDIR}/libntp.a
 
-LIBNTPEVENTDIR=	${OBJTOP}/usr.sbin/ntp/libntpevent
+LIBNTPEVENTDIR=	${_LIB_OBJTOP}/usr.sbin/ntp/libntpevent
 LIBNTPEVENT?=	${LIBNTPEVENTDIR}/libntpevent.a
 
-LIBOPTSDIR=	${OBJTOP}/usr.sbin/ntp/libopts
+LIBOPTSDIR=	${_LIB_OBJTOP}/usr.sbin/ntp/libopts
 LIBOPTS?=	${LIBOPTSDIR}/libopts.a
 
-LIBPARSEDIR=	${OBJTOP}/usr.sbin/ntp/libparse
+LIBPARSEDIR=	${_LIB_OBJTOP}/usr.sbin/ntp/libparse
 LIBPARSE?=	${LIBPARSEDIR}/libparse.a
 
-LIBLPRDIR=	${OBJTOP}/usr.sbin/lpr/common_source
+LIBLPRDIR=	${_LIB_OBJTOP}/usr.sbin/lpr/common_source
 LIBLPR?=	${LIBLPRDIR}/liblpr.a
 
-LIBFIFOLOGDIR=	${OBJTOP}/usr.sbin/fifolog/lib
+LIBFIFOLOGDIR=	${_LIB_OBJTOP}/usr.sbin/fifolog/lib
 LIBFIFOLOG?=	${LIBFIFOLOGDIR}/libfifolog.a
 
-LIBBSNMPTOOLSDIR=	${OBJTOP}/usr.sbin/bsnmpd/tools/libbsnmptools
+LIBBSNMPTOOLSDIR=	${_LIB_OBJTOP}/usr.sbin/bsnmpd/tools/libbsnmptools
 LIBBSNMPTOOLS?=	${LIBBSNMPTOOLSDIR}/libbsnmptools.a
 
-LIBAMUDIR=	${OBJTOP}/usr.sbin/amd/libamu
+LIBAMUDIR=	${_LIB_OBJTOP}/usr.sbin/amd/libamu
 LIBAMU?=	${LIBAMUDIR}/libamu.a
 
 LIBBE?=		${LIBBEDIR}/libbe.a
 
-LIBPMCSTATDIR=	${OBJTOP}/lib/libpmcstat
+LIBPMCSTATDIR=	${_LIB_OBJTOP}/lib/libpmcstat
 LIBPMCSTAT?=	${LIBPMCSTATDIR}/libpmcstat.a
 
-LIBC_NOSSP_PICDIR=	${OBJTOP}/lib/libc
+LIBC_NOSSP_PICDIR=	${_LIB_OBJTOP}/lib/libc
 LIBC_NOSSP_PIC?=	${LIBC_NOSSP_PICDIR}/libc_nossp_pic.a
 
 .if ${MK_HBSDCONTROL} != "no"
@@ -573,8 +577,8 @@ LIBDIALOGDIR=	${OBJTOP}/gnu/lib/libdialog
 LIBGCOVDIR=	${OBJTOP}/gnu/lib/libgcov
 LIBGOMPDIR=	${OBJTOP}/gnu/lib/libgomp
 LIBGNUREGEXDIR=	${OBJTOP}/gnu/lib/libregex
-LIBSSPDIR=	${OBJTOP}/gnu/lib/libssp
-LIBSSP_NONSHAREDDIR=	${OBJTOP}/gnu/lib/libssp/libssp_nonshared
+LIBSSPDIR=	${OBJTOP}/lib/libssp
+LIBSSP_NONSHAREDDIR=	${OBJTOP}/lib/libssp_nonshared
 LIBSUPCPLUSPLUSDIR=	${OBJTOP}/gnu/lib/libsupc++
 LIBASN1DIR=	${OBJTOP}/kerberos5/lib/libasn1
 LIBGSSAPI_KRB5DIR=	${OBJTOP}/kerberos5/lib/libgssapi_krb5

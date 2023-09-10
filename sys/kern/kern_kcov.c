@@ -321,7 +321,6 @@ kcov_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
 	struct kcov_info *info;
 	int error;
 
-
 	if ((error = devfs_get_cdevpriv((void **)&info)) != 0)
 		return (error);
 
@@ -383,8 +382,9 @@ kcov_alloc(struct kcov_info *info, size_t entries)
 	VM_OBJECT_WLOCK(info->bufobj);
 	for (n = 0; n < pages; n++) {
 		m = vm_page_grab(info->bufobj, n,
-		    VM_ALLOC_NOBUSY | VM_ALLOC_ZERO | VM_ALLOC_WIRED);
-		m->valid = VM_PAGE_BITS_ALL;
+		    VM_ALLOC_ZERO | VM_ALLOC_WIRED);
+		vm_page_valid(m);
+		vm_page_xunbusy(m);
 		pmap_qenter(info->kvaddr + n * PAGE_SIZE, &m, 1);
 	}
 	VM_OBJECT_WUNLOCK(info->bufobj);
@@ -408,10 +408,7 @@ kcov_free(struct kcov_info *info)
 		VM_OBJECT_WLOCK(info->bufobj);
 		m = vm_page_lookup(info->bufobj, 0);
 		for (i = 0; i < info->bufsize / PAGE_SIZE; i++) {
-			vm_page_lock(m);
 			vm_page_unwire_noq(m);
-			vm_page_unlock(m);
-
 			m = vm_page_next(m);
 		}
 		VM_OBJECT_WUNLOCK(info->bufobj);

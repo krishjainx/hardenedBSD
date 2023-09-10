@@ -654,6 +654,10 @@ options 	IPSEC			#IP security (requires device crypto)
 options		IPSEC_SUPPORT
 #options 	IPSEC_DEBUG		#debug for IP security
 
+
+# TLS framing and encryption of data transmitted over TCP sockets.
+options		KERN_TLS		# TLS transmit offload
+
 #
 # SMB/CIFS requester
 # NETSMB enables support for SMB protocol, it requires LIBMCHAIN and LIBICONV
@@ -1034,9 +1038,17 @@ options 	TCP_SIGNATURE		#include support for RFC 2385
 # a smooth scheduling of the traffic.
 options 	DUMMYNET
 
+# The DEBUGNET option enables a basic debug/panic-time networking API.  It
+# is used by NETDUMP and NETGDB.
+options 	DEBUGNET
+
 # The NETDUMP option enables netdump(4) client support in the kernel.
 # This allows a panicking kernel to transmit a kernel dump to a remote host.
 options 	NETDUMP
+
+# The NETGDB option enables netgdb(4) support in the kernel.  This allows a
+# panicking kernel to be debugged as a GDB remote over the network.
+options 	NETGDB
 
 #####################################################################
 # FILESYSTEM OPTIONS
@@ -1341,6 +1353,7 @@ device		ctl		#CAM Target Layer
 # CAM_DEBUG_TARGET	Limit debugging to the given target.
 # CAM_DEBUG_LUN		Limit debugging to the given lun.
 # CAM_DEBUG_DELAY	Delay in us after printing each debug line.
+# CAM_IO_STATS		Publish additional CAM device statics by sysctl
 #
 # CAM_MAX_HIGHPOWER: Maximum number of concurrent high power (start unit) cmds
 # SCSI_NO_SENSE_STRINGS: When defined disables sense descriptions
@@ -1362,6 +1375,7 @@ options 	SCSI_NO_SENSE_STRINGS
 options 	SCSI_NO_OP_STRINGS
 options 	SCSI_DELAY=5000	# Be pessimistic about Joe SCSI device
 options 	CAM_IOSCHED_DYNAMIC
+options		CAM_IO_STATS
 options		CAM_TEST_FAILURE
 
 # Options for the CAM CDROM driver:
@@ -1497,7 +1511,6 @@ options		TERMINAL_KERN_ATTR=(FG_LIGHTRED|BG_BLACK)
 #      53C810, 53C810A, 53C815, 53C825,  53C825A, 53C860, 53C875,
 #      53C876, 53C885,  53C895, 53C895A, 53C896,  53C897, 53C1510D,
 #      53C1010-33, 53C1010-66.
-# trm: Tekram DC395U/UW/F DC315U adapters.
 
 device		ahc
 device		ahd
@@ -1524,7 +1537,6 @@ device		mpr			# LSI-Logic MPT-Fusion 3
 device		mps			# LSI-Logic MPT-Fusion 2
 device		mpt			# LSI-Logic MPT-Fusion
 device		sym
-device		trm
 
 # The aic7xxx driver will attempt to use memory mapped I/O for all PCI
 # controllers that have it configured only if this option is set. Unfortunately,
@@ -2033,8 +2045,6 @@ device		sound
 # snd_ad1816:		Analog Devices AD1816 ISA PnP/non-PnP.
 # snd_als4000:		Avance Logic ALS4000 PCI.
 # snd_atiixp:		ATI IXP 200/300/400 PCI.
-# snd_audiocs:		Crystal Semiconductor CS4231 SBus/EBus. Only
-#			for sparc64.
 # snd_cmi:		CMedia CMI8338/CMI8738 PCI.
 # snd_cs4281:		Crystal Semiconductor CS4281 PCI.
 # snd_csa:		Crystal Semiconductor CS461x/428x PCI. (except
@@ -2077,7 +2087,6 @@ device		sound
 device		snd_ad1816
 device		snd_als4000
 device		snd_atiixp
-#device		snd_audiocs
 device		snd_cmi
 device		snd_cs4281
 device		snd_csa
@@ -2310,12 +2319,17 @@ device		jedec_dimm
 # iicbb	generic I2C bit-banging code (needed by lpbb, bktr)
 #
 device		iicbus		# Bus support, required for ic/iic/iicsmb below.
-device		iicbb
+device		iicbb		# bitbang driver; implements i2c on a pair of gpio pins
 
 device		ic
-device		iic
+device		iic		# userland access to i2c slave devices via ioctl(8)
 device		iicsmb		# smb over i2c bridge
 device		iicoc		# OpenCores I2C controller support
+
+# I2C bus multiplexer (mux) devices
+device		iicmux		# i2c mux core driver
+device		iic_gpiomux	# i2c mux hardware controlled via gpio pins
+device		ltc430x		# LTC4305 and LTC4306 i2c mux chips
 
 # I2C peripheral devices
 #
@@ -2341,9 +2355,6 @@ device		syr827		# Silergy Corp. DC/DC regulator
 # are automatically probed and attached when found.
 #
 # Supported devices:
-# vpo	Iomega Zip Drive
-#	Requires SCSI disk support ('scbus' and 'da'), best
-#	performance is achieved with ports in EPP 1.9 mode.
 # lpt	Parallel Printer
 # plip	Parallel network interface
 # ppi	General-purpose I/O ("Geek Port") + IEEE1284 I/O
@@ -2361,7 +2372,6 @@ options 	DEBUG_1284	# IEEE1284 signaling protocol debug
 options 	PERIPH_1284	# Makes your computer act as an IEEE1284
 				# compliant peripheral
 options 	DONTPROBE_1284	# Avoid boot detection of PnP parallel devices
-options 	VP0_DEBUG	# ZIP/ZIP+ debug
 options 	LPT_DEBUG	# Printer driver debug
 options 	PPC_DEBUG	# Parallel chipset level debug
 options 	PLIP_DEBUG	# Parallel network IP interface debug
@@ -2372,7 +2382,6 @@ device		ppc
 hint.ppc.0.at="isa"
 hint.ppc.0.irq="7"
 device		ppbus
-device		vpo
 device		lpt
 device		plip
 device		ppi
@@ -2381,6 +2390,7 @@ device		lpbb
 device		pcfclock
 
 # General Purpose I/O pins
+device		dwgpio		# Synopsys DesignWare APB GPIO Controller
 device  	gpio		# gpio interfaces and bus support
 device  	gpiobacklight	# sysctl control of gpio-based backlight
 device  	gpioiic		# i2c via gpio bitbang
@@ -2897,3 +2907,6 @@ options 	SPIGEN_LEGACY_CDEVNAME # legacy device names for spigen
 # Compression supports.
 device		zlib		# gzip/zlib compression/decompression library
 device		xz		# xz_embedded LZMA de-compression library
+
+# Kernel support for stats(3).
+options 	STATS

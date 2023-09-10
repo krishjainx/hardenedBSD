@@ -78,6 +78,8 @@ SYSCTL_ROOT_NODE(CTL_HW,	  hw,     CTLFLAG_RW, 0,
 	"hardware");
 SYSCTL_ROOT_NODE(CTL_MACHDEP, machdep, CTLFLAG_RW, 0,
 	"machine dependent");
+SYSCTL_NODE(_machdep, OID_AUTO, mitigations, CTLFLAG_RW, 0,
+	"Machine dependent platform mitigations.");
 SYSCTL_ROOT_NODE(CTL_USER,	  user,   CTLFLAG_RW, 0,
 	"user-level");
 SYSCTL_ROOT_NODE(CTL_P1003_1B,  p1003_1b,   CTLFLAG_RW, 0,
@@ -517,7 +519,6 @@ sysctl_build_id(SYSCTL_HANDLER_ARGS)
 	    sectionlen > (BUILD_ID_HEADER_LEN + BUILD_ID_HASH_MAXLEN)) {
 		return (ENOENT);
 	}
-
 
 	hashlen = sectionlen - BUILD_ID_HEADER_LEN;
 	for (int i = 0; i < hashlen; i++) {

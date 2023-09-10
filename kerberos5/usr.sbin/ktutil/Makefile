@@ -16,6 +16,8 @@ SRCS=	add.c \
 	remove.c \
 	rename.c
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CFLAGS+=-I${KRB5DIR}/lib/roken -I${KRB5DIR}/lib/sl -I.
 LIBADD=	kadm5clnt krb5 roken crypto edit sl vers
 

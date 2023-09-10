@@ -52,7 +52,7 @@
 
 #include "_elftc.h"
 
-ELFTC_VCSID("$Id: readelf.c 3649 2018-11-24 03:26:23Z emaste $");
+ELFTC_VCSID("$Id: readelf.c 3769 2019-06-29 15:15:02Z emaste $");
 
 /* Backwards compatability for older FreeBSD releases. */
 #ifndef	STB_GNU_UNIQUE
@@ -220,12 +220,12 @@ struct eflags_desc {
 	const char *desc;
 };
 
-struct mips_option {
+struct flag_desc {
 	uint64_t flag;
 	const char *desc;
 };
 
-struct flag_desc {
+struct mips_option {
 	uint64_t flag;
 	const char *desc;
 };
@@ -1180,6 +1180,8 @@ note_type_freebsd_core(unsigned int nt)
 	case 15: return "NT_PROCSTAT_PSSTRINGS";
 	case 16: return "NT_PROCSTAT_AUXV";
 	case 17: return "NT_PTLWPINFO";
+	case 0x100: return "NT_PPC_VMX (ppc Altivec registers)";
+	case 0x102: return "NT_PPC_VSX (ppc VSX registers)";
 	case 0x202: return "NT_X86_XSTATE (x86 XSAVE extended state)";
 	case 0x400: return "NT_ARM_VFP (arm VFP registers)";
 	default: return (note_type_unknown(nt));
@@ -2379,7 +2381,7 @@ dump_eflags(struct readelf *re, uint64_t e_flags)
 		case 2: printf(", OpenPOWER ELF V2 ABI"); break;
 		default: break;
 		}
-		/* explicit fall through*/
+		/* FALLTHROUGH */
 	case EM_PPC:
 		edesc = powerpc_eflags_desc;
 		break;
@@ -5962,6 +5964,7 @@ dump_dwarf_frame_regtable(struct readelf *re, Dwarf_Fde fde, Dwarf_Addr pc,
 	for (; cur_pc < end_pc; cur_pc++) {
 		if (dwarf_get_fde_info_for_all_regs(fde, cur_pc, &rt, &row_pc,
 		    &de) != DW_DLV_OK) {
+			free(vec);
 			warnx("dwarf_get_fde_info_for_all_regs failed: %s\n",
 			    dwarf_errmsg(de));
 			return (-1);
@@ -6296,8 +6299,8 @@ search_loclist_at(struct readelf *re, Dwarf_Die die, Dwarf_Unsigned lowpc,
 		if (*la_list_cap == *la_list_len) {
 			*la_list = realloc(*la_list,
 			    *la_list_cap * 2 * sizeof(**la_list));
-			if (la_list == NULL)
-				errx(EXIT_FAILURE, "realloc failed");
+			if (*la_list == NULL)
+				err(EXIT_FAILURE, "realloc failed");
 			*la_list_cap *= 2;
 		}
 		la = &((*la_list)[*la_list_len]);
@@ -7226,13 +7229,13 @@ dump_object(struct readelf *re, int fd)
 
 	if ((re->elf = elf_begin(fd, ELF_C_READ, NULL)) == NULL) {
 		warnx("elf_begin() failed: %s", elf_errmsg(-1));
-		return;
+		goto done;
 	}
 
 	switch (elf_kind(re->elf)) {
 	case ELF_K_NONE:
 		warnx("Not an ELF file.");
-		return;
+		goto done;
 	case ELF_K_ELF:
 		dump_elf(re);
 		break;
@@ -7241,9 +7244,9 @@ dump_object(struct readelf *re, int fd)
 		break;
 	default:
 		warnx("Internal: libelf returned unknown elf kind.");
-		return;
 	}
 
+done:
 	elf_end(re->elf);
 }
 

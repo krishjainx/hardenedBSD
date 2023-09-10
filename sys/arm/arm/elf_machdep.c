@@ -50,9 +50,14 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/elf.h>
 #include <machine/md_var.h>
+#include <machine/stack.h>
 #ifdef VFP
 #include <machine/vfp.h>
 #endif
+
+#include "opt_ddb.h"            /* for OPT_DDB */
+#include "opt_global.h"         /* for OPT_KDTRACE_HOOKS */
+#include "opt_stack.h"          /* for OPT_STACK */
 
 static boolean_t elf32_arm_abi_supported(struct image_params *);
 
@@ -78,13 +83,14 @@ struct sysentvec elf32_freebsd_sysvec = {
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
 	.sv_stackprot	= VM_PROT_ALL,
+	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
 	.sv_copyout_strings = exec_copyout_strings,
 	.sv_setregs	= exec_setregs,
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
 	.sv_flags	=
 #if __ARM_ARCH >= 6
-			  SV_ASLR | SV_SHP | SV_TIMEKEEP |
+			  SV_SHP | SV_TIMEKEEP |
 #endif
 			  SV_ABI_FREEBSD | SV_ILP32,
 	.sv_set_syscall_retval = cpu_set_syscall_retval,
@@ -312,12 +318,32 @@ elf_cpu_load_file(linker_file_t lf)
 	cpu_l2cache_wb_range((vm_offset_t)lf->address, (vm_size_t)lf->size);
 	cpu_icache_sync_range((vm_offset_t)lf->address, (vm_size_t)lf->size);
 #endif
+
+#if defined(DDB) || defined(KDTRACE_HOOKS) || defined(STACK)
+	/*
+	 * Inform the stack(9) code of the new module, so it can acquire its
+	 * per-module unwind data.
+	 */
+	unwind_module_loaded(lf);
+#endif
+
 	return (0);
 }
 
 int
-elf_cpu_unload_file(linker_file_t lf __unused)
+elf_cpu_parse_dynamic(linker_file_t lf __unused, Elf_Dyn *dynamic __unused)
 {
 
+	return (0);
+}
+
+int
+elf_cpu_unload_file(linker_file_t lf)
+{
+
+#if defined(DDB) || defined(KDTRACE_HOOKS) || defined(STACK)
+	/* Inform the stack(9) code that this module is gone. */
+	unwind_module_unloaded(lf);
+#endif
 	return (0);
 }

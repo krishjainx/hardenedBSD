@@ -65,11 +65,8 @@ DEVEL|PLAYGROUND)
 	    --extra-button --extra-label "Other" \
 	    --menu "Please select the site closest to you or \"other\" if you'd like to specify a different choice.  Also note that not every site listed here carries more than the base distribution kits. Only Primary sites are guaranteed to carry the full range of possible distributions. Select a site that's close!" \
 	    0 0 0 \
-		http://installer.hardenedbsd.org	"Main Site (NYI)"\
-		http://ipv6.installer.hardenedbsd.org 	"IPv6 Main Site (NYI)"\
-		http://ca-01.installer.hardenedbsd.org	"Canada Mirror Site"\
-		http://dk-01.installer.hardenedbsd.org	"Denmark Mirror Site"\
-		http://pub.allbsd.org			"Japan Mirror Site" \
+		http://ci-01.nyi.hardenedbsd.org	"Main Site (NYI)"\
+		http://qspcqclhifj3tcpojsbwoxgwanlo2wakti2ia4wozxjcldkxmw2yj3yd.onion "Onion Service" \
 	    2>&1 1>&3`
 	MIRROR_BUTTON=$?
 	exec 3>&-
@@ -78,17 +75,11 @@ DEVEL|PLAYGROUND)
 ;;
 *)
 	case `uname -r` in
-	10.*)
-		_hbsd_dist_dir="pub/HardenedBSD/releases/`uname -m`/`uname -p`/hardenedbsd-10-stable-LAST"
-		;;
-	11.*)
-		_hbsd_dist_dir="pub/HardenedBSD/releases/`uname -m`/`uname -p`/hardenedbsd-11-stable-LAST"
-		;;
 	12.*)
-		_hbsd_dist_dir="pub/HardenedBSD/releases/`uname -m`/`uname -p`/hardenedbsd-12-stable-LAST"
+		_hbsd_dist_dir="pub/hardenedbsd/12-stable/`uname -m`/`uname -p`/BUILD-LATEST"
 		;;
 	*)
-		_hbsd_dist_dir="pub/HardenedBSD/releases/`uname -m`/`uname -p`/hardenedbsd-master-LAST"
+		_hbsd_dist_dir="pub/hardenedbsd/current/`uname -m`/`uname -p`/BUILD-LATEST"
 		;;
 	esac
 
@@ -98,11 +89,8 @@ DEVEL|PLAYGROUND)
 	    --extra-button --extra-label "Other" \
 	    --menu "Please select the site closest to you or \"other\" if you'd like to specify a different choice.  Also note that not every site listed here carries more than the base distribution kits. Only Primary sites are guaranteed to carry the full range of possible distributions. Select a site that's close!" \
 	    0 0 0 \
-		http://installer.hardenedbsd.org	"Main Site (NYI)"\
-		http://ipv6.installer.hardenedbsd.org 	"IPv6 Main Site (NYI)"\
-		http://ca-01.installer.hardenedbsd.org	"Canada Mirror Site"\
-		http://dk-01.installer.hardenedbsd.org	"Denmark Mirror Site"\
-		http://pub.allbsd.org			"Japan Mirror Site" \
+		http://ci-01.nyi.hardenedbsd.org	"Main Site (NYI)"\
+		http://qspcqclhifj3tcpojsbwoxgwanlo2wakti2ia4wozxjcldkxmw2yj3yd.onion "Onion Service" \
 	    2>&1 1>&3`
 	MIRROR_BUTTON=$?
 	exec 3>&-

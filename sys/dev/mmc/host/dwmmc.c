@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2014 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2014-2019 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/rman.h>
+#include <sys/queue.h>
+#include <sys/taskqueue.h>
 
 #include <dev/mmc/bridge.h>
 #include <dev/mmc/mmcbrvar.h>
@@ -64,8 +66,6 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/mmc/host/dwmmc_reg.h>
 #include <dev/mmc/host/dwmmc_var.h>
-
-#include "opt_mmccam.h"
 
 #include "mmcbr_if.h"
 
@@ -127,6 +127,7 @@ static int dma_done(struct dwmmc_softc *, struct mmc_command *);
 static int dma_stop(struct dwmmc_softc *);
 static void pio_read(struct dwmmc_softc *, struct mmc_command *);
 static void pio_write(struct dwmmc_softc *, struct mmc_command *);
+static void dwmmc_handle_card_present(struct dwmmc_softc *sc, bool is_present);
 
 static struct resource_spec dwmmc_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -374,7 +375,8 @@ dwmmc_intr(void *arg)
 			sc->dto_rcvd = 1;
 
 		if (reg & SDMMC_INTMASK_CD) {
-			/* XXX: Handle card detect */
+			dwmmc_handle_card_present(sc,
+			    READ4(sc, SDMMC_CDETECT) == 0 ? true : false);
 		}
 	}
 
@@ -407,6 +409,56 @@ dwmmc_intr(void *arg)
 	DWMMC_UNLOCK(sc);
 }
 
+static void
+dwmmc_handle_card_present(struct dwmmc_softc *sc, bool is_present)
+{
+	bool was_present;
+
+	was_present = sc->child != NULL;
+
+	if (!was_present && is_present) {
+		taskqueue_enqueue_timeout(taskqueue_swi_giant,
+		  &sc->card_delayed_task, -(hz / 2));
+	} else if (was_present && !is_present) {
+		taskqueue_enqueue(taskqueue_swi_giant, &sc->card_task);
+	}
+}
+
+static void
+dwmmc_card_task(void *arg, int pending __unused)
+{
+	struct dwmmc_softc *sc = arg;
+
+	DWMMC_LOCK(sc);
+
+	if (READ4(sc, SDMMC_CDETECT) == 0) {
+		if (sc->child == NULL) {
+			if (bootverbose)
+				device_printf(sc->dev, "Card inserted\n");
+
+			sc->child = device_add_child(sc->dev, "mmc", -1);
+			DWMMC_UNLOCK(sc);
+			if (sc->child) {
+				device_set_ivars(sc->child, sc);
+				(void)device_probe_and_attach(sc->child);
+			}
+		} else
+			DWMMC_UNLOCK(sc);
+		
+	} else {
+		/* Card isn't present, detach if necessary */
+		if (sc->child != NULL) {
+			if (bootverbose)
+				device_printf(sc->dev, "Card removed\n");
+
+			DWMMC_UNLOCK(sc);
+			device_delete_child(sc->dev, sc->child);
+			sc->child = NULL;
+		} else
+			DWMMC_UNLOCK(sc);
+	}
+}
+
 static int
 parse_fdt(struct dwmmc_softc *sc)
 {
@@ -430,8 +482,8 @@ parse_fdt(struct dwmmc_softc *sc)
 		sc->host.caps |= MMC_CAP_8_BIT_DATA;
 
 	/* max-frequency */
-	if (OF_getencprop(node, "max-frequency", &sc->max_hz, sizeof(uint32_t)) <= 0)
-		sc->max_hz = 200000000;
+	if (OF_getencprop(node, "max-frequency", &sc->host.f_max, sizeof(uint32_t)) <= 0)
+		sc->host.f_max = 200000000;
 
 	/* fifo-depth */
 	if ((len = OF_getproplen(node, "fifo-depth")) > 0) {
@@ -454,8 +506,54 @@ parse_fdt(struct dwmmc_softc *sc)
 	}
 
 #ifdef EXT_RESOURCES
+
+	/* IP block reset is optional */
+	error = hwreset_get_by_ofw_name(sc->dev, 0, "reset", &sc->hwreset);
+	if (error != 0 &&
+	    error != ENOENT &&
+	    error != ENODEV) {
+		device_printf(sc->dev, "Cannot get reset\n");
+		goto fail;
+	}
+
+	/* vmmc regulator is optional */
+	error = regulator_get_by_ofw_property(sc->dev, 0, "vmmc-supply",
+	     &sc->vmmc);
+	if (error != 0 &&
+	    error != ENOENT &&
+	    error != ENODEV) {
+		device_printf(sc->dev, "Cannot get regulator 'vmmc-supply'\n");
+		goto fail;
+	}
+
+	/* vqmmc regulator is optional */
+	error = regulator_get_by_ofw_property(sc->dev, 0, "vqmmc-supply",
+	     &sc->vqmmc);
+	if (error != 0 &&
+	    error != ENOENT &&
+	    error != ENODEV) {
+		device_printf(sc->dev, "Cannot get regulator 'vqmmc-supply'\n");
+		goto fail;
+	}
+
+	/* Assert reset first */
+	if (sc->hwreset != NULL) {
+		error = hwreset_assert(sc->hwreset);
+		if (error != 0) {
+			device_printf(sc->dev, "Cannot assert reset\n");
+			goto fail;
+		}
+	}
+
 	/* BIU (Bus Interface Unit clock) is optional */
 	error = clk_get_by_ofw_name(sc->dev, 0, "biu", &sc->biu);
+	if (error != 0 &&
+	    error != ENOENT &&
+	    error != ENODEV) {
+		device_printf(sc->dev, "Cannot get 'biu' clock\n");
+		goto fail;
+	}
+
 	if (sc->biu) {
 		error = clk_enable(sc->biu);
 		if (error != 0) {
@@ -469,19 +567,51 @@ parse_fdt(struct dwmmc_softc *sc)
 	 * if no clock-frequency property is given
 	 */
 	error = clk_get_by_ofw_name(sc->dev, 0, "ciu", &sc->ciu);
+	if (error != 0 &&
+	    error != ENOENT &&
+	    error != ENODEV) {
+		device_printf(sc->dev, "Cannot get 'ciu' clock\n");
+		goto fail;
+	}
+
 	if (sc->ciu) {
-		error = clk_enable(sc->ciu);
-		if (error != 0) {
-			device_printf(sc->dev, "cannot enable ciu clock\n");
-			goto fail;
-		}
 		if (bus_hz != 0) {
 			error = clk_set_freq(sc->ciu, bus_hz, 0);
 			if (error != 0)
 				device_printf(sc->dev,
 				    "cannot set ciu clock to %u\n", bus_hz);
 		}
+		error = clk_enable(sc->ciu);
+		if (error != 0) {
+			device_printf(sc->dev, "cannot enable ciu clock\n");
+			goto fail;
+		}
 		clk_get_freq(sc->ciu, &sc->bus_hz);
+	}
+
+	/* Enable regulators */
+	if (sc->vmmc != NULL) {
+		error = regulator_enable(sc->vmmc);
+		if (error != 0) {
+			device_printf(sc->dev, "Cannot enable vmmc regulator\n");
+			goto fail;
+		}
+	}
+	if (sc->vqmmc != NULL) {
+		error = regulator_enable(sc->vqmmc);
+		if (error != 0) {
+			device_printf(sc->dev, "Cannot enable vqmmc regulator\n");
+			goto fail;
+		}
+	}
+
+	/* Take dwmmc out of reset */
+	if (sc->hwreset != NULL) {
+		error = hwreset_deassert(sc->hwreset);
+		if (error != 0) {
+			device_printf(sc->dev, "Cannot deassert reset\n");
+			goto fail;
+		}
 	}
 #endif /* EXT_RESOURCES */
 
@@ -561,6 +691,7 @@ dwmmc_attach(device_t dev)
 	}
 
 	if (!sc->use_pio) {
+		dma_stop(sc);
 		if (dma_setup(sc))
 			return (ENXIO);
 
@@ -593,13 +724,62 @@ dwmmc_attach(device_t dev)
 	WRITE4(sc, SDMMC_CTRL, SDMMC_CTRL_INT_ENABLE);
 
 	sc->host.f_min = 400000;
-	sc->host.f_max = sc->max_hz;
 	sc->host.host_ocr = MMC_OCR_320_330 | MMC_OCR_330_340;
 	sc->host.caps |= MMC_CAP_HSPEED;
 	sc->host.caps |= MMC_CAP_SIGNALING_330;
 
-	device_add_child(dev, "mmc", -1);
-	return (bus_generic_attach(dev));
+	TASK_INIT(&sc->card_task, 0, dwmmc_card_task, sc);
+	TIMEOUT_TASK_INIT(taskqueue_swi_giant, &sc->card_delayed_task, 0,
+		dwmmc_card_task, sc);
+
+	/* 
+	 * Schedule a card detection as we won't get an interrupt
+	 * if the card is inserted when we attach
+	 */
+	dwmmc_card_task(sc, 0);
+
+	return (0);
+}
+
+int
+dwmmc_detach(device_t dev)
+{
+	struct dwmmc_softc *sc;
+	int ret;
+
+	sc = device_get_softc(dev);
+
+	ret = device_delete_children(dev);
+	if (ret != 0)
+		return (ret);
+
+	taskqueue_drain(taskqueue_swi_giant, &sc->card_task);
+	taskqueue_drain_timeout(taskqueue_swi_giant, &sc->card_delayed_task);
+
+	if (sc->intr_cookie != NULL) {
+		ret = bus_teardown_intr(dev, sc->res[1], sc->intr_cookie);
+		if (ret != 0)
+			return (ret);
+	}
+	bus_release_resources(dev, dwmmc_spec, sc->res);
+
+	DWMMC_LOCK_DESTROY(sc);
+
+#ifdef EXT_RESOURCES
+	if (sc->hwreset != NULL && hwreset_deassert(sc->hwreset) != 0)
+		device_printf(sc->dev, "cannot deassert reset\n");
+	if (sc->biu != NULL && clk_disable(sc->biu) != 0)
+		device_printf(sc->dev, "cannot disable biu clock\n");
+	if (sc->ciu != NULL && clk_disable(sc->ciu) != 0)
+			device_printf(sc->dev, "cannot disable ciu clock\n");
+
+	if (sc->vmmc && regulator_disable(sc->vmmc) != 0)
+		device_printf(sc->dev, "Cannot disable vmmc regulator\n");
+	if (sc->vqmmc && regulator_disable(sc->vqmmc) != 0)
+		device_printf(sc->dev, "Cannot disable vqmmc regulator\n");
+#endif
+
+	return (0);
 }
 
 static int

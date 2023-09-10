@@ -52,12 +52,12 @@ __FBSDID("$FreeBSD$");
 #include <netinet/sctp_bsd_addr.h>
 #include <netinet/sctp_input.h>
 #include <netinet/sctp_crc32.h>
+#include <netinet/sctp_kdtrace.h>
 #if defined(INET) || defined(INET6)
 #include <netinet/udp.h>
 #endif
 #include <netinet/udp_var.h>
 #include <machine/in_cksum.h>
-#include <netinet/in_kdtrace.h>
 
 
 
@@ -4970,7 +4970,10 @@ sctp_send_initiate(struct sctp_inpcb *inp, struct sctp_tcb *stcb, int so_locked
 
 struct mbuf *
 sctp_arethere_unrecognized_parameters(struct mbuf *in_initpkt,
-    int param_offset, int *abort_processing, struct sctp_chunkhdr *cp, int *nat_friendly)
+    int param_offset, int *abort_processing,
+    struct sctp_chunkhdr *cp,
+    int *nat_friendly,
+    int *cookie_found)
 {
 	/*
 	 * Given a mbuf containing an INIT or INIT-ACK with the param_offset
@@ -4993,6 +4996,9 @@ sctp_arethere_unrecognized_parameters(struct mbuf *in_initpkt,
 	uint16_t ptype, plen, padded_size;
 
 	*abort_processing = 0;
+	if (cookie_found != NULL) {
+		*cookie_found = 0;
+	}
 	mat = in_initpkt;
 	limit = ntohs(cp->chunk_length) - sizeof(struct sctp_init_chunk);
 	at = param_offset;
@@ -5021,10 +5027,15 @@ sctp_arethere_unrecognized_parameters(struct mbuf *in_initpkt,
 		switch (ptype) {
 			/* Param's with variable size */
 		case SCTP_HEARTBEAT_INFO:
-		case SCTP_STATE_COOKIE:
 		case SCTP_UNRECOG_PARAM:
 		case SCTP_ERROR_CAUSE_IND:
 			/* ok skip fwd */
+			at += padded_size;
+			break;
+		case SCTP_STATE_COOKIE:
+			if (cookie_found != NULL) {
+				*cookie_found = 1;
+			}
 			at += padded_size;
 			break;
 			/* Param's with variable size within a range */
@@ -5568,7 +5579,9 @@ sctp_send_initiate_ack(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 	abort_flag = 0;
 	op_err = sctp_arethere_unrecognized_parameters(init_pkt,
 	    (offset + sizeof(struct sctp_init_chunk)),
-	    &abort_flag, (struct sctp_chunkhdr *)init_chk, &nat_friendly);
+	    &abort_flag,
+	    (struct sctp_chunkhdr *)init_chk,
+	    &nat_friendly, NULL);
 	if (abort_flag) {
 do_a_abort:
 		if (op_err == NULL) {
@@ -6872,8 +6885,8 @@ sctp_sendall(struct sctp_inpcb *inp, struct uio *uio, struct mbuf *m,
 		/* There is another. */
 		return (EBUSY);
 	}
-	if (uio->uio_resid > SCTP_MAX_SENDALL_LIMIT) {
-		/* You must be less than the max! */
+	if (uio->uio_resid > (ssize_t)SCTP_BASE_SYSCTL(sctp_sendall_limit)) {
+		/* You must not be larger than the limit! */
 		return (EMSGSIZE);
 	}
 	SCTP_MALLOC(ca, struct sctp_copy_all *, sizeof(struct sctp_copy_all),
@@ -6919,7 +6932,7 @@ sctp_sendall(struct sctp_inpcb *inp, struct uio *uio, struct mbuf *m,
 	    (void *)ca, 0,
 	    sctp_sendall_completes, inp, 1);
 	if (ret) {
-		SCTP_PRINTF("Failed to initiate iterator for sendall\n");
+		inp->sctp_flags &= ~SCTP_PCB_FLAGS_SND_ITERATOR_UP;
 		SCTP_FREE(ca, SCTP_M_COPYAL);
 		SCTP_LTRACE_ERR_RET_PKT(m, inp, NULL, NULL, SCTP_FROM_SCTP_OUTPUT, EFAULT);
 		return (EFAULT);
@@ -7859,8 +7872,8 @@ sctp_med_chunk_output(struct sctp_inpcb *inp,
 	int bundle_at, ctl_cnt, no_data_chunks, eeor_mode;
 	unsigned int mtu, r_mtu, omtu, mx_mtu, to_out;
 	int tsns_sent = 0;
-	uint32_t auth_offset = 0;
-	struct sctp_auth_chunk *auth = NULL;
+	uint32_t auth_offset;
+	struct sctp_auth_chunk *auth;
 	uint16_t auth_keyid;
 	int override_ok = 1;
 	int skip_fill_up = 0;
@@ -8055,6 +8068,8 @@ again_one_more_time:
 		}
 		bundle_at = 0;
 		endoutchain = outchain = NULL;
+		auth = NULL;
+		auth_offset = 0;
 		no_fragmentflg = 1;
 		one_chunk = 0;
 		if (net->dest_state & SCTP_ADDR_UNCONFIRMED) {
@@ -9001,7 +9016,7 @@ sctp_queue_op_err(struct sctp_tcb *stcb, struct mbuf *op_err)
 
 int
 sctp_send_cookie_echo(struct mbuf *m,
-    int offset,
+    int offset, int limit,
     struct sctp_tcb *stcb,
     struct sctp_nets *net)
 {
@@ -9027,17 +9042,28 @@ sctp_send_cookie_echo(struct mbuf *m,
 		}
 		ptype = ntohs(phdr->param_type);
 		plen = ntohs(phdr->param_length);
+		if (plen < sizeof(struct sctp_paramhdr)) {
+			return (-6);
+		}
 		if (ptype == SCTP_STATE_COOKIE) {
 			int pad;
 
 			/* found the cookie */
-			if ((pad = (plen % 4))) {
-				plen += 4 - pad;
+			if (at + plen > limit) {
+				return (-7);
 			}
 			cookie = SCTP_M_COPYM(m, at, plen, M_NOWAIT);
 			if (cookie == NULL) {
 				/* No memory */
 				return (-2);
+			}
+			if ((pad = (plen % 4)) > 0) {
+				pad = 4 - pad;
+			}
+			if (pad > 0) {
+				if (sctp_pad_lastmbuf(cookie, pad, NULL) == NULL) {
+					return (-8);
+				}
 			}
 #ifdef SCTP_MBUF_LOGGING
 			if (SCTP_BASE_SYSCTL(sctp_logging_level) & SCTP_MBUF_LOGGING_ENABLE) {
@@ -9064,7 +9090,7 @@ sctp_send_cookie_echo(struct mbuf *m,
 	chk->rec.chunk_id.id = SCTP_COOKIE_ECHO;
 	chk->rec.chunk_id.can_take_data = 0;
 	chk->flags = CHUNK_FLAGS_FRAGMENT_OK;
-	chk->send_size = plen;
+	chk->send_size = SCTP_SIZE32(plen);
 	chk->sent = SCTP_DATAGRAM_UNSENT;
 	chk->snd_count = 0;
 	chk->asoc = &stcb->asoc;
@@ -10048,7 +10074,8 @@ do_it_again:
 	 */
 	if (SCTP_OS_TIMER_PENDING(&stcb->asoc.dack_timer.timer)) {
 		sctp_send_sack(stcb, so_locked);
-		(void)SCTP_OS_TIMER_STOP(&stcb->asoc.dack_timer.timer);
+		sctp_timer_stop(SCTP_TIMER_TYPE_RECV, stcb->sctp_ep, stcb, NULL,
+		    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_3);
 	}
 	while (asoc->sent_queue_retran_cnt) {
 		/*-
@@ -10577,7 +10604,7 @@ sctp_send_sack(struct sctp_tcb *stcb, int so_locked
 			if (stcb->asoc.delayed_ack) {
 				sctp_timer_stop(SCTP_TIMER_TYPE_RECV,
 				    stcb->sctp_ep, stcb, NULL,
-				    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_3);
+				    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_4);
 				sctp_timer_start(SCTP_TIMER_TYPE_RECV,
 				    stcb->sctp_ep, stcb, NULL);
 			} else {
@@ -10646,7 +10673,7 @@ sctp_send_sack(struct sctp_tcb *stcb, int so_locked
 		if (stcb->asoc.delayed_ack) {
 			sctp_timer_stop(SCTP_TIMER_TYPE_RECV,
 			    stcb->sctp_ep, stcb, NULL,
-			    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_4);
+			    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_5);
 			sctp_timer_start(SCTP_TIMER_TYPE_RECV,
 			    stcb->sctp_ep, stcb, NULL);
 		} else {
@@ -12808,7 +12835,7 @@ sctp_lower_sosend(struct socket *so,
 			if (control) {
 				if (sctp_process_cmsgs_for_init(stcb, control, &error)) {
 					sctp_free_assoc(inp, stcb, SCTP_PCBFREE_FORCE,
-					    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_5);
+					    SCTP_FROM_SCTP_OUTPUT + SCTP_LOC_6);
 					hold_tcblock = 0;
 					stcb = NULL;
 					goto out_unlocked;

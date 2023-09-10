@@ -825,7 +825,7 @@ static	void		adadone(struct cam_periph *periph,
 			       union ccb *done_ccb);
 static  int		adaerror(union ccb *ccb, u_int32_t cam_flags,
 				u_int32_t sense_flags);
-static timeout_t	adasendorderedtag;
+static callout_func_t	adasendorderedtag;
 static void		adashutdown(void *arg, int howto);
 static void		adasuspend(void *arg);
 static void		adaresume(void *arg);
@@ -2430,6 +2430,10 @@ adastart(struct cam_periph *periph, union ccb *start_ccb)
 			}
 			break;
 		}
+		default:
+			biofinish(bp, NULL, EOPNOTSUPP);
+			xpt_release_ccb(start_ccb);
+			return;
 		}
 		start_ccb->ccb_h.ccb_state = ADA_CCB_BUFFER_IO;
 		start_ccb->ccb_h.flags |= CAM_UNLOCKED;
@@ -3420,6 +3424,8 @@ adasetgeom(struct ada_softc *softc, struct ccb_getdev *cgd)
 	softc->disk->d_fwheads = softc->params.heads;
 	ata_disk_firmware_geom_adjust(softc->disk);
 	softc->disk->d_rotation_rate = cgd->ident_data.media_rotation_rate;
+	snprintf(softc->disk->d_attachment, sizeof(softc->disk->d_attachment),
+	    "%s%d", softc->cpi.dev_name, softc->cpi.unit_number);
 }
 
 static void

@@ -77,8 +77,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_pagequeue.h>
 #include <vm/uma_int.h>
 
-int	vmem_startup_count(void);
-
 #define	VMEM_OPTORDER		5
 #define	VMEM_OPTVALUE		(1 << VMEM_OPTORDER)
 #define	VMEM_MAXORDER						\
@@ -202,7 +200,6 @@ static uma_zone_t vmem_zone;
 #define	VMEM_CONDVAR_DESTROY(vm)	cv_destroy(&vm->vm_cv)
 #define	VMEM_CONDVAR_WAIT(vm)		cv_wait(&vm->vm_cv, &vm->vm_lock)
 #define	VMEM_CONDVAR_BROADCAST(vm)	cv_broadcast(&vm->vm_cv)
-
 
 #define	VMEM_LOCK(vm)		mtx_lock(&vm->vm_lock)
 #define	VMEM_TRYLOCK(vm)	mtx_trylock(&vm->vm_lock)
@@ -466,6 +463,7 @@ static void
 bt_remseg(vmem_t *vm, bt_t *bt)
 {
 
+	MPASS(bt->bt_type != BT_TYPE_CURSOR);
 	TAILQ_REMOVE(&vm->vm_seglist, bt, bt_seglist);
 	bt_free(vm, bt);
 }
@@ -588,7 +586,7 @@ qc_drain(vmem_t *vm)
 
 	qcache_idx_max = vm->vm_qcache_max >> vm->vm_quantum_shift;
 	for (i = 0; i < qcache_idx_max; i++)
-		zone_drain(vm->vm_qcache[i].qc_cache);
+		uma_zone_reclaim(vm->vm_qcache[i].qc_cache, UMA_RECLAIM_DRAIN);
 }
 
 #ifndef UMA_MD_SMALL_ALLOC
@@ -660,17 +658,6 @@ vmem_bt_alloc(uma_zone_t zone, vm_size_t bytes, int domain, uint8_t *pflag,
 		pause("btalloc", 1);
 
 	return (NULL);
-}
-
-/*
- * How many pages do we need to startup_alloc.
- */
-int
-vmem_startup_count(void)
-{
-
-	return (howmany(BT_MAXALLOC,
-	    UMA_SLAB_SPACE / sizeof(struct vmem_btag)));
 }
 #endif
 
@@ -843,6 +830,7 @@ vmem_destroy1(vmem_t *vm)
 	VMEM_LOCK(vm);
 	MPASS(vm->vm_nbusytag == 0);
 
+	TAILQ_REMOVE(&vm->vm_seglist, &vm->vm_cursor, bt_seglist);
 	while ((bt = TAILQ_FIRST(&vm->vm_seglist)) != NULL)
 		bt_remseg(vm, bt);
 

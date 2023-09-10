@@ -70,6 +70,7 @@ __FBSDID("$FreeBSD$");
 #include <assert.h>
 
 
+#include "debug.h"
 #include "iov.h"
 #include "mevent.h"
 #include "net_backends.h"
@@ -98,7 +99,8 @@ struct net_backend {
 	 * vector provided by the caller has 'iovcnt' elements and contains
 	 * the packet to send.
 	 */
-	ssize_t (*send)(struct net_backend *be, struct iovec *iov, int iovcnt);
+	ssize_t (*send)(struct net_backend *be, const struct iovec *iov,
+	    int iovcnt);
 
 	/*
 	 * Called to receive a packet from the backend. When the function
@@ -107,7 +109,19 @@ struct net_backend {
 	 * The function returns 0 if the backend doesn't have a new packet to
 	 * receive.
 	 */
-	ssize_t (*recv)(struct net_backend *be, struct iovec *iov, int iovcnt);
+	ssize_t (*recv)(struct net_backend *be, const struct iovec *iov,
+	    int iovcnt);
+
+	/*
+	 * Ask the backend to enable or disable receive operation in the
+	 * backend. On return from a disable operation, it is guaranteed
+	 * that the receive callback won't be called until receive is
+	 * enabled again. Note however that it is up to the caller to make
+	 * sure that netbe_recv() is not currently being executed by another
+	 * thread.
+	 */
+	void (*recv_enable)(struct net_backend *be);
+	void (*recv_disable)(struct net_backend *be);
 
 	/*
 	 * Ask the backend for the virtio-net features it is able to
@@ -145,7 +159,7 @@ SET_DECLARE(net_backend_set, struct net_backend);
 
 #define VNET_HDR_LEN	sizeof(struct virtio_net_rxhdr)
 
-#define WPRINTF(params) printf params
+#define WPRINTF(params) PRINTLN params
 
 /*
  * The tap backend
@@ -181,7 +195,7 @@ tap_init(struct net_backend *be, const char *devname,
 #endif
 
 	if (cb == NULL) {
-		WPRINTF(("TAP backend requires non-NULL callback\n"));
+		WPRINTF(("TAP backend requires non-NULL callback"));
 		return (-1);
 	}
 
@@ -190,7 +204,7 @@ tap_init(struct net_backend *be, const char *devname,
 
 	be->fd = open(tbuf, O_RDWR);
 	if (be->fd == -1) {
-		WPRINTF(("open of tap device %s failed\n", tbuf));
+		WPRINTF(("open of tap device %s failed", tbuf));
 		goto error;
 	}
 
@@ -199,7 +213,7 @@ tap_init(struct net_backend *be, const char *devname,
 	 * notifications with the event loop
 	 */
 	if (ioctl(be->fd, FIONBIO, &opt) < 0) {
-		WPRINTF(("tap device O_NONBLOCK failed\n"));
+		WPRINTF(("tap device O_NONBLOCK failed"));
 		goto error;
 	}
 
@@ -209,9 +223,9 @@ tap_init(struct net_backend *be, const char *devname,
 		errx(EX_OSERR, "Unable to apply rights for sandbox");
 #endif
 
-	priv->mevp = mevent_add(be->fd, EVF_READ, cb, param);
+	priv->mevp = mevent_add_disabled(be->fd, EVF_READ, cb, param);
 	if (priv->mevp == NULL) {
-		WPRINTF(("Could not register event\n"));
+		WPRINTF(("Could not register event"));
 		goto error;
 	}
 
@@ -226,13 +240,13 @@ error:
  * Called to send a buffer chain out to the tap device
  */
 static ssize_t
-tap_send(struct net_backend *be, struct iovec *iov, int iovcnt)
+tap_send(struct net_backend *be, const struct iovec *iov, int iovcnt)
 {
 	return (writev(be->fd, iov, iovcnt));
 }
 
 static ssize_t
-tap_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
+tap_recv(struct net_backend *be, const struct iovec *iov, int iovcnt)
 {
 	ssize_t ret;
 
@@ -246,6 +260,22 @@ tap_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
 	}
 
 	return (ret);
+}
+
+static void
+tap_recv_enable(struct net_backend *be)
+{
+	struct tap_priv *priv = (struct tap_priv *)be->opaque;
+
+	mevent_enable(priv->mevp);
+}
+
+static void
+tap_recv_disable(struct net_backend *be)
+{
+	struct tap_priv *priv = (struct tap_priv *)be->opaque;
+
+	mevent_disable(priv->mevp);
 }
 
 static uint64_t
@@ -270,6 +300,8 @@ static struct net_backend tap_backend = {
 	.cleanup = tap_cleanup,
 	.send = tap_send,
 	.recv = tap_recv,
+	.recv_enable = tap_recv_enable,
+	.recv_disable = tap_recv_disable,
 	.get_cap = tap_get_cap,
 	.set_cap = tap_set_cap,
 };
@@ -282,6 +314,8 @@ static struct net_backend vmnet_backend = {
 	.cleanup = tap_cleanup,
 	.send = tap_send,
 	.recv = tap_recv,
+	.recv_enable = tap_recv_enable,
+	.recv_disable = tap_recv_disable,
 	.get_cap = tap_get_cap,
 	.set_cap = tap_set_cap,
 };
@@ -297,7 +331,8 @@ DATA_SET(net_backend_set, vmnet_backend);
 #define NETMAP_FEATURES (VIRTIO_NET_F_CSUM | VIRTIO_NET_F_HOST_TSO4 | \
 		VIRTIO_NET_F_HOST_TSO6 | VIRTIO_NET_F_HOST_UFO | \
 		VIRTIO_NET_F_GUEST_CSUM | VIRTIO_NET_F_GUEST_TSO4 | \
-		VIRTIO_NET_F_GUEST_TSO6 | VIRTIO_NET_F_GUEST_UFO)
+		VIRTIO_NET_F_GUEST_TSO6 | VIRTIO_NET_F_GUEST_UFO | \
+		VIRTIO_NET_F_MRG_RXBUF)
 
 struct netmap_priv {
 	char ifname[IFNAMSIZ];
@@ -331,7 +366,7 @@ netmap_set_vnet_hdr_len(struct net_backend *be, int vnet_hdr_len)
 	req.nr_arg1 = vnet_hdr_len;
 	err = ioctl(be->fd, NIOCREGIF, &req);
 	if (err) {
-		WPRINTF(("Unable to set vnet header length %d\n",
+		WPRINTF(("Unable to set vnet header length %d",
 				vnet_hdr_len));
 		return (err);
 	}
@@ -388,7 +423,7 @@ netmap_init(struct net_backend *be, const char *devname,
 
 	priv->nmd = nm_open(priv->ifname, NULL, NETMAP_NO_TX_POLL, NULL);
 	if (priv->nmd == NULL) {
-		WPRINTF(("Unable to nm_open(): interface '%s', errno (%s)\n",
+		WPRINTF(("Unable to nm_open(): interface '%s', errno (%s)",
 			devname, strerror(errno)));
 		free(priv);
 		return (-1);
@@ -401,9 +436,9 @@ netmap_init(struct net_backend *be, const char *devname,
 	priv->cb_param = param;
 	be->fd = priv->nmd->fd;
 
-	priv->mevp = mevent_add(be->fd, EVF_READ, cb, param);
+	priv->mevp = mevent_add_disabled(be->fd, EVF_READ, cb, param);
 	if (priv->mevp == NULL) {
-		WPRINTF(("Could not register event\n"));
+		WPRINTF(("Could not register event"));
 		return (-1);
 	}
 
@@ -425,7 +460,7 @@ netmap_cleanup(struct net_backend *be)
 }
 
 static ssize_t
-netmap_send(struct net_backend *be, struct iovec *iov,
+netmap_send(struct net_backend *be, const struct iovec *iov,
 	    int iovcnt)
 {
 	struct netmap_priv *priv = (struct netmap_priv *)be->opaque;
@@ -440,7 +475,7 @@ netmap_send(struct net_backend *be, struct iovec *iov,
 	ring = priv->tx;
 	head = ring->head;
 	if (head == ring->tail) {
-		WPRINTF(("No space, drop %zu bytes\n", count_iov(iov, iovcnt)));
+		WPRINTF(("No space, drop %zu bytes", count_iov(iov, iovcnt)));
 		goto txsync;
 	}
 	nm_buf = NETMAP_BUF(ring, ring->slot[head].buf_idx);
@@ -481,7 +516,7 @@ netmap_send(struct net_backend *be, struct iovec *iov,
 				 * We ran out of netmap slots while
 				 * splitting the iovec fragments.
 				 */
-				WPRINTF(("No space, drop %zu bytes\n",
+				WPRINTF(("No space, drop %zu bytes",
 				   count_iov(iov, iovcnt)));
 				goto txsync;
 			}
@@ -505,7 +540,7 @@ txsync:
 }
 
 static ssize_t
-netmap_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
+netmap_recv(struct net_backend *be, const struct iovec *iov, int iovcnt)
 {
 	struct netmap_priv *priv = (struct netmap_priv *)be->opaque;
 	struct netmap_slot *slot = NULL;
@@ -553,7 +588,7 @@ netmap_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
 			iovcnt--;
 			if (iovcnt == 0) {
 				/* No space to receive. */
-				WPRINTF(("Short iov, drop %zd bytes\n",
+				WPRINTF(("Short iov, drop %zd bytes",
 				    totlen));
 				return (-ENOSPC);
 			}
@@ -571,6 +606,22 @@ netmap_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
 	return (totlen);
 }
 
+static void
+netmap_recv_enable(struct net_backend *be)
+{
+	struct netmap_priv *priv = (struct netmap_priv *)be->opaque;
+
+	mevent_enable(priv->mevp);
+}
+
+static void
+netmap_recv_disable(struct net_backend *be)
+{
+	struct netmap_priv *priv = (struct netmap_priv *)be->opaque;
+
+	mevent_disable(priv->mevp);
+}
+
 static struct net_backend netmap_backend = {
 	.prefix = "netmap",
 	.priv_size = sizeof(struct netmap_priv),
@@ -578,6 +629,8 @@ static struct net_backend netmap_backend = {
 	.cleanup = netmap_cleanup,
 	.send = netmap_send,
 	.recv = netmap_recv,
+	.recv_enable = netmap_recv_enable,
+	.recv_disable = netmap_recv_disable,
 	.get_cap = netmap_get_cap,
 	.set_cap = netmap_set_cap,
 };
@@ -590,6 +643,8 @@ static struct net_backend vale_backend = {
 	.cleanup = netmap_cleanup,
 	.send = netmap_send,
 	.recv = netmap_recv,
+	.recv_enable = netmap_recv_enable,
+	.recv_disable = netmap_recv_disable,
 	.get_cap = netmap_get_cap,
 	.set_cap = netmap_set_cap,
 };
@@ -696,41 +751,9 @@ netbe_set_cap(struct net_backend *be, uint64_t features,
 	return (ret);
 }
 
-static __inline struct iovec *
-iov_trim(struct iovec *iov, int *iovcnt, unsigned int tlen)
-{
-	struct iovec *riov;
-
-	/* XXX short-cut: assume first segment is >= tlen */
-	assert(iov[0].iov_len >= tlen);
-
-	iov[0].iov_len -= tlen;
-	if (iov[0].iov_len == 0) {
-		assert(*iovcnt > 1);
-		*iovcnt -= 1;
-		riov = &iov[1];
-	} else {
-		iov[0].iov_base = (void *)((uintptr_t)iov[0].iov_base + tlen);
-		riov = &iov[0];
-	}
-
-	return (riov);
-}
-
 ssize_t
-netbe_send(struct net_backend *be, struct iovec *iov, int iovcnt)
+netbe_send(struct net_backend *be, const struct iovec *iov, int iovcnt)
 {
-
-	assert(be != NULL);
-	if (be->be_vnet_hdr_len != be->fe_vnet_hdr_len) {
-		/*
-		 * The frontend uses a virtio-net header, but the backend
-		 * does not. We ignore it (as it must be all zeroes) and
-		 * strip it.
-		 */
-		assert(be->be_vnet_hdr_len == 0);
-		iov = iov_trim(iov, &iovcnt, be->fe_vnet_hdr_len);
-	}
 
 	return (be->send(be, iov, iovcnt));
 }
@@ -741,46 +764,10 @@ netbe_send(struct net_backend *be, struct iovec *iov, int iovcnt)
  * the length of the packet just read. Return -1 in case of errors.
  */
 ssize_t
-netbe_recv(struct net_backend *be, struct iovec *iov, int iovcnt)
+netbe_recv(struct net_backend *be, const struct iovec *iov, int iovcnt)
 {
-	/* Length of prepended virtio-net header. */
-	unsigned int hlen = be->fe_vnet_hdr_len;
-	int ret;
 
-	assert(be != NULL);
-
-	if (hlen && hlen != be->be_vnet_hdr_len) {
-		/*
-		 * The frontend uses a virtio-net header, but the backend
-		 * does not. We need to prepend a zeroed header.
-		 */
-		struct virtio_net_rxhdr *vh;
-
-		assert(be->be_vnet_hdr_len == 0);
-
-		/*
-		 * Get a pointer to the rx header, and use the
-		 * data immediately following it for the packet buffer.
-		 */
-		vh = iov[0].iov_base;
-		iov = iov_trim(iov, &iovcnt, hlen);
-
-		/*
-		 * The only valid field in the rx packet header is the
-		 * number of buffers if merged rx bufs were negotiated.
-		 */
-		memset(vh, 0, hlen);
-		if (hlen == VNET_HDR_LEN) {
-			vh->vrh_bufs = 1;
-		}
-	}
-
-	ret = be->recv(be, iov, iovcnt);
-	if (ret > 0) {
-		ret += hlen;
-	}
-
-	return (ret);
+	return (be->recv(be, iov, iovcnt));
 }
 
 /*
@@ -805,3 +792,23 @@ netbe_rx_discard(struct net_backend *be)
 	return netbe_recv(be, &iov, 1);
 }
 
+void
+netbe_rx_disable(struct net_backend *be)
+{
+
+	return be->recv_disable(be);
+}
+
+void
+netbe_rx_enable(struct net_backend *be)
+{
+
+	return be->recv_enable(be);
+}
+
+size_t
+netbe_get_vnet_hdr_len(struct net_backend *be)
+{
+
+	return (be->be_vnet_hdr_len);
+}

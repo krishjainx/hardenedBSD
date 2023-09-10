@@ -16,6 +16,7 @@ MAN=	aac.4 \
 	${_acpi_rapidstart.4} \
 	${_acpi_sony.4} \
 	acpi_thermal.4 \
+	acpi_battery.4 \
 	${_acpi_toshiba.4} \
 	acpi_video.4 \
 	${_acpi_wmi.4} \
@@ -174,6 +175,7 @@ MAN=	aac.4 \
 	gpio.4 \
 	gpioiic.4 \
 	gpioled.4 \
+	gpioths.4 \
 	gre.4 \
 	h_ertt.4 \
 	hardening.4 \
@@ -204,8 +206,10 @@ MAN=	aac.4 \
 	ig4.4 \
 	igmp.4 \
 	iic.4 \
+	iic_gpiomux.4 \
 	iicbb.4 \
 	iicbus.4 \
+	iicmux.4 \
 	iicsmb.4 \
 	iir.4 \
 	${_imcsmb.4} \
@@ -229,6 +233,7 @@ MAN=	aac.4 \
 	ismt.4 \
 	isp.4 \
 	ispfw.4 \
+	${_itwd.4} \
 	iwi.4 \
 	iwifw.4 \
 	iwm.4 \
@@ -257,6 +262,7 @@ MAN=	aac.4 \
 	lp.4 \
 	lpbb.4 \
 	lpt.4 \
+	ltc430x.4 \
 	mac.4 \
 	mac_biba.4 \
 	mac_bsdextended.4 \
@@ -308,6 +314,7 @@ MAN=	aac.4 \
 	net80211.4 \
 	netdump.4 \
 	netfpga10g_nf10bmac.4 \
+	netgdb.4 \
 	netgraph.4 \
 	netintro.4 \
 	netmap.4 \
@@ -351,6 +358,7 @@ MAN=	aac.4 \
 	ng_netflow.4 \
 	ng_one2many.4 \
 	ng_patch.4 \
+	ng_pipe.4 \
 	ng_ppp.4 \
 	ng_pppoe.4 \
 	ng_pptpgre.4 \
@@ -373,6 +381,7 @@ MAN=	aac.4 \
 	ng_vlan.4 \
 	nmdm.4 \
 	${_ntb.4} \
+	${_ntb_hw_amd.4} \
 	${_ntb_hw_intel.4} \
 	${_ntb_hw_plx.4} \
 	${_ntb_transport.4} \
@@ -381,6 +390,7 @@ MAN=	aac.4 \
 	null.4 \
 	numa.4 \
 	${_nvd.4} \
+	${_nvdimm.4} \
 	${_nvme.4} \
 	${_nvram.4} \
 	${_nvram2env.4} \
@@ -414,6 +424,7 @@ MAN=	aac.4 \
 	psm.4 \
 	pst.4 \
 	pt.4 \
+	ptnet.4 \
 	pts.4 \
 	pty.4 \
 	puc.4 \
@@ -457,7 +468,6 @@ MAN=	aac.4 \
 	siftr.4 \
 	siis.4 \
 	simplebus.4 \
-	sio.4 \
 	sis.4 \
 	sk.4 \
 	${_smartpqi.4} \
@@ -503,6 +513,7 @@ MAN=	aac.4 \
 	ste.4 \
 	stf.4 \
 	stge.4 \
+	${_superio.4} \
 	sym.4 \
 	syncache.4 \
 	syncer.4 \
@@ -518,7 +529,6 @@ MAN=	aac.4 \
 	ti.4 \
 	timecounters.4 \
 	${_tpm.4} \
-	trm.4 \
 	tty.4 \
 	tun.4 \
 	twa.4 \
@@ -542,9 +552,9 @@ MAN=	aac.4 \
 	vkbd.4 \
 	vlan.4 \
 	vxlan.4 \
+	${_vmd.4} \
 	${_vmm.4} \
 	${_vmx.4} \
-	vpo.4 \
 	vr.4 \
 	vt.4 \
 	vte.4 \
@@ -643,6 +653,8 @@ MLINKS+=gem.4 if_gem.4
 MLINKS+=geom.4 GEOM.4
 MLINKS+=gif.4 if_gif.4
 MLINKS+=gpio.4 gpiobus.4
+MLINKS+=gpioths.4 dht11.4
+MLINKS+=gpioths.4 dht22.4
 MLINKS+=gre.4 if_gre.4
 MLINKS+=hme.4 if_hme.4
 MLINKS+=hpet.4 acpi_hpet.4
@@ -693,6 +705,7 @@ MLINKS+=pccbb.4 cbb.4
 MLINKS+=pcm.4 snd.4 \
 	pcm.4 sound.4
 MLINKS+=pms.4 pmspcv.4
+MLINKS+=ptnet.4 if_ptnet.4
 MLINKS+=ral.4 if_ral.4
 MLINKS+=re.4 if_re.4
 MLINKS+=rl.4 if_rl.4
@@ -717,7 +730,9 @@ MLINKS+=stf.4 if_stf.4
 MLINKS+=stge.4 if_stge.4
 MLINKS+=syncache.4 syncookies.4
 MLINKS+=syscons.4 sc.4
-MLINKS+=tap.4 if_tap.4
+MLINKS+=tap.4 if_tap.4 \
+	tap.4 vmnet.4 \
+	tap.4 if_vmnet.4
 MLINKS+=tdfx.4 tdfx_linux.4
 MLINKS+=ti.4 if_ti.4
 MLINKS+=tun.4 if_tun.4
@@ -726,7 +741,6 @@ MLINKS+=vge.4 if_vge.4
 MLINKS+=vlan.4 if_vlan.4
 MLINKS+=vxlan.4 if_vxlan.4
 MLINKS+=${_vmx.4} ${_if_vmx.4}
-MLINKS+=vpo.4 imm.4
 MLINKS+=vr.4 if_vr.4
 MLINKS+=vte.4 if_vte.4
 MLINKS+=${_vtnet.4} ${_if_vtnet.4}
@@ -787,6 +801,7 @@ _if_wpi.4=	if_wpi.4
 _imcsmb.4=	imcsmb.4
 _ipmi.4=	ipmi.4
 _io.4=		io.4
+_itwd.4=	itwd.4
 _linux.4=	linux.4
 _nda.4=		nda.4
 _ndis.4=	ndis.4
@@ -794,28 +809,30 @@ _nfe.4=		nfe.4
 _nfsmb.4=	nfsmb.4
 _if_ntb.4=	if_ntb.4
 _ntb.4=		ntb.4
+_ntb_hw_amd.4=	ntb_hw_amd.4
 _ntb_hw_intel.4=	ntb_hw_intel.4
 _ntb_hw_plx.4=	ntb_hw_plx.4
 _ntb_transport.4=ntb_transport.4
 _nvd.4=		nvd.4
 _nvme.4=	nvme.4
 _nvram.4=	nvram.4
+_padlock.4=	padlock.4
+_rr232x.4=	rr232x.4
+_speaker.4=	speaker.4
+_spkr.4=	spkr.4
+_superio.4=	superio.4
+_tpm.4=		tpm.4
+_urtw.4=	urtw.4
+_viawd.4=	viawd.4
 _virtio.4=	virtio.4
 _virtio_balloon.4=virtio_balloon.4
 _virtio_blk.4=	virtio_blk.4
 _virtio_console.4=virtio_console.4
 _virtio_random.4= virtio_random.4
 _virtio_scsi.4= virtio_scsi.4
+_vmci.4=	vmci.4
 _vmx.4=		vmx.4
 _vtnet.4=	vtnet.4
-_padlock.4=	padlock.4
-_rr232x.4=	rr232x.4
-_speaker.4=	speaker.4
-_spkr.4=	spkr.4
-_tpm.4=		tpm.4
-_urtw.4=	urtw.4
-_viawd.4=	viawd.4
-_vmci.4=	vmci.4
 _wbwd.4=	wbwd.4
 _wpi.4=		wpi.4
 _xen.4=		xen.4
@@ -825,12 +842,14 @@ _xnb.4=		xnb.4
 
 .if ${MACHINE_CPUARCH} == "amd64"
 _ioat.4=	ioat.4
+_nvdimm.4=	nvdimm.4
 _qlxge.4=	qlxge.4
 _qlxgb.4=	qlxgb.4
 _qlxgbe.4=	qlxgbe.4
 _qlnxe.4=	qlnxe.4
 _sfxge.4=	sfxge.4
 _smartpqi.4=	smartpqi.4
+_vmd.4=		vmd.4
 
 MLINKS+=qlxge.4 if_qlxge.4
 MLINKS+=qlxgb.4 if_qlxgb.4
@@ -849,8 +868,16 @@ _nvram2env.4=	nvram2env.4
 .endif
 
 .if ${MACHINE_CPUARCH} == "powerpc"
+_if_vtnet.4=    if_vtnet.4
 _nvd.4= 	nvd.4
 _nvme.4=	nvme.4
+_virtio.4=	virtio.4
+_virtio_balloon.4=virtio_balloon.4
+_virtio_blk.4=	virtio_blk.4
+_virtio_console.4=virtio_console.4
+_virtio_random.4= virtio_random.4
+_virtio_scsi.4=	virtio_scsi.4
+_vtnet.4=	vtnet.4
 .endif
 
 .if empty(MAN_ARCH)

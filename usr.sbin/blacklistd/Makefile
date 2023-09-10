@@ -20,4 +20,6 @@ CFLAGS+=-I${BLACKLIST_DIR}/include -I${BLACKLIST_DIR}/port \
 	-DHAVE_STRUCT_SOCKADDR_SA_LEN
 # CFLAGS+= -D_REENTRANT
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 .include <bsd.prog.mk>

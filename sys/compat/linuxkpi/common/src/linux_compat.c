@@ -508,15 +508,10 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot,
 			page = vm_page_getfake(paddr, vm_obj->memattr);
 			VM_OBJECT_WLOCK(vm_obj);
 
-			vm_page_replace_checked(page, vm_obj,
-			    (*mres)->pindex, *mres);
-
-			vm_page_lock(*mres);
-			vm_page_free(*mres);
-			vm_page_unlock(*mres);
+			vm_page_replace(page, vm_obj, (*mres)->pindex, *mres);
 			*mres = page;
 		}
-		page->valid = VM_PAGE_BITS_ALL;
+		vm_page_valid(page);
 		return (VM_PAGER_OK);
 	}
 	return (VM_PAGER_FAIL);
@@ -1503,6 +1498,9 @@ linux_file_close(struct file *file, struct thread *td)
 	KASSERT(file_count(filp) == 0,
 	    ("File refcount(%d) is not zero", file_count(filp)));
 
+	if (td == NULL)
+		td = curthread;
+
 	error = 0;
 	filp->f_flags = file->f_flag;
 	linux_set_current(td);
@@ -1528,7 +1526,9 @@ linux_file_ioctl(struct file *fp, u_long cmd, void *data, struct ucred *cred,
 	struct linux_file *filp;
 	const struct file_operations *fop;
 	struct linux_cdev *ldev;
-	int error;
+	struct fiodgname_arg *fgn;
+	const char *p;
+	int error, i;
 
 	error = 0;
 	filp = (struct linux_file *)fp->f_data;
@@ -1555,6 +1555,23 @@ linux_file_ioctl(struct file *fp, u_long cmd, void *data, struct ucred *cred,
 		break;
 	case FIOGETOWN:
 		*(int *)data = fgetown(&filp->f_sigio);
+		break;
+	case FIODGNAME:
+#ifdef	COMPAT_FREEBSD32
+	case FIODGNAME_32:
+#endif
+		if (filp->f_cdev == NULL || filp->f_cdev->cdev == NULL) {
+			error = ENXIO;
+			break;
+		}
+		fgn = data;
+		p = devtoname(filp->f_cdev->cdev);
+		i = strlen(p) + 1;
+		if (i > fgn->len) {
+			error = EINVAL;
+			break;
+		}
+		error = copyout(p, fiodgname_buf_get_ptr(fgn, cmd), i);
 		break;
 	default:
 		error = linux_file_ioctl_sub(fp, filp, fop, cmd, data, td);
@@ -1668,7 +1685,7 @@ linux_file_stat(struct file *fp, struct stat *sb, struct ucred *active_cred,
 
 	vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = vn_stat(vp, sb, td->td_ucred, NOCRED, td);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return (error);
 }

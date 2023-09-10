@@ -237,13 +237,15 @@ struct prison_racct {
 #define	PR_ALLOW_UNPRIV_DEBUG		0x00000200
 #define	PR_ALLOW_RESERVED_PORTS		0x00008000
 #define	PR_ALLOW_KMEM_ACCESS		0x00010000	/* reserved, not used yet */
-#define	PR_ALLOW_ALL_STATIC		0x000183ff
+#define	PR_ALLOW_EXTATTR		0x00020000
+#define	PR_ALLOW_ALL_STATIC		0x000383ff
 
 /*
  * PR_ALLOW_DIFFERENCES determines which flags are able to be
  * different between the parent and child jail upon creation.
  */
-#define	PR_ALLOW_DIFFERENCES		(PR_ALLOW_UNPRIV_DEBUG)
+#define	PR_ALLOW_DIFFERENCES		(PR_ALLOW_UNPRIV_DEBUG | \
+    PR_ALLOW_EXTATTR)
 
 /*
  * OSD methods
@@ -374,7 +376,12 @@ struct mount;
 struct sockaddr;
 struct statfs;
 struct vfsconf;
-int jailed(struct ucred *cred);
+
+/*
+ * Return 1 if the passed credential is in a jail, otherwise 0.
+ */
+#define jailed(cred)	(cred->cr_prison != &prison0)
+
 int jailed_without_vnet(struct ucred *);
 void getcredhostname(struct ucred *, char *, size_t);
 void getcreddomainname(struct ucred *, char *, size_t);
@@ -419,7 +426,7 @@ int prison_restrict_ip6(struct prison *, struct in6_addr *);
 int prison_qcmp_v6(const void *, const void *);
 #endif
 int prison_check_af(struct ucred *cred, int af);
-int prison_if(struct ucred *cred, struct sockaddr *sa);
+int prison_if(struct ucred *cred, const struct sockaddr *sa);
 char *prison_name(struct prison *, struct prison *);
 int prison_priv_check(struct ucred *cred, int priv);
 int sysctl_jail_param(SYSCTL_HANDLER_ARGS);

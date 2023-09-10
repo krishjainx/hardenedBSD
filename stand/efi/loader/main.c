@@ -180,8 +180,17 @@ static void
 set_currdev(const char *devname)
 {
 
-	env_setenv("currdev", EV_VOLATILE, devname, efi_setcurrdev, env_nounset);
-	env_setenv("loaddev", EV_VOLATILE, devname, env_noset, env_nounset);
+	/*
+	 * Don't execute hooks here; we may need to try setting these more than
+	 * once here if we're probing for the ZFS pool we're supposed to boot.
+	 * The currdev hook is intended to just validate user input anyways,
+	 * while the loaddev hook makes it immutable once we've determined what
+	 * the proper currdev is.
+	 */
+	env_setenv("currdev", EV_VOLATILE | EV_NOHOOK, devname, efi_setcurrdev,
+	    env_nounset);
+	env_setenv("loaddev", EV_VOLATILE | EV_NOHOOK, devname, env_noset,
+	    env_nounset);
 }
 
 static void
@@ -239,6 +248,9 @@ sanity_check_currdev(void)
 	struct stat st;
 
 	return (stat(PATH_DEFAULTS_LOADER_CONF, &st) == 0 ||
+#ifdef PATH_BOOTABLE_TOKEN
+	    stat(PATH_BOOTABLE_TOKEN, &st) == 0 || /* non-standard layout */
+#endif
 	    stat(PATH_KERNEL, &st) == 0);
 }
 
@@ -685,7 +697,7 @@ setenv_int(const char *key, int val)
  * ACPI name space to map the UID for the serial port to a port. The
  * latter is especially hard.
  */
-static int
+int
 parse_uefi_con_out(void)
 {
 	int how, rv;
@@ -700,8 +712,11 @@ parse_uefi_con_out(void)
 	how = 0;
 	sz = sizeof(buf);
 	rv = efi_global_getenv("ConOut", buf, &sz);
-	if (rv != EFI_SUCCESS)
+	if (rv != EFI_SUCCESS) {
+		/* If we don't have any ConOut default to serial */
+		how = RB_SERIAL;
 		goto out;
+	}
 	ep = buf + sz;
 	node = (EFI_DEVICE_PATH *)buf;
 	while ((char *)node < ep) {
@@ -735,7 +750,7 @@ parse_uefi_con_out(void)
 			 */
 			pci_pending = true;
 		}
-		node = NextDevicePathNode(node); /* Skip the end node */
+		node = NextDevicePathNode(node);
 	}
 	if (pci_pending && vid_seen == 0)
 		vid_seen = ++seen;
@@ -860,6 +875,9 @@ main(int argc, CHAR16 *argv[])
 	archsw.arch_getdev = efi_getdev;
 	archsw.arch_copyin = efi_copyin;
 	archsw.arch_copyout = efi_copyout;
+#ifdef __amd64__
+	archsw.arch_hypervisor = x86_hypervisor;
+#endif
 	archsw.arch_readin = efi_readin;
 	archsw.arch_zfs_probe = efi_zfs_probe;
 
@@ -990,6 +1008,7 @@ main(int argc, CHAR16 *argv[])
 		printf(" %S", argv[i]);
 	printf("\n");
 
+	printf("   Image base: 0x%lx\n", (unsigned long)boot_img->ImageBase);
 	printf("   EFI version: %d.%02d\n", ST->Hdr.Revision >> 16,
 	    ST->Hdr.Revision & 0xffff);
 	printf("   EFI Firmware: %S (rev %d.%02d)\n", ST->FirmwareVendor,
@@ -1280,10 +1299,8 @@ command_mode(int argc, char *argv[])
 	unsigned int mode;
 	int i;
 	char *cp;
-	char rowenv[8];
 	EFI_STATUS status;
 	SIMPLE_TEXT_OUTPUT_INTERFACE *conout;
-	extern void HO(void);
 
 	conout = ST->ConOut;
 
@@ -1303,9 +1320,7 @@ command_mode(int argc, char *argv[])
 			printf("couldn't set mode %d\n", mode);
 			return (CMD_ERROR);
 		}
-		sprintf(rowenv, "%u", (unsigned)rows);
-		setenv("LINES", rowenv, 1);
-		HO();		/* set cursor */
+		(void) efi_cons_update_mode();
 		return (CMD_OK);
 	}
 

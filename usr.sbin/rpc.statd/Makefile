@@ -4,10 +4,17 @@ PROG=	rpc.statd
 MAN=	rpc.statd.8
 SRCS=	file.c sm_inter_svc.c sm_inter.h statd.c procs.c
 
-CFLAGS+= -I.
-WARNS?= 2
-
+CFLAGS+= -I${.OBJDIR}
 LIBADD=	rpcsvc
+
+<<<<<<< HEAD
+LIBADD=	rpcsvc
+=======
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
+# XXX: mismatch between (xdrproc_t) and xdr_void().
+WARNS?=	2
+>>>>>>> origin/hardened/current/master
 
 CLEANFILES= sm_inter_svc.c sm_inter.h
 
@@ -20,7 +27,8 @@ sm_inter_svc.c: ${RPCSRC}
 sm_inter.h: ${RPCSRC}
 	${RPCGEN} -h -o ${.TARGET} ${.ALLSRC}
 
-test: test.c
-	cc -o test test.c -lrpcsvc
+test: test.o
+	${CC} ${LDFLAGS} -o ${.TARGET} ${.ALLSRC} ${LIBADD:S/^/-l/}
+CLEANFILES+=	test test.o
 
 .include <bsd.prog.mk>

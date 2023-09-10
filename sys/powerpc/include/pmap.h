@@ -80,6 +80,8 @@
 struct pmap;
 typedef struct pmap *pmap_t;
 
+#define	PMAP_ENTER_QUICK_LOCKED	0x10000000
+
 #if !defined(NPMAPS)
 #define	NPMAPS		32768
 #endif /* !defined(NPMAPS) */
@@ -247,7 +249,7 @@ extern	struct pmap kernel_pmap_store;
 #define	PMAP_TRYLOCK(pmap)	mtx_trylock(&(pmap)->pm_mtx)
 #define	PMAP_UNLOCK(pmap)	mtx_unlock(&(pmap)->pm_mtx)
 
-#define	pmap_page_is_write_mapped(m)	(((m)->aflags & PGA_WRITEABLE) != 0)
+#define	pmap_page_is_write_mapped(m)	(((m)->a.flags & PGA_WRITEABLE) != 0)
 
 void		pmap_bootstrap(vm_offset_t, vm_offset_t);
 void		pmap_kenter(vm_offset_t va, vm_paddr_t pa);
@@ -266,11 +268,15 @@ void		pmap_deactivate(struct thread *);
 vm_paddr_t	pmap_kextract(vm_offset_t);
 int		pmap_dev_direct_mapped(vm_paddr_t, vm_size_t);
 boolean_t	pmap_mmu_install(char *name, int prio);
+const char	*pmap_mmu_name(void);
+
+void		pmap_page_array_startup(long count);
 
 #define	vtophys(va)	pmap_kextract((vm_offset_t)(va))
 
 extern	vm_offset_t virtual_avail;
 extern	vm_offset_t virtual_end;
+extern	caddr_t crashdumpmap;
 
 extern	vm_offset_t msgbuf_phys;
 

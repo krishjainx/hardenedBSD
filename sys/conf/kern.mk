@@ -37,8 +37,9 @@ CWARNEXTRA+=	-Wno-error-shift-negative-value
 .if ${COMPILER_VERSION} >= 40000
 CWARNEXTRA+=	-Wno-address-of-packed-member
 .endif
-
-CLANG_NO_IAS= -no-integrated-as
+.if ${COMPILER_VERSION} >= 100000
+NO_WMISLEADING_INDENTATION=	-Wno-misleading-indentation
+.endif
 .endif
 
 .if ${COMPILER_TYPE} == "gcc"
@@ -63,11 +64,17 @@ CWARNEXTRA+=	-Wno-error=misleading-indentation		\
 		-Wno-error=shift-overflow			\
 		-Wno-error=tautological-compare
 .endif
+.if ${COMPILER_VERSION} >= 70100
+CWARNEXTRA+=	-Wno-error=stringop-overflow
+.endif
 .if ${COMPILER_VERSION} >= 70200
 CWARNEXTRA+=	-Wno-error=memset-elt-size
 .endif
 .if ${COMPILER_VERSION} >= 80000
 CWARNEXTRA+=	-Wno-error=packed-not-aligned
+.endif
+.if ${COMPILER_VERSION} >= 90100
+CWARNEXTRA+=	-Wno-address-of-packed-member
 .endif
 .else
 # For gcc 4.2, eliminate the too-often-wrong warnings about uninitialized vars.
@@ -130,21 +137,23 @@ CFLAGS += -ffixed-x18
 INLINE_LIMIT?=	8000
 .endif
 
+#
+# For RISC-V we specify the soft-float ABI (lp64) to avoid the use of floating
+# point registers within the kernel. We also specify the "medium" code model,
+# which generates code suitable for a 2GiB addressing range located at any
+# offset, allowing modules to be located anywhere in the 64-bit address space.
+# Note that clang and GCC refer to this code model as "medium" and "medany"
+# respectively.
+#
 .if ${MACHINE_CPUARCH} == "riscv"
-CFLAGS.gcc+=	-mcmodel=medany -march=rv64imafdc -mabi=lp64
+CFLAGS+=	-march=rv64imafdc -mabi=lp64
+CFLAGS.clang+=	-mcmodel=medium
+CFLAGS.gcc+=	-mcmodel=medany
 INLINE_LIMIT?=	8000
-.endif
 
-#
-# For sparc64 we want the medany code model so modules may be located
-# anywhere in the 64-bit address space.  We also tell GCC to use floating
-# point emulation.  This avoids using floating point registers for integer
-# operations which it has a tendency to do.
-#
-.if ${MACHINE_CPUARCH} == "sparc64"
-CFLAGS.clang+=	-mcmodel=large -fno-dwarf2-cfi-asm
-CFLAGS.gcc+=	-mcmodel=medany -msoft-float
-INLINE_LIMIT?=	15000
+.if ${LINKER_FEATURES:Mriscv-relaxations} == ""
+CFLAGS+=	-mno-relax
+.endif
 .endif
 
 #
@@ -241,6 +250,7 @@ CFLAGS+=	-gdwarf-2
 .endif
 
 CFLAGS+= ${CWARNFLAGS:M*} ${CWARNFLAGS.${.IMPSRC:T}}
+CFLAGS+= ${CWARNFLAGS.${COMPILER_TYPE}}
 CFLAGS+= ${CFLAGS.${COMPILER_TYPE}} ${CFLAGS.${.IMPSRC:T}}
 
 # Tell bmake not to mistake standard targets for things to be searched for
@@ -292,5 +302,4 @@ LD_EMULATION_powerpc= elf32ppc_fbsd
 LD_EMULATION_powerpcspe= elf32ppc_fbsd
 LD_EMULATION_powerpc64= elf64ppc_fbsd
 LD_EMULATION_riscv64= elf64lriscv
-LD_EMULATION_sparc64= elf64_sparc_fbsd
 LD_EMULATION=${LD_EMULATION_${MACHINE_ARCH}}

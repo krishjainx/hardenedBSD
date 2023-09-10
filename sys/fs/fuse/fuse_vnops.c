@@ -174,6 +174,7 @@ struct vop_vector fuse_fifoops = {
 	.vop_write =		VOP_PANIC,
 	.vop_vptofh =		fuse_vnop_vptofh,
 };
+VFS_VOP_VECTOR_REGISTER(fuse_fifoops);
 
 struct vop_vector fuse_vnops = {
 	.vop_allocate =	VOP_EINVAL,
@@ -223,13 +224,9 @@ struct vop_vector fuse_vnops = {
 	.vop_print = fuse_vnop_print,
 	.vop_vptofh = fuse_vnop_vptofh,
 };
+VFS_VOP_VECTOR_REGISTER(fuse_vnops);
 
 uma_zone_t fuse_pbuf_zone;
-
-#define fuse_vm_page_lock(m)		vm_page_lock((m));
-#define fuse_vm_page_unlock(m)		vm_page_unlock((m));
-#define fuse_vm_page_lock_queues()	((void)0)
-#define fuse_vm_page_unlock_queues()	((void)0)
 
 /* Check permission for extattr operations, much like extattr_check_cred */
 static int
@@ -509,7 +506,7 @@ fuse_vnop_bmap(struct vop_bmap_args *ap)
 	if (runp != NULL) {
 		error = fuse_vnode_size(vp, &filesize, td->td_ucred, td);
 		if (error == 0)
-			*runp = MIN(MAX(0, filesize / biosize - lbn - 1),
+			*runp = MIN(MAX(0, filesize / (off_t)biosize - lbn - 1),
 				    maxrun);
 		else
 			*runp = 0;
@@ -1009,7 +1006,9 @@ fuse_vnop_lookup(struct vop_lookup_args *ap)
 	if (islastcn && vfs_isrdonly(mp) && (nameiop != LOOKUP))
 		return EROFS;
 
-	if ((err = fuse_internal_access(dvp, VEXEC, td, cred)))
+	if ((cnp->cn_flags & NOEXECCHECK) != 0)
+		cnp->cn_flags &= ~NOEXECCHECK;
+	else if ((err = fuse_internal_access(dvp, VEXEC, td, cred)))
 		return err;
 
 	if (flags & ISDOTDOT) {
@@ -1530,14 +1529,12 @@ fuse_vnop_reclaim(struct vop_reclaim_args *ap)
 		fuse_filehandle_close(vp, fufh, td, NULL);
 	}
 
-	if ((!fuse_isdeadfs(vp)) && (fvdat->nlookup)) {
+	if (!fuse_isdeadfs(vp) && fvdat->nlookup > 0) {
 		fuse_internal_forget_send(vnode_mount(vp), td, NULL, VTOI(vp),
 		    fvdat->nlookup);
 	}
-	fuse_vnode_setparent(vp, NULL);
 	cache_purge(vp);
 	vfs_hash_remove(vp);
-	vnode_destroy_vobject(vp);
 	fuse_vnode_destroy(vp);
 
 	return 0;
@@ -2225,6 +2222,20 @@ fuse_xattrlist_convert(char *prefix, const char *list, int list_len,
 }
 
 /*
+ * List extended attributes
+ *
+ * The FUSE_LISTXATTR operation is based on Linux's listxattr(2) syscall, which
+ * has a number of differences compared to its FreeBSD equivalent,
+ * extattr_list_file:
+ *
+ * - FUSE_LISTXATTR returns all extended attributes across all namespaces,
+ *   whereas listxattr(2) only returns attributes for a single namespace
+ * - FUSE_LISTXATTR prepends each attribute name with "namespace."
+ * - If the provided buffer is not large enough to hold the result,
+ *   FUSE_LISTXATTR should return ERANGE, whereas listxattr is expected to
+ *   return as many results as will fit.
+ */
+/*
     struct vop_listextattr_args {
 	struct vop_generic_args a_gen;
 	struct vnode *a_vp;
@@ -2303,14 +2314,31 @@ fuse_vnop_listextattr(struct vop_listextattr_args *ap)
 	 */
 	fdisp_refresh_vp(&fdi, FUSE_LISTXATTR, vp, td, cred);
 	list_xattr_in = fdi.indata;
-	list_xattr_in->size = linux_list_len + sizeof(*list_xattr_out);
+	list_xattr_in->size = linux_list_len;
 
 	err = fdisp_wait_answ(&fdi);
-	if (err != 0)
+	if (err == ERANGE) {
+		/* 
+		 * Race detected.  The attribute list must've grown since the
+		 * first FUSE_LISTXATTR call.  Start over.  Go all the way back
+		 * to userland so we can process signals, if necessary, before
+		 * restarting.
+		 */
+		err = ERESTART;
+		goto out;
+	} else if (err != 0)
 		goto out;
 
 	linux_list = fdi.answ;
-	linux_list_len = fdi.iosize;
+	/* FUSE doesn't allow the server to return more data than requested */
+	if (fdi.iosize > linux_list_len) {
+		printf("WARNING: FUSE protocol violation.  Server returned "
+			"more extended attribute data than requested; "
+			"should've returned ERANGE instead");
+	} else {
+		/* But returning less data is fine */
+		linux_list_len = fdi.iosize;
+	}
 
 	/*
 	 * Retrieve the BSD compatible list values.

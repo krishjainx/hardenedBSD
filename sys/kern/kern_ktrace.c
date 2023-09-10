@@ -779,6 +779,14 @@ ktrstruct(const char *name, const void *data, size_t datalen)
 }
 
 void
+ktrstruct_error(const char *name, const void *data, size_t datalen, int error)
+{
+
+	if (error == 0)
+		ktrstruct(name, data, datalen);
+}
+
+void
 ktrstructarray(const char *name, enum uio_seg seg, const void *data,
     int num_items, size_t struct_size)
 {
@@ -941,7 +949,7 @@ sys_ktrace(struct thread *td, struct ktrace_args *uap)
 		}
 		NDFREE(&nd, NDF_ONLY_PNBUF);
 		vp = nd.ni_vp;
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		if (vp->v_type != VREG) {
 			(void) vn_close(vp, FREAD|FWRITE, td->td_ucred, td);
 			ktrace_exit(td);
@@ -1242,7 +1250,7 @@ ktr_writerequest(struct thread *td, struct ktr_request *req)
 	if (error == 0)
 #endif
 		error = VOP_WRITE(vp, &auio, IO_UNIT | IO_APPEND, cred);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	vn_finished_write(mp);
 	crfree(cred);
 	if (!error) {

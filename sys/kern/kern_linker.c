@@ -134,7 +134,6 @@ retry:									\
 	(a) = next_file_id;						\
 } while(0)
 
-
 /* XXX wrong name; we're looking at version provision tags here, not modules */
 typedef TAILQ_HEAD(, modlist) modlisthead_t;
 struct modlist {
@@ -625,6 +624,10 @@ linker_make_file(const char *pathname, linker_class_t lc)
 	lf->ndeps = 0;
 	lf->deps = NULL;
 	lf->loadcnt = ++loadcnt;
+#ifdef __arm__
+	lf->exidx_addr = 0;
+	lf->exidx_size = 0;
+#endif
 	STAILQ_INIT(&lf->common);
 	TAILQ_INIT(&lf->modules);
 	TAILQ_INSERT_TAIL(&linker_files, lf, link);
@@ -1841,7 +1844,7 @@ linker_lookup_file(const char *path, int pathlen, const char *name,
 			type = nd.ni_vp->v_type;
 			if (vap)
 				VOP_GETATTR(nd.ni_vp, vap, td->td_ucred);
-			VOP_UNLOCK(nd.ni_vp, 0);
+			VOP_UNLOCK(nd.ni_vp);
 			vn_close(nd.ni_vp, FREAD, td->td_ucred, td);
 			if (type == VREG)
 				return (result);
@@ -1906,7 +1909,7 @@ linker_hints_lookup(const char *path, int pathlen, const char *modname,
 	    UIO_SYSSPACE, IO_NODELOCKED, cred, NOCRED, &reclen, td);
 	if (error)
 		goto bad;
-	VOP_UNLOCK(nd.ni_vp, 0);
+	VOP_UNLOCK(nd.ni_vp);
 	vn_close(nd.ni_vp, FREAD, cred, td);
 	nd.ni_vp = NULL;
 	if (reclen != 0) {
@@ -1974,7 +1977,7 @@ bad:
 	if (hints)
 		free(hints, M_TEMP);
 	if (nd.ni_vp != NULL) {
-		VOP_UNLOCK(nd.ni_vp, 0);
+		VOP_UNLOCK(nd.ni_vp);
 		vn_close(nd.ni_vp, FREAD, cred, td);
 	}
 	/*
@@ -2111,14 +2114,18 @@ linker_load_module(const char *kldname, const char *modname,
  		 */
 		KASSERT(verinfo == NULL, ("linker_load_module: verinfo"
 		    " is not NULL"));
+		/* check if root file system is not mounted */
+		if (rootvnode == NULL || curproc->p_fd->fd_rdir == NULL)
+			return (ENXIO);
 		pathname = linker_search_kld(kldname);
 	} else {
 		if (modlist_lookup2(modname, verinfo) != NULL)
 			return (EEXIST);
+		/* check if root file system is not mounted */
+		if (rootvnode == NULL || curproc->p_fd->fd_rdir == NULL)
+			return (ENXIO);
 		if (kldname != NULL)
 			pathname = strdup(kldname, M_LINKER);
-		else if (rootvnode == NULL)
-			pathname = NULL;
 		else
 			/*
 			 * Need to find a KLD with required module

@@ -77,7 +77,6 @@ static int	kdb_break_to_debugger = KDB_BREAK_TO_DEBUGGER;
 static int	kdb_alt_break_to_debugger = KDB_ALT_BREAK_TO_DEBUGGER;
 
 KDB_BACKEND(null, NULL, NULL, NULL, NULL);
-SET_DECLARE(kdb_dbbe_set, struct kdb_dbbe);
 
 static int kdb_sysctl_available(SYSCTL_HANDLER_ARGS);
 static int kdb_sysctl_current(SYSCTL_HANDLER_ARGS);
@@ -259,7 +258,6 @@ kdb_sysctl_stack_overflow(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
-
 void
 kdb_panic(const char *msg)
 {
@@ -434,9 +432,8 @@ kdb_backtrace_thread(struct thread *td)
 		struct stack st;
 
 		printf("KDB: stack backtrace of thread %d:\n", td->td_tid);
-		stack_zero(&st);
-		stack_save_td(&st, td);
-		stack_print_ddb(&st);
+		if (stack_save_td(&st, td) == 0)
+			stack_print_ddb(&st);
 	}
 #endif
 }
@@ -667,7 +664,7 @@ kdb_trap(int type, int code, struct trapframe *tf)
 	if (!SCHEDULER_STOPPED()) {
 #ifdef SMP
 		other_cpus = all_cpus;
-		CPU_NAND(&other_cpus, &stopped_cpus);
+		CPU_ANDNOT(&other_cpus, &stopped_cpus);
 		CPU_CLR(PCPU_GET(cpuid), &other_cpus);
 		stop_cpus_hard(other_cpus);
 #endif

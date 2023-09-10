@@ -330,22 +330,27 @@ ipopts_match(struct ip *ip, ipfw_insn *cmd)
 	return (flags_match(cmd, bits));
 }
 
+/*
+ * Parse TCP options. The logic copied from tcp_dooptions().
+ */
 static int
-tcpopts_parse(struct tcphdr *tcp, uint16_t *mss)
+tcpopts_parse(const struct tcphdr *tcp, uint16_t *mss)
 {
-	u_char *cp = (u_char *)(tcp + 1);
+	const u_char *cp = (const u_char *)(tcp + 1);
 	int optlen, bits = 0;
-	int x = (tcp->th_off << 2) - sizeof(struct tcphdr);
+	int cnt = (tcp->th_off << 2) - sizeof(struct tcphdr);
 
-	for (; x > 0; x -= optlen, cp += optlen) {
+	for (; cnt > 0; cnt -= optlen, cp += optlen) {
 		int opt = cp[0];
 		if (opt == TCPOPT_EOL)
 			break;
 		if (opt == TCPOPT_NOP)
 			optlen = 1;
 		else {
+			if (cnt < 2)
+				break;
 			optlen = cp[1];
-			if (optlen <= 0)
+			if (optlen < 2 || optlen > cnt)
 				break;
 		}
 
@@ -354,22 +359,31 @@ tcpopts_parse(struct tcphdr *tcp, uint16_t *mss)
 			break;
 
 		case TCPOPT_MAXSEG:
+			if (optlen != TCPOLEN_MAXSEG)
+				break;
 			bits |= IP_FW_TCPOPT_MSS;
 			if (mss != NULL)
 				*mss = be16dec(cp + 2);
 			break;
 
 		case TCPOPT_WINDOW:
-			bits |= IP_FW_TCPOPT_WINDOW;
+			if (optlen == TCPOLEN_WINDOW)
+				bits |= IP_FW_TCPOPT_WINDOW;
 			break;
 
 		case TCPOPT_SACK_PERMITTED:
+			if (optlen == TCPOLEN_SACK_PERMITTED)
+				bits |= IP_FW_TCPOPT_SACK;
+			break;
+
 		case TCPOPT_SACK:
-			bits |= IP_FW_TCPOPT_SACK;
+			if (optlen > 2 && (optlen - 2) % TCPOLEN_SACK == 0)
+				bits |= IP_FW_TCPOPT_SACK;
 			break;
 
 		case TCPOPT_TIMESTAMP:
-			bits |= IP_FW_TCPOPT_TS;
+			if (optlen == TCPOLEN_TIMESTAMP)
+				bits |= IP_FW_TCPOPT_TS;
 			break;
 		}
 	}
@@ -408,17 +422,15 @@ iface_match(struct ifnet *ifp, ipfw_insn_if *cmd, struct ip_fw_chain *chain,
 #if !defined(USERSPACE) && defined(__FreeBSD__)	/* and OSX too ? */
 		struct ifaddr *ia;
 
-		if_addr_rlock(ifp);
+		NET_EPOCH_ASSERT();
+
 		CK_STAILQ_FOREACH(ia, &ifp->if_addrhead, ifa_link) {
 			if (ia->ifa_addr->sa_family != AF_INET)
 				continue;
 			if (cmd->p.ip.s_addr == ((struct sockaddr_in *)
-			    (ia->ifa_addr))->sin_addr.s_addr) {
-				if_addr_runlock(ifp);
-				return(1);	/* match */
-			}
+			    (ia->ifa_addr))->sin_addr.s_addr)
+				return (1);	/* match */
 		}
-		if_addr_runlock(ifp);
 #endif /* __FreeBSD__ */
 	}
 	return(0);	/* no match, fail ... */
@@ -1448,7 +1460,10 @@ ipfw_chk(struct ip_fw_args *args)
 do {								\
 	int x = (_len) + T + EHLEN;				\
 	if (mem) {						\
-		MPASS(pktlen >= x);				\
+		if (__predict_false(pktlen < x)) {		\
+			unlock;					\
+			goto pullup_failed;			\
+		}						\
 		p = (char *)args->mem + (_len) + EHLEN;		\
 	} else {						\
 		if (__predict_false((m)->m_len < x)) {		\
@@ -1464,7 +1479,8 @@ do {								\
 
 #define	PULLUP_LEN(_len, p, T)	_PULLUP_LOCKED(_len, p, T, )
 #define	PULLUP_LEN_LOCKED(_len, p, T)	\
-    _PULLUP_LOCKED(_len, p, T, IPFW_PF_RUNLOCK(chain))
+    _PULLUP_LOCKED(_len, p, T, IPFW_PF_RUNLOCK(chain));	\
+    UPDATE_POINTERS()
 /*
  * In case pointers got stale after pullups, update them.
  */

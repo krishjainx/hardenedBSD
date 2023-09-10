@@ -11,6 +11,8 @@ CFLAGS+=	-I${KRB5DIR}/lib/hx509 \
 LIBADD=	hx509 roken asn1 crypto sl vers edit
 SRCS=	hxtool.c hxtool-commands.c hxtool-commands.h
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CLEANFILES=	hxtool-commands.h hxtool-commands.c
 
 hxtool-commands.h: hxtool-commands.in

@@ -8,6 +8,10 @@ BINDIR=		${TESTSDIR}
 ATF_TESTS_SH+=	if_lagg_test
 ATF_TESTS_SH+=	if_clone_test
 ATF_TESTS_SH+=	if_tun_test
+ATF_TESTS_SH+=	if_vlan
+ATF_TESTS_C+=	if_epair
+
+TESTS_SUBDIRS+=	routing
 
 # The tests are written to be run in parallel, but doing so leads to random
 # panics.  I think it's because the kernel's list of interfaces isn't properly
@@ -15,7 +19,7 @@ ATF_TESTS_SH+=	if_tun_test
 TEST_METADATA+=	is_exclusive=true
 
 MAN=
-PROG=		randsleep
+PROGS+=		randsleep
 
 WARNS?=		6
 

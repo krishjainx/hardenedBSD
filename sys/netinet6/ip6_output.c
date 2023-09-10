@@ -68,6 +68,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
+#include "opt_kern_tls.h"
 #include "opt_ratelimit.h"
 #include "opt_route.h"
 #include "opt_rss.h"
@@ -75,6 +76,7 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
+#include <sys/ktls.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/errno.h>
@@ -280,14 +282,39 @@ static int
 ip6_output_send(struct inpcb *inp, struct ifnet *ifp, struct ifnet *origifp,
     struct mbuf *m, struct sockaddr_in6 *dst, struct route_in6 *ro)
 {
+#ifdef KERN_TLS
+	struct ktls_session *tls = NULL;
+#endif
 	struct m_snd_tag *mst;
 	int error;
 
 	MPASS((m->m_pkthdr.csum_flags & CSUM_SND_TAG) == 0);
 	mst = NULL;
 
+#ifdef KERN_TLS
+	/*
+	 * If this is an unencrypted TLS record, save a reference to
+	 * the record.  This local reference is used to call
+	 * ktls_output_eagain after the mbuf has been freed (thus
+	 * dropping the mbuf's reference) in if_output.
+	 */
+	if (m->m_next != NULL && mbuf_has_tls_session(m->m_next)) {
+		tls = ktls_hold(m->m_next->m_ext.ext_pgs->tls);
+		mst = tls->snd_tag;
+
+		/*
+		 * If a TLS session doesn't have a valid tag, it must
+		 * have had an earlier ifp mismatch, so drop this
+		 * packet.
+		 */
+		if (mst == NULL) {
+			error = EAGAIN;
+			goto done;
+		}
+	}
+#endif
 #ifdef RATELIMIT
-	if (inp != NULL) {
+	if (inp != NULL && mst == NULL) {
 		if ((inp->inp_flags2 & INP_RATE_LIMIT_CHANGED) != 0 ||
 		    (inp->inp_snd_tag != NULL &&
 		    inp->inp_snd_tag->ifp != ifp))
@@ -314,6 +341,13 @@ ip6_output_send(struct inpcb *inp, struct ifnet *ifp, struct ifnet *origifp,
 
 done:
 	/* Check for route change invalidating send tags. */
+#ifdef KERN_TLS
+	if (tls != NULL) {
+		if (error == EAGAIN)
+			error = ktls_output_eagain(inp, tls);
+		ktls_free(tls);
+	}
+#endif
 #ifdef RATELIMIT
 	if (error == EAGAIN)
 		in_pcboutput_eagain(inp);
@@ -369,6 +403,8 @@ ip6_output(struct mbuf *m0, struct ip6_pktopts *opt,
 	uint32_t fibnum;
 	struct m_tag *fwd_tag = NULL;
 	uint32_t id;
+
+	NET_EPOCH_ASSERT();
 
 	if (inp != NULL) {
 		INP_LOCK_ASSERT(inp);
@@ -861,7 +897,7 @@ again:
 		ip6 = mtod(m, struct ip6_hdr *);
 		break;
 	case PFIL_DROPPED:
-		error = EPERM;
+		error = EACCES;
 		/* FALLTHROUGH */
 	case PFIL_CONSUMED:
 		goto done;
@@ -1769,21 +1805,24 @@ do {									\
 #endif
 
 				case IPV6_V6ONLY:
-					/*
-					 * make setsockopt(IPV6_V6ONLY)
-					 * available only prior to bind(2).
-					 * see ipng mailing list, Jun 22 2001.
-					 */
+					INP_WLOCK(inp);
 					if (inp->inp_lport ||
 					    !IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_laddr)) {
+						/*
+						 * The socket is already bound.
+						 */
+						INP_WUNLOCK(inp);
 						error = EINVAL;
 						break;
 					}
-					OPTSET(IN6P_IPV6_V6ONLY);
-					if (optval)
+					if (optval) {
+						inp->inp_flags |= IN6P_IPV6_V6ONLY;
 						inp->inp_vflag &= ~INP_IPV4;
-					else
+					} else {
+						inp->inp_flags &= ~IN6P_IPV6_V6ONLY;
 						inp->inp_vflag |= INP_IPV4;
+					}
+					INP_WUNLOCK(inp);
 					break;
 				case IPV6_RECVTCLASS:
 					/* cannot mix with RFC2292 XXX */

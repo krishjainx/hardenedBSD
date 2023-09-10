@@ -2,8 +2,16 @@
 
 .include <src.opts.mk>
 
+<<<<<<< HEAD
 LLVM_SRCS=	${SRCTOP}/contrib/llvm
 LLD_SRCS=	${LLVM_SRCS}/tools/lld
+=======
+MK_CFI=		no
+
+LLVM_BASE=	${SRCTOP}/contrib/llvm-project
+LLVM_SRCS=	${LLVM_BASE}/llvm
+LLD_SRCS=	${LLVM_BASE}/lld
+>>>>>>> origin/hardened/current/master
 
 PACKAGE=	lld
 PROG_CXX=	ld.lld
@@ -15,14 +23,19 @@ SYMLINKS=	${PROG_CXX} ${BINDIR}/ld
 MLINKS=		ld.lld.1 ld.1
 .endif
 
+.if ${MK_SHARED_TOOLCHAIN} == "no"
+NO_SHARED?= yes
+.endif
+
 CFLAGS+=	-I${LLD_SRCS}/ELF
 CFLAGS+=	-I${LLD_SRCS}/include
 CFLAGS+=	-I${.OBJDIR}
 CFLAGS+=	-I${OBJTOP}/lib/clang/libllvm
 
-SRCDIR=		tools/lld
+SRCDIR=		lld
 SRCS+=		Common/Args.cpp
 SRCS+=		Common/ErrorHandler.cpp
+SRCS+=		Common/Filesystem.cpp
 SRCS+=		Common/Memory.cpp
 SRCS+=		Common/Reproduce.cpp
 SRCS+=		Common/Strings.cpp
@@ -49,7 +62,6 @@ SRCS+=		ELF/DWARF.cpp
 SRCS+=		ELF/Driver.cpp
 SRCS+=		ELF/DriverUtils.cpp
 SRCS+=		ELF/EhFrame.cpp
-SRCS+=		ELF/Filesystem.cpp
 SRCS+=		ELF/ICF.cpp
 SRCS+=		ELF/InputFiles.cpp
 SRCS+=		ELF/InputSection.cpp
@@ -96,6 +108,7 @@ TGHDRS+=	${INCFILE}
 DPSRCS+=	${TGHDRS}
 CLEANFILES+=	${TGHDRS} ${TGHDRS:C/$/.d/}
 
+LIBADD+=	execinfo
 LIBADD+=	ncursesw
 LIBADD+=	pthread
 LIBADD+=	z

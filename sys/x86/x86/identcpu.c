@@ -119,6 +119,10 @@ u_int	cpu_mon_mwait_flags;	/* MONITOR/MWAIT flags (CPUID.05H.ECX) */
 u_int	cpu_mon_min_size;	/* MONITOR minimum range size, bytes */
 u_int	cpu_mon_max_size;	/* MONITOR minimum range size, bytes */
 u_int	cpu_maxphyaddr;		/* Max phys addr width in bits */
+u_int	cpu_power_eax;		/* 06H: Power management leaf, %eax */
+u_int	cpu_power_ebx;		/* 06H: Power management leaf, %ebx */
+u_int	cpu_power_ecx;		/* 06H: Power management leaf, %ecx */
+u_int	cpu_power_edx;		/* 06H: Power management leaf, %edx */
 char machine[] = MACHINE;
 
 SYSCTL_UINT(_hw, OID_AUTO, via_feature_rng, CTLFLAG_RD,
@@ -220,6 +224,7 @@ static struct {
 } cpu_vendors[] = {
 	{ INTEL_VENDOR_ID,	CPU_VENDOR_INTEL },	/* GenuineIntel */
 	{ AMD_VENDOR_ID,	CPU_VENDOR_AMD },	/* AuthenticAMD */
+	{ HYGON_VENDOR_ID,	CPU_VENDOR_HYGON },	/* HygonGenuine*/
 	{ CENTAUR_VENDOR_ID,	CPU_VENDOR_CENTAUR },	/* CentaurHauls */
 #ifdef __i386__
 	{ NSC_VENDOR_ID,	CPU_VENDOR_NSC },	/* Geode by NSC */
@@ -679,6 +684,18 @@ printcpuinfo(void)
 		}
 		break;
 #endif
+	case CPU_VENDOR_HYGON:
+		strcpy(cpu_model, "Hygon ");
+#ifdef __i386__
+		strcat(cpu_model, "Unknown");
+#else
+		if ((cpu_id & 0xf00) == 0xf00)
+			strcat(cpu_model, "AMD64 Processor");
+		else
+			strcat(cpu_model, "Unknown");
+#endif
+		break;
+
 	default:
 		strcat(cpu_model, "Unknown");
 		break;
@@ -738,6 +755,7 @@ printcpuinfo(void)
 
 	if (cpu_vendor_id == CPU_VENDOR_INTEL ||
 	    cpu_vendor_id == CPU_VENDOR_AMD ||
+	    cpu_vendor_id == CPU_VENDOR_HYGON ||
 	    cpu_vendor_id == CPU_VENDOR_CENTAUR ||
 #ifdef __i386__
 	    cpu_vendor_id == CPU_VENDOR_TRANSMETA ||
@@ -916,7 +934,7 @@ printcpuinfo(void)
 				"\034PTSC"	/* Performance TSC */
 				"\035PL2I"	/* L2I perf count */
 				"\036MWAITX"	/* MONITORX/MWAITX instructions */
-				"\037<b30>"
+				"\037ADMSKX"	/* Address mask extension */
 				"\040<b31>"
 				);
 			}
@@ -961,7 +979,8 @@ printcpuinfo(void)
 				       /* Supervisor Mode Access Prevention */
 				       "\025SMAP"
 				       "\026AVX512IFMA"
-				       "\027PCOMMIT"
+				       /* Formerly PCOMMIT */
+				       "\027<b22>"
 				       "\030CLFLUSHOPT"
 				       "\031CLWB"
 				       "\032PROCTRACE"
@@ -994,7 +1013,7 @@ printcpuinfo(void)
 				       "\027RDPID"
 				       "\032CLDEMOTE"
 				       "\034MOVDIRI"
-				       "\035MOVDIRI64B"
+				       "\035MOVDIR64B"
 				       "\036ENQCMD"
 				       "\037SGXLC"
 				       );
@@ -1006,10 +1025,12 @@ printcpuinfo(void)
 				       "\020"
 				       "\003AVX512_4VNNIW"
 				       "\004AVX512_4FMAPS"
+				       "\005FSRM"
 				       "\011AVX512VP2INTERSECT"
 				       "\013MD_CLEAR"
 				       "\016TSXFA"
 				       "\023PCONFIG"
+				       "\025IBT"
 				       "\033IBPB"
 				       "\034STIBP"
 				       "\035L1DFL"
@@ -1041,6 +1062,9 @@ printcpuinfo(void)
 				       "\003RSBA"
 				       "\004SKIP_L1DFL_VME"
 				       "\005SSB_NO"
+				       "\006MDS_NO"
+				       "\010TSX_CTRL"
+				       "\011TAA_NO"
 				       );
 			}
 
@@ -1063,6 +1087,9 @@ printcpuinfo(void)
 				    "\001CLZERO"
 				    "\002IRPerf"
 				    "\003XSaveErPtr"
+				    "\005RDPRU"
+				    "\011MCOMMIT"
+				    "\012WBNOINVD"
 				    "\015IBPB"
 				    "\017IBRS"
 				    "\020STIBP"
@@ -1085,7 +1112,8 @@ printcpuinfo(void)
 				print_svm_info();
 
 			if ((cpu_feature & CPUID_HTT) &&
-			    cpu_vendor_id == CPU_VENDOR_AMD)
+			    (cpu_vendor_id == CPU_VENDOR_AMD ||
+			     cpu_vendor_id == CPU_VENDOR_HYGON))
 				cpu_feature &= ~CPUID_HTT;
 
 			/*
@@ -1115,7 +1143,8 @@ printcpuinfo(void)
 		printf("\n");
 
 	if (bootverbose) {
-		if (cpu_vendor_id == CPU_VENDOR_AMD)
+		if (cpu_vendor_id == CPU_VENDOR_AMD ||
+		    cpu_vendor_id == CPU_VENDOR_HYGON)
 			print_AMD_info();
 		else if (cpu_vendor_id == CPU_VENDOR_INTEL)
 			print_INTEL_info();
@@ -1552,6 +1581,14 @@ identify_cpu2(void)
 {
 	u_int regs[4], cpu_stdext_disable;
 
+	if (cpu_high >= 6) {
+		cpuid_count(6, 0, regs);
+		cpu_power_eax = regs[0];
+		cpu_power_ebx = regs[1];
+		cpu_power_ecx = regs[2];
+		cpu_power_edx = regs[3];
+	}
+
 	if (cpu_high >= 7) {
 		cpuid_count(7, 0, regs);
 		cpu_stdext_feature = regs[1];
@@ -1613,6 +1650,7 @@ finishidentcpu(void)
 	if (cpu_high > 0 &&
 	    (cpu_vendor_id == CPU_VENDOR_INTEL ||
 	     cpu_vendor_id == CPU_VENDOR_AMD ||
+	     cpu_vendor_id == CPU_VENDOR_HYGON ||
 	     cpu_vendor_id == CPU_VENDOR_TRANSMETA ||
 	     cpu_vendor_id == CPU_VENDOR_CENTAUR ||
 	     cpu_vendor_id == CPU_VENDOR_NSC)) {
@@ -1623,6 +1661,7 @@ finishidentcpu(void)
 #else
 	if (cpu_vendor_id == CPU_VENDOR_INTEL ||
 	    cpu_vendor_id == CPU_VENDOR_AMD ||
+	    cpu_vendor_id == CPU_VENDOR_HYGON ||
 	    cpu_vendor_id == CPU_VENDOR_CENTAUR) {
 		do_cpuid(0x80000000, regs);
 		cpu_exthigh = regs[0];
@@ -1745,7 +1784,8 @@ pti_get_default(void)
 #ifdef PAX
 	return (1);
 #else
-	if (strcmp(cpu_vendor, AMD_VENDOR_ID) == 0)
+	if (strcmp(cpu_vendor, AMD_VENDOR_ID) == 0 ||
+	    strcmp(cpu_vendor, HYGON_VENDOR_ID) == 0)
 		return (0);
 	if ((cpu_ia32_arch_caps & IA32_ARCH_CAP_RDCL_NO) != 0)
 		return (0);
@@ -2347,7 +2387,7 @@ print_svm_info(void)
 	       "\017<b14>"
 	       "\020V_VMSAVE_VMLOAD"
 	       "\021vGIF"
-	       "\022<b17>"
+	       "\022GMET"		/* Guest Mode Execute Trap */
 	       "\023<b18>"
 	       "\024<b19>"
 	       "\025<b20>"

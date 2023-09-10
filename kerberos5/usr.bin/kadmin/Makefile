@@ -24,6 +24,8 @@ SRCS=	add_enctype.c \
 	stash.c \
 	util.c
 
+CFI_OVERRIDE=	-fno-sanitize=cfi-icall
+
 CFLAGS+=-I${KRB5DIR}/lib/asn1 -I${KRB5DIR}/lib/krb5 -I${KRB5DIR}/lib/roken \
 	-I${KRB5DIR}/lib/sl -I${SRCTOP}/contrib/com_err -I. ${LDAPCFLAGS}
 LIBADD=	kadm5clnt kadm5srv hdb krb5 roken vers sl asn1 crypto edit

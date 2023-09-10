@@ -35,8 +35,14 @@
     ..
     lib
         clang
-            8.0.1
+            9.0.1
                 include
+                    cuda_wrappers
+                    ..
+                    openmp_wrappers
+                    ..
+                    ppc_wrappers
+                    ..
                     sanitizer
                     ..
                 ..
@@ -188,6 +194,12 @@
             uk_UA.KOI8-U
             ..
         ..
+        certs
+            blacklisted tags=package=caroot
+            ..
+            trusted tags=package=caroot
+            ..
+        ..
         dict
         ..
         doc
@@ -298,8 +310,6 @@
             mdoc
             ..
             netgraph
-            ..
-            pc-sysinstall
             ..
             perfmon
             ..
@@ -1170,22 +1180,10 @@
                 ..
                 man5
                 ..
+                man7
+		..
                 man8
                 ..
-            ..
-        ..
-        pc-sysinstall
-            backend
-            ..
-            backend-partmanager
-            ..
-            backend-query
-            ..
-            conf
-                license
-                ..
-            ..
-            doc
             ..
         ..
         security

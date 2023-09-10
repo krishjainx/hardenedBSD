@@ -20,9 +20,6 @@ SRCS+=	load_elf32.c reloc_elf32.c
 SRCS+=	load_elf32.c reloc_elf32.c
 SRCS+=	load_elf64.c reloc_elf64.c
 SRCS+=	metadata.c
-.elif ${MACHINE_CPUARCH} == "sparc64"
-SRCS+=	load_elf64.c reloc_elf64.c
-SRCS+=	metadata.c
 .elif ${MACHINE_ARCH:Mmips64*} != ""
 SRCS+= load_elf64.c reloc_elf64.c
 SRCS+=	metadata.c
@@ -63,6 +60,7 @@ SRCS+=	interp_lua.c
 .include "${BOOTSRC}/lua.mk"
 LDR_INTERP=	${LIBLUA}
 LDR_INTERP32=	${LIBLUA32}
+CFLAGS.interp_lua.c= -DLUA_PATH=\"${LUAPATH}\" -I${FLUASRC}/modules
 .elif ${LOADER_INTERP} == "4th"
 SRCS+=	interp_forth.c
 .include "${BOOTSRC}/ficl.mk"

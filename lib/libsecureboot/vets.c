@@ -240,7 +240,7 @@ ve_forbidden_digest_add(hash_data *digest, size_t num)
 
 static size_t
 ve_anchors_add(br_x509_certificate *xcs, size_t num, anchor_list *anchors,
-    char *anchors_name)
+    const char *anchors_name)
 {
 	br_x509_trust_anchor ta;
 	size_t u;
@@ -642,9 +642,10 @@ hexdigest(char *buf, size_t bufsz, unsigned char *foo, size_t foo_len)
 static unsigned char *
 verify_ec(br_x509_pkey *pk, const char *file, const char *sigfile)
 {
-	char hexbuf[br_sha512_SIZE * 2 + 2];
+#ifdef VE_ECDSA_HASH_AGAIN
+	char *hex, hexbuf[br_sha512_SIZE * 2 + 2];
+#endif
 	unsigned char rhbuf[br_sha512_SIZE];
-	char *hex;
 	br_sha256_context ctx;
 	unsigned char *fcp, *scp;
 	size_t flen, slen, plen;

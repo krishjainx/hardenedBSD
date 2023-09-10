@@ -1,5 +1,7 @@
 # $FreeBSD$
 
+.include <src.opts.mk>
+
 .PATH: ${SRCTOP}/contrib/netcat
 
 PROG=	nc
@@ -9,6 +11,11 @@ CFLAGS+=-DIPSEC
 LIBADD=	ipsec
 
 CFI_OVERRIDE=-fno-sanitize=cfi-icall
+
+.if ${MK_STATS} != "no" && !defined(RESCUE)
+LIBADD+=	sbuf stats
+CFLAGS+=	-DWITH_STATS
+.endif
 
 WARNS?=	2
 

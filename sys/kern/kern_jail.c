@@ -198,12 +198,14 @@ static struct bool_flags pr_flag_allow[NBBY * NBPW] = {
 	{"allow.read_msgbuf", "allow.noread_msgbuf", PR_ALLOW_READ_MSGBUF},
 	{"allow.unprivileged_proc_debug", "allow.nounprivileged_proc_debug",
 	 PR_ALLOW_UNPRIV_DEBUG},
+	{"allow.extattr", "allow.noextattr", PR_ALLOW_EXTATTR},
 };
 const size_t pr_flag_allow_size = sizeof(pr_flag_allow);
 
 #define	JAIL_DEFAULT_ALLOW		(PR_ALLOW_SET_HOSTNAME | \
 					 PR_ALLOW_RESERVED_PORTS | \
-					 PR_ALLOW_UNPRIV_DEBUG)
+					 PR_ALLOW_UNPRIV_DEBUG | \
+					 PR_ALLOW_EXTATTR)
 #define	JAIL_DEFAULT_ENFORCE_STATFS	2
 #define	JAIL_DEFAULT_DEVFS_RSNUM	0
 static unsigned jail_default_allow = JAIL_DEFAULT_ALLOW;
@@ -442,7 +444,6 @@ kern_jail(struct thread *td, struct jail *j)
 	return (error);
 }
 
-
 /*
  * struct jail_set_args {
  *	struct iovec *iovp;
@@ -497,7 +498,6 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 	int gotchildmax, gotenforce, gothid, gotrsnum, gotslevel;
 	int jid, jsys, len, level;
 	int childmax, osreldt, rsnum, slevel;
-	int fullpath_disabled;
 #if defined(INET) || defined(INET6)
 	int ii, ij;
 #endif
@@ -901,7 +901,6 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 		}
 	}
 
-	fullpath_disabled = 0;
 	root = NULL;
 	error = vfs_getopt(opts, "path", (void **)&path, &len);
 	if (error == ENOENT)
@@ -929,13 +928,8 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 		g_path = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 		strlcpy(g_path, path, MAXPATHLEN);
 		error = vn_path_to_global_path(td, root, g_path, MAXPATHLEN);
-		if (error == 0)
+		if (error == 0) {
 			path = g_path;
-		else if (error == ENODEV) {
-			/* proceed if sysctl debug.disablefullpath == 1 */
-			fullpath_disabled = 1;
-			if (len < 2 || (len == 2 && path[0] == '/'))
-				path = NULL;
 		} else {
 			/* exit on other errors */
 			goto done_free;
@@ -945,16 +939,7 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 			vput(root);
 			goto done_free;
 		}
-		VOP_UNLOCK(root, 0);
-		if (fullpath_disabled) {
-			/* Leave room for a real-root full pathname. */
-			if (len + (path[0] == '/' && strcmp(mypr->pr_path, "/")
-			    ? strlen(mypr->pr_path) : 0) > MAXPATHLEN) {
-				error = ENAMETOOLONG;
-				vrele(root);
-				goto done_free;
-			}
-		}
+		VOP_UNLOCK(root);
 	}
 
 	/*
@@ -1667,12 +1652,7 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 	}
 	if (path != NULL) {
 		/* Try to keep a real-rooted full pathname. */
-		if (fullpath_disabled && path[0] == '/' &&
-		    strcmp(mypr->pr_path, "/"))
-			snprintf(pr->pr_path, sizeof(pr->pr_path), "%s%s",
-			    mypr->pr_path, path);
-		else
-			strlcpy(pr->pr_path, path, sizeof(pr->pr_path));
+		strlcpy(pr->pr_path, path, sizeof(pr->pr_path));
 		pr->pr_root = root;
 	}
 	if (PR_HOST & ch_flags & ~pr_flags) {
@@ -1909,7 +1889,6 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 	vfs_freeopts(opts);
 	return (error);
 }
-
 
 /*
  * struct jail_get_args {
@@ -2222,7 +2201,6 @@ kern_jail_get(struct thread *td, struct uio *optuio, int flags)
 	return (error);
 }
 
-
 /*
  * struct jail_remove_args {
  *	int jid;
@@ -2328,7 +2306,6 @@ prison_remove_one(struct prison *pr)
 	prison_deref(pr, deuref | PD_DEREF);
 }
 
-
 /*
  * struct jail_attach_args {
  *	int jid;
@@ -2413,7 +2390,7 @@ do_jail_attach(struct thread *td, struct prison *pr)
 	if ((error = mac_vnode_check_chroot(td->td_ucred, pr->pr_root)))
 		goto e_unlock;
 #endif
-	VOP_UNLOCK(pr->pr_root, 0);
+	VOP_UNLOCK(pr->pr_root);
 	if ((error = pwd_chroot(td, pr->pr_root)))
 		goto e_revert_osd;
 
@@ -2437,14 +2414,13 @@ do_jail_attach(struct thread *td, struct prison *pr)
 	return (0);
 
  e_unlock:
-	VOP_UNLOCK(pr->pr_root, 0);
+	VOP_UNLOCK(pr->pr_root);
  e_revert_osd:
 	/* Tell modules this thread is still in its old jail after all. */
 	(void)osd_jail_call(td->td_ucred->cr_prison, PR_METHOD_ATTACH, td);
 	prison_deref(pr, PD_DEREF | PD_DEUREF);
 	return (error);
 }
-
 
 /*
  * Returns a locked prison instance, or NULL on failure.
@@ -2802,13 +2778,13 @@ prison_check_af(struct ucred *cred, int af)
  * the jail doesn't allow the address family.  IPv4 Address passed in in NBO.
  */
 int
-prison_if(struct ucred *cred, struct sockaddr *sa)
+prison_if(struct ucred *cred, const struct sockaddr *sa)
 {
 #ifdef INET
-	struct sockaddr_in *sai;
+	const struct sockaddr_in *sai;
 #endif
 #ifdef INET6
-	struct sockaddr_in6 *sai6;
+	const struct sockaddr_in6 *sai6;
 #endif
 	int error;
 
@@ -2825,13 +2801,13 @@ prison_if(struct ucred *cred, struct sockaddr *sa)
 	{
 #ifdef INET
 	case AF_INET:
-		sai = (struct sockaddr_in *)sa;
+		sai = (const struct sockaddr_in *)sa;
 		error = prison_check_ip4(cred, &sai->sin_addr);
 		break;
 #endif
 #ifdef INET6
 	case AF_INET6:
-		sai6 = (struct sockaddr_in6 *)sa;
+		sai6 = (const struct sockaddr_in6 *)sa;
 		error = prison_check_ip6(cred, &sai6->sin6_addr);
 		break;
 #endif
@@ -2864,16 +2840,6 @@ prison_ischild(struct prison *pr1, struct prison *pr2)
 		if (pr1 == pr2)
 			return (1);
 	return (0);
-}
-
-/*
- * Return 1 if the passed credential is in a jail, otherwise 0.
- */
-int
-jailed(struct ucred *cred)
-{
-
-	return (cred->cr_prison != &prison0);
 }
 
 /*
@@ -3053,6 +3019,16 @@ prison_enforce_statfs(struct ucred *cred, struct mount *mp, struct statfs *sp)
 int
 prison_priv_check(struct ucred *cred, int priv)
 {
+
+	/*
+	 * Some policies have custom handlers. This routine should not be
+	 * called for them. See priv_check_cred().
+	 */
+	switch (priv) {
+	case PRIV_VFS_GENERATION:
+		KASSERT(0, ("prison_priv_check instead of a custom handler "
+		    "called for %d\n", priv));
+	}
 
 	if (!jailed(cred))
 		return (0);
@@ -3387,6 +3363,12 @@ prison_priv_check(struct ucred *cred, int priv)
 			return (0);
 		return (EPERM);
 
+	case PRIV_VFS_EXTATTR_SYSTEM:
+		if (cred->cr_prison->pr_allow & PR_ALLOW_EXTATTR)
+			return (0);
+		else
+			return (EPERM);
+
 	default:
 		/*
 		 * In all remaining cases, deny the privilege request.  This
@@ -3446,7 +3428,6 @@ prison_path(struct prison *pr1, struct prison *pr2)
 		return (path2 + len1);
 	return (path2);
 }
-
 
 /*
  * Jail-related sysctls.
@@ -3811,6 +3792,8 @@ SYSCTL_JAIL_PARAM(_allow, read_msgbuf, CTLTYPE_INT | CTLFLAG_RW,
     "B", "Jail may read the kernel message buffer");
 SYSCTL_JAIL_PARAM(_allow, unprivileged_proc_debug, CTLTYPE_INT | CTLFLAG_RW,
     "B", "Unprivileged processes may use process debugging facilities");
+SYSCTL_JAIL_PARAM(_allow, extattr, CTLTYPE_INT | CTLFLAG_RW,
+    "B", "Jails may set system-level filesystem extended attributes");
 
 SYSCTL_JAIL_PARAM_SUBNODE(allow, mount, "Jail mount/unmount permission flags");
 SYSCTL_JAIL_PARAM(_allow_mount, , CTLTYPE_INT | CTLFLAG_RW,

@@ -38,7 +38,6 @@ DIRDEPS_FILTER.host = \
 	Nlib/csu* \
 	Nlib/libc \
 	Nlib/[mn]* \
-	Ngnu/lib/csu* \
 	Ngnu/lib/lib[a-r]* \
 	Nsecure/lib* \
 	Nusr.bin/xinstall* \
@@ -75,7 +74,7 @@ DIRDEPS_FILTER.xtras+= Nusr.bin/clang/clang.host
 .if ${DEP_RELDIR} == "lib/libc"
 DIRDEPS += lib/libc_nonshared
 .if ${MK_SSP:Uno} != "no" 
-DIRDEPS += gnu/lib/libssp/libssp_nonshared
+DIRDEPS += lib/libssp_nonshared
 .endif
 .else
 DIRDEPS_FILTER.xtras+= Nlib/libc_nonshared
@@ -148,7 +147,6 @@ _SRCS= ${SRCS} ${_PROGS_SRCS}
 
 # Has C files. The C_DIRDEPS are shared with C++ files as well.
 C_DIRDEPS= \
-	gnu/lib/csu \
 	include \
 	include/arpa \
 	include/protocols \

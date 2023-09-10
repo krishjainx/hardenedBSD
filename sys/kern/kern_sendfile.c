@@ -30,12 +30,15 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_kern_tls.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/capsicum.h>
 #include <sys/kernel.h>
 #include <netinet/in.h>
 #include <sys/lock.h>
+#include <sys/ktls.h>
 #include <sys/mutex.h>
 #include <sys/sysproto.h>
 #include <sys/malloc.h>
@@ -53,6 +56,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vnode.h>
 
 #include <net/vnet.h>
+#include <netinet/tcp.h>
 
 #include <security/audit/audit.h>
 #include <security/mac/mac_framework.h>
@@ -85,6 +89,10 @@ struct sf_io {
 	int		npages;
 	struct socket	*so;
 	struct mbuf	*m;
+	vm_object_t	obj;
+#ifdef KERN_TLS
+	struct ktls_session *tls;
+#endif
 	vm_page_t	pa[];
 };
 
@@ -254,7 +262,7 @@ sendfile_iodone(void *arg, vm_page_t *pg, int count, int error)
 
 	for (int i = 0; i < count; i++)
 		if (pg[i] != bogus_page)
-			vm_page_xunbusy(pg[i]);
+			vm_page_xunbusy_unchecked(pg[i]);
 
 	if (error)
 		sfio->error = error;
@@ -262,8 +270,29 @@ sendfile_iodone(void *arg, vm_page_t *pg, int count, int error)
 	if (!refcount_release(&sfio->nios))
 		return;
 
+	vm_object_pip_wakeup(sfio->obj);
+
+	if (__predict_false(sfio->error && sfio->m == NULL)) {
+		/*
+		 * I/O operation failed, but pru_send hadn't been executed -
+		 * nothing had been sent to the socket.  The syscall has
+		 * returned error to the user.
+		 */
+		free(sfio, M_TEMP);
+		return;
+	}
+
+#if defined(KERN_TLS) && defined(INVARIANTS)
+	if ((sfio->m->m_flags & M_EXT) != 0 &&
+	    sfio->m->m_ext.ext_type == EXT_PGS)
+		KASSERT(sfio->tls == sfio->m->m_ext.ext_pgs->tls,
+		    ("TLS session mismatch"));
+	else
+		KASSERT(sfio->tls == NULL,
+		    ("non-ext_pgs mbuf with TLS session"));
+#endif
 	CURVNET_SET(so->so_vnet);
-	if (sfio->error) {
+	if (__predict_false(sfio->error)) {
 		/*
 		 * I/O operation failed.  The state of data in the socket
 		 * is now inconsistent, and all what we can do is to tear
@@ -279,12 +308,29 @@ sendfile_iodone(void *arg, vm_page_t *pg, int count, int error)
 		so->so_error = EIO;
 
 		mb_free_notready(sfio->m, sfio->npages);
+#ifdef KERN_TLS
+	} else if (sfio->tls != NULL && sfio->tls->mode == TCP_TLS_MODE_SW) {
+		/*
+		 * I/O operation is complete, but we still need to
+		 * encrypt.  We cannot do this in the interrupt thread
+		 * of the disk controller, so forward the mbufs to a
+		 * different thread.
+		 *
+		 * Donate the socket reference from sfio to rather
+		 * than explicitly invoking soref().
+		 */
+		ktls_enqueue(sfio->m, so, sfio->npages);
+		goto out_with_ref;
+#endif
 	} else
 		(void)(so->so_proto->pr_usrreqs->pru_ready)(so, sfio->m,
 		    sfio->npages);
 
 	SOCK_LOCK(so);
 	sorele(so);
+#ifdef KERN_TLS
+out_with_ref:
+#endif
 	CURVNET_RESTORE();
 	free(sfio, M_TEMP);
 }
@@ -342,7 +388,7 @@ sendfile_swapin(vm_object_t obj, struct sf_io *sfio, int *nios, off_t off,
 		if (!vm_pager_has_page(obj, OFF_TO_IDX(vmoff(i, off)), NULL,
 		    &a)) {
 			pmap_zero_page(pa[i]);
-			pa[i]->valid = VM_PAGE_BITS_ALL;
+			vm_page_valid(pa[i]);
 			MPASS(pa[i]->dirty == 0);
 			vm_page_xunbusy(pa[i]);
 			i++;
@@ -378,16 +424,30 @@ sendfile_swapin(vm_object_t obj, struct sf_io *sfio, int *nios, off_t off,
 			}
 
 		refcount_acquire(&sfio->nios);
+		VM_OBJECT_WUNLOCK(obj);
 		rv = vm_pager_get_pages_async(obj, pa + i, count, NULL,
 		    i + count == npages ? &rhpages : NULL,
 		    &sendfile_iodone, sfio);
-		if (rv != VM_PAGER_OK) {
-			for (j = i; j < i + count; j++) {
-				if (pa[j] != bogus_page) {
-					vm_page_lock(pa[j]);
-					vm_page_unwire(pa[j], PQ_INACTIVE);
-					vm_page_unlock(pa[j]);
-				}
+		VM_OBJECT_WLOCK(obj);
+		if (__predict_false(rv != VM_PAGER_OK)) {
+			/*
+			 * Perform full pages recovery before returning EIO.
+			 * Pages from 0 to npages are wired.
+			 * Pages from i to npages are also busied.
+			 * Pages from (i + 1) to (i + count - 1) may be
+			 * substituted to bogus page, and not busied.
+			 */
+			for (j = 0; j < npages; j++) {
+				if (j > i && j < i + count - 1 &&
+				    pa[j] == bogus_page)
+					pa[j] = vm_page_lookup(obj,
+					    OFF_TO_IDX(vmoff(j, off)));
+				else if (j >= i)
+					vm_page_xunbusy(pa[j]);
+				KASSERT(pa[j] != NULL && pa[j] != bogus_page,
+				    ("%s: page %p[%d] I/O recovery failure",
+				    __func__, pa, j));
+				vm_page_unwire(pa[j], PQ_INACTIVE);
 			}
 			VM_OBJECT_WUNLOCK(obj);
 			return (EIO);
@@ -489,7 +549,7 @@ sendfile_getobj(struct thread *td, struct file *fp, vm_object_t *obj_res,
 
 out:
 	if (vp != NULL)
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -526,6 +586,9 @@ vn_sendfile(struct file *fp, int sockfd, struct uio *hdr_uio,
 	struct vnode *vp;
 	struct vm_object *obj;
 	struct socket *so;
+#ifdef KERN_TLS
+	struct ktls_session *tls;
+#endif
 	struct mbuf_ext_pgs *ext_pgs;
 	struct mbuf *m, *mh, *mhtail;
 	struct sf_buf *sf;
@@ -534,12 +597,18 @@ vn_sendfile(struct file *fp, int sockfd, struct uio *hdr_uio,
 	struct vattr va;
 	off_t off, sbytes, rem, obj_size;
 	int bsize, error, ext_pgs_idx, hdrlen, max_pgs, softerr;
+#ifdef KERN_TLS
+	int tls_enq_cnt;
+#endif
 	bool use_ext_pgs;
 
 	obj = NULL;
 	so = NULL;
 	m = mh = NULL;
 	sfs = NULL;
+#ifdef KERN_TLS
+	tls = NULL;
+#endif
 	hdrlen = sbytes = 0;
 	softerr = 0;
 	use_ext_pgs = false;
@@ -576,6 +645,9 @@ vn_sendfile(struct file *fp, int sockfd, struct uio *hdr_uio,
 	 * we implement that, but possibly shouldn't.
 	 */
 	(void)sblock(&so->so_snd, SBL_WAIT | SBL_NOINTR);
+#ifdef KERN_TLS
+	tls = ktls_hold(so->so_snd.sb_tls_info);
+#endif
 
 	/*
 	 * Loop through the pages of the file, starting with the requested
@@ -669,7 +741,14 @@ retry_space:
 		if (hdr_uio != NULL && hdr_uio->uio_resid > 0) {
 			hdr_uio->uio_td = td;
 			hdr_uio->uio_rw = UIO_WRITE;
-			mh = m_uiotombuf(hdr_uio, M_WAITOK, space, 0, 0);
+#ifdef KERN_TLS
+			if (tls != NULL)
+				mh = m_uiotombuf(hdr_uio, M_WAITOK, space,
+				    tls->params.max_frame_len, M_NOMAP);
+			else
+#endif
+				mh = m_uiotombuf(hdr_uio, M_WAITOK,
+				    space, 0, 0);
 			hdrlen = m_length(mh, &mhtail);
 			space -= hdrlen;
 			/*
@@ -690,7 +769,7 @@ retry_space:
 				goto done;
 			error = VOP_GETATTR(vp, &va, td->td_ucred);
 			if (error != 0 || off >= va.va_size) {
-				VOP_UNLOCK(vp, 0);
+				VOP_UNLOCK(vp);
 				goto done;
 			}
 			if (va.va_size != obj_size) {
@@ -741,14 +820,26 @@ retry_space:
 		    npages * sizeof(vm_page_t), M_TEMP, M_WAITOK);
 		refcount_init(&sfio->nios, 1);
 		sfio->so = so;
+		sfio->obj = obj;
 		sfio->error = 0;
+		vm_object_pip_add(obj, 1);
+
+#ifdef KERN_TLS
+		/*
+		 * This doesn't use ktls_hold() because sfio->m will
+		 * also have a reference on 'tls' that will be valid
+		 * for all of sfio's lifetime.
+		 */
+		sfio->tls = tls;
+#endif
 
 		error = sendfile_swapin(obj, sfio, &nios, off, space, npages,
 		    rhpages, flags);
 		if (error != 0) {
 			if (vp != NULL)
-				VOP_UNLOCK(vp, 0);
-			free(sfio, M_TEMP);
+				VOP_UNLOCK(vp);
+			sfio->m = NULL;
+			sendfile_iodone(sfio, NULL, 0, error);
 			goto done;
 		}
 
@@ -763,11 +854,22 @@ retry_space:
 		 * bufs are restricted to TCP as that is what has been
 		 * tested.  In particular, unmapped mbufs have not
 		 * been tested with UNIX-domain sockets.
+		 *
+		 * TLS frames always require unmapped mbufs.
 		 */
-		if (mb_use_ext_pgs &&
-		    so->so_proto->pr_protocol == IPPROTO_TCP) {
+		if ((mb_use_ext_pgs &&
+		    so->so_proto->pr_protocol == IPPROTO_TCP)
+#ifdef KERN_TLS
+		    || tls != NULL
+#endif
+		    ) {
 			use_ext_pgs = true;
-			max_pgs = MBUF_PEXT_MAX_PGS;
+#ifdef KERN_TLS
+			if (tls != NULL)
+				max_pgs = num_pages(tls->params.max_frame_len);
+			else
+#endif
+				max_pgs = MBUF_PEXT_MAX_PGS;
 
 			/* Start at last index, to wrap on first use. */
 			ext_pgs_idx = max_pgs - 1;
@@ -861,11 +963,8 @@ retry_space:
 			    m != NULL ? SFB_NOWAIT : SFB_CATCH);
 			if (sf == NULL) {
 				SFSTAT_INC(sf_allocfail);
-				for (int j = i; j < npages; j++) {
-					vm_page_lock(pa[j]);
+				for (int j = i; j < npages; j++)
 					vm_page_unwire(pa[j], PQ_INACTIVE);
-					vm_page_unlock(pa[j]);
-				}
 				if (m == NULL)
 					softerr = ENOBUFS;
 				fixspace(npages, i, off, &space);
@@ -919,7 +1018,7 @@ retry_space:
 		}
 
 		if (vp != NULL)
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 
 		/* Keep track of bytes processed. */
 		off += space;
@@ -946,6 +1045,14 @@ prepend_header:
 		    __func__, m_length(m, NULL), space, hdrlen));
 
 		CURVNET_SET(so->so_vnet);
+#ifdef KERN_TLS
+		if (tls != NULL) {
+			error = ktls_frame(m, tls, &tls_enq_cnt,
+			    TLS_RLTYPE_APP);
+			if (error != 0)
+				goto done;
+		}
+#endif
 		if (nios == 0) {
 			/*
 			 * If sendfile_swapin() didn't initiate any I/Os,
@@ -953,9 +1060,20 @@ prepend_header:
 			 * we can send data right now without the
 			 * PRUS_NOTREADY flag.
 			 */
-			free(sfio, M_TEMP);
-			error = (*so->so_proto->pr_usrreqs->pru_send)
-			    (so, 0, m, NULL, NULL, td);
+			if (sfio != NULL) {
+				vm_object_pip_wakeup(sfio->obj);
+				free(sfio, M_TEMP);
+			}
+#ifdef KERN_TLS
+			if (tls != NULL && tls->mode == TCP_TLS_MODE_SW) {
+				error = (*so->so_proto->pr_usrreqs->pru_send)
+				    (so, PRUS_NOTREADY, m, NULL, NULL, td);
+				soref(so);
+				ktls_enqueue(m, so, tls_enq_cnt);
+			} else
+#endif
+				error = (*so->so_proto->pr_usrreqs->pru_send)
+				    (so, 0, m, NULL, NULL, td);
 		} else {
 			sfio->npages = npages;
 			soref(so);
@@ -1019,6 +1137,10 @@ out:
 		mtx_destroy(&sfs->mtx);
 		free(sfs, M_TEMP);
 	}
+#ifdef KERN_TLS
+	if (tls != NULL)
+		ktls_free(tls);
+#endif
 
 	if (error == ERESTART)
 		error = EINTR;

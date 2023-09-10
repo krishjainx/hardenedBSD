@@ -51,12 +51,12 @@ __FBSDID("$FreeBSD$");
 #include <netinet/sctp_auth.h>
 #include <netinet/sctp_asconf.h>
 #include <netinet/sctp_bsd_addr.h>
+#include <netinet/sctp_kdtrace.h>
 #if defined(INET6) || defined(INET)
 #include <netinet/tcp_var.h>
 #endif
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
-#include <netinet/in_kdtrace.h>
 #include <sys/proc.h>
 #ifdef INET6
 #include <netinet/icmp6.h>
@@ -780,19 +780,66 @@ sctp_audit_log(uint8_t ev, uint8_t fd)
 void
 sctp_stop_timers_for_shutdown(struct sctp_tcb *stcb)
 {
-	struct sctp_association *asoc;
+	struct sctp_inpcb *inp;
 	struct sctp_nets *net;
 
-	asoc = &stcb->asoc;
+	inp = stcb->sctp_ep;
 
-	(void)SCTP_OS_TIMER_STOP(&asoc->dack_timer.timer);
-	(void)SCTP_OS_TIMER_STOP(&asoc->strreset_timer.timer);
-	(void)SCTP_OS_TIMER_STOP(&asoc->asconf_timer.timer);
-	(void)SCTP_OS_TIMER_STOP(&asoc->autoclose_timer.timer);
-	(void)SCTP_OS_TIMER_STOP(&asoc->delayed_event_timer.timer);
-	TAILQ_FOREACH(net, &asoc->nets, sctp_next) {
-		(void)SCTP_OS_TIMER_STOP(&net->pmtu_timer.timer);
-		(void)SCTP_OS_TIMER_STOP(&net->hb_timer.timer);
+	sctp_timer_stop(SCTP_TIMER_TYPE_RECV, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_12);
+	sctp_timer_stop(SCTP_TIMER_TYPE_STRRESET, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_13);
+	sctp_timer_stop(SCTP_TIMER_TYPE_ASCONF, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_14);
+	sctp_timer_stop(SCTP_TIMER_TYPE_AUTOCLOSE, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_15);
+	TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
+		sctp_timer_stop(SCTP_TIMER_TYPE_PATHMTURAISE, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_16);
+		sctp_timer_stop(SCTP_TIMER_TYPE_HEARTBEAT, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_17);
+	}
+}
+
+void
+sctp_stop_association_timers(struct sctp_tcb *stcb, bool stop_assoc_kill_timer)
+{
+	struct sctp_inpcb *inp;
+	struct sctp_nets *net;
+
+	inp = stcb->sctp_ep;
+	sctp_timer_stop(SCTP_TIMER_TYPE_RECV, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_18);
+	sctp_timer_stop(SCTP_TIMER_TYPE_STRRESET, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_19);
+	if (stop_assoc_kill_timer) {
+		sctp_timer_stop(SCTP_TIMER_TYPE_ASOCKILL, inp, stcb, NULL,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_20);
+	}
+	sctp_timer_stop(SCTP_TIMER_TYPE_ASCONF, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_21);
+	sctp_timer_stop(SCTP_TIMER_TYPE_AUTOCLOSE, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_22);
+	sctp_timer_stop(SCTP_TIMER_TYPE_SHUTDOWNGUARD, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_23);
+	/* Mobility adaptation */
+	sctp_timer_stop(SCTP_TIMER_TYPE_PRIM_DELETED, inp, stcb, NULL,
+	    SCTP_FROM_SCTPUTIL + SCTP_LOC_24);
+	TAILQ_FOREACH(net, &stcb->asoc.nets, sctp_next) {
+		sctp_timer_stop(SCTP_TIMER_TYPE_SEND, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_25);
+		sctp_timer_stop(SCTP_TIMER_TYPE_INIT, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_26);
+		sctp_timer_stop(SCTP_TIMER_TYPE_SHUTDOWN, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_27);
+		sctp_timer_stop(SCTP_TIMER_TYPE_COOKIE, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_28);
+		sctp_timer_stop(SCTP_TIMER_TYPE_SHUTDOWNACK, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_29);
+		sctp_timer_stop(SCTP_TIMER_TYPE_PATHMTURAISE, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_30);
+		sctp_timer_stop(SCTP_TIMER_TYPE_HEARTBEAT, inp, stcb, net,
+		    SCTP_FROM_SCTPUTIL + SCTP_LOC_31);
 	}
 }
 
@@ -1475,12 +1522,11 @@ no_stcb:
 void
 sctp_iterator_worker(void)
 {
-	struct sctp_iterator *it, *nit;
+	struct sctp_iterator *it;
 
 	/* This function is called with the WQ lock in place */
-
 	sctp_it_ctl.iterator_running = 1;
-	TAILQ_FOREACH_SAFE(it, &sctp_it_ctl.iteratorhead, sctp_nxt_itr, nit) {
+	while ((it = TAILQ_FIRST(&sctp_it_ctl.iteratorhead)) != NULL) {
 		/* now lets work on this one */
 		TAILQ_REMOVE(&sctp_it_ctl.iteratorhead, it, sctp_nxt_itr);
 		SCTP_IPI_ITERATOR_WQ_UNLOCK();
@@ -2004,6 +2050,10 @@ sctp_timer_start(int t_type, struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 	if (stcb) {
 		SCTP_TCB_LOCK_ASSERT(stcb);
 	}
+	/* Don't restart timer on net that's been removed. */
+	if (net != NULL && (net->dest_state & SCTP_ADDR_BEING_DELETED)) {
+		return;
+	}
 	switch (t_type) {
 	case SCTP_TIMER_TYPE_ADDR_WQ:
 		/* Only 1 tick away :-) */
@@ -2469,25 +2519,24 @@ sctp_mtu_size_reset(struct sctp_inpcb *inp,
 
 
 /*
- * given an association and starting time of the current RTT period return
- * RTO in number of msecs net should point to the current network
+ * Given an association and starting time of the current RTT period, update
+ * RTO in number of msecs. net should point to the current network.
+ * Return 1, if an RTO update was performed, return 0 if no update was
+ * performed due to invalid starting point.
  */
 
-uint32_t
+int
 sctp_calculate_rto(struct sctp_tcb *stcb,
     struct sctp_association *asoc,
     struct sctp_nets *net,
     struct timeval *old,
     int rtt_from_sack)
 {
-	/*-
-	 * given an association and the starting time of the current RTT
-	 * period (in value1/value2) return RTO in number of msecs.
-	 */
+	struct timeval now;
+	uint64_t rtt_us;	/* RTT in us */
 	int32_t rtt;		/* RTT in ms */
 	uint32_t new_rto;
 	int first_measure = 0;
-	struct timeval now;
 
 	/************************/
 	/* 1. calculate new RTT */
@@ -2498,10 +2547,19 @@ sctp_calculate_rto(struct sctp_tcb *stcb,
 	} else {
 		(void)SCTP_GETTIME_TIMEVAL(&now);
 	}
+	if ((old->tv_sec > now.tv_sec) ||
+	    ((old->tv_sec == now.tv_sec) && (old->tv_sec > now.tv_sec))) {
+		/* The starting point is in the future. */
+		return (0);
+	}
 	timevalsub(&now, old);
+	rtt_us = (uint64_t)1000000 * (uint64_t)now.tv_sec + (uint64_t)now.tv_usec;
+	if (rtt_us > SCTP_RTO_UPPER_BOUND * 1000) {
+		/* The RTT is larger than a sane value. */
+		return (0);
+	}
 	/* store the current RTT in us */
-	net->rtt = (uint64_t)1000000 * (uint64_t)now.tv_sec +
-	    (uint64_t)now.tv_usec;
+	net->rtt = rtt_us;
 	/* compute rtt in ms */
 	rtt = (int32_t)(net->rtt / 1000);
 	if ((asoc->cc_functions.sctp_rtt_calculated) && (rtt_from_sack == SCTP_RTT_FROM_DATA)) {
@@ -2533,7 +2591,7 @@ sctp_calculate_rto(struct sctp_tcb *stcb,
 	 * Paper "Congestion Avoidance and Control", Annex A.
 	 *
 	 * (net->lastsa >> SCTP_RTT_SHIFT) is the srtt
-	 * (net->lastsa >> SCTP_RTT_VAR_SHIFT) is the rttvar
+	 * (net->lastsv >> SCTP_RTT_VAR_SHIFT) is the rttvar
 	 */
 	if (net->RTO_measured) {
 		rtt -= (net->lastsa >> SCTP_RTT_SHIFT);
@@ -2574,8 +2632,8 @@ sctp_calculate_rto(struct sctp_tcb *stcb,
 	if (new_rto > stcb->asoc.maxrto) {
 		new_rto = stcb->asoc.maxrto;
 	}
-	/* we are now returning the RTO */
-	return (new_rto);
+	net->RTO = new_rto;
+	return (1);
 }
 
 /*

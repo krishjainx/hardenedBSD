@@ -15,7 +15,7 @@ NOCFI=		yes
 
 LIBADD=		geom util
 
-.if defined(RESCUE) || defined(RELEASE_CRUNCH)
+.if defined(RESCUE)
 .PATH:	${SRCTOP}/lib/geom/part \
 	${SRCTOP}/lib/geom/label
 

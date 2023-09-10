@@ -72,11 +72,12 @@ struct sysentvec elf32_freebsd_sysvec = {
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
 	.sv_stackprot	= VM_PROT_ALL,
+	.sv_copyout_auxargs = __elfN(freebsd_copyout_auxargs),
 	.sv_copyout_strings	= exec_copyout_strings,
 	.sv_setregs	= exec_setregs,
 	.sv_fixlimit	= NULL,
 	.sv_maxssiz	= NULL,
-	.sv_flags	= SV_ABI_FREEBSD | SV_ASLR | SV_IA32 | SV_ILP32 |
+	.sv_flags	= SV_ABI_FREEBSD | SV_IA32 | SV_ILP32 |
 			    SV_SHP | SV_TIMEKEEP,
 	.sv_set_syscall_retval = cpu_set_syscall_retval,
 	.sv_fetch_syscall_args = cpu_fetch_syscall_args,
@@ -293,6 +294,13 @@ elf_cpu_load_file(linker_file_t lf __unused)
 
 int
 elf_cpu_unload_file(linker_file_t lf __unused)
+{
+
+	return (0);
+}
+
+int
+elf_cpu_parse_dynamic(linker_file_t lf __unused, Elf_Dyn *dynamic __unused)
 {
 
 	return (0);

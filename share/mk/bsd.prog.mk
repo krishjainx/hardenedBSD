@@ -35,6 +35,11 @@ PROG=	${PROG_CXX}
 MK_DEBUG_FILES=	no
 .endif
 
+
+.if ${MACHINE_CPUARCH} == "riscv" && ${LINKER_FEATURES:Mriscv-relaxations} == ""
+CFLAGS += -mno-relax
+.endif
+
 .if defined(CRUNCH_CFLAGS)
 CFLAGS+=${CRUNCH_CFLAGS}
 .else
@@ -51,7 +56,7 @@ STRIP?=	-s
 
 .if defined(NO_ROOT)
 .if !defined(TAGS) || ! ${TAGS:Mpackage=*}
-TAGS+=		package=${PACKAGE:Uruntime}
+TAGS+=		package=${PACKAGE:Uutilities}
 .endif
 TAG_ARGS=	-T ${TAGS:[*]:S/ /,/g}
 .endif
@@ -125,6 +130,11 @@ CFLAGS+=	-mspeculative-load-hardening
 
 .if defined(MK_LIBRESSL) && ${MK_LIBRESSL} != "no"
 CFLAGS+=	-DHAVE_LIBRESSL
+.endif
+#
+# clang currently defaults to dynamic TLS for mips64 binaries
+.if ${MACHINE_ARCH:Mmips64*} && ${COMPILER_TYPE} == "clang"
+CFLAGS+= -ftls-model=initial-exec
 .endif
 
 .if ${MK_DEBUG_FILES} != "no"

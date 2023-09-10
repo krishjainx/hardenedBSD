@@ -393,6 +393,7 @@ inm_lookup(struct ifnet *ifp, const struct in_addr ina)
 
 	IN_MULTI_LIST_LOCK_ASSERT();
 	NET_EPOCH_ENTER(et);
+
 	inm = inm_lookup_locked(ifp, ina);
 	NET_EPOCH_EXIT(et);
 
@@ -525,7 +526,7 @@ in_getmulti(struct ifnet *ifp, const struct in_addr *group,
 	IN_MULTI_LIST_UNLOCK();
 	if (inm != NULL)
 		return (0);
-	
+
 	memset(&gsin, 0, sizeof(gsin));
 	gsin.sin_family = AF_INET;
 	gsin.sin_len = sizeof(struct sockaddr_in);
@@ -1267,7 +1268,9 @@ in_joingroup_locked(struct ifnet *ifp, const struct in_addr *gina,
 	if (error) {
 
 		CTR2(KTR_IGMPV3, "%s: dropping ref on %p", __func__, inm);
+		IF_ADDR_WLOCK(ifp);
 		inm_release_deferred(inm);
+		IF_ADDR_WUNLOCK(ifp);
 	} else {
 		*pinm = inm;
 	}
@@ -1310,10 +1313,10 @@ in_leavegroup_locked(struct in_multi *inm, /*const*/ struct in_mfilter *imf)
 	struct in_mfilter	 timf;
 	int			 error;
 
-	error = 0;
-
 	IN_MULTI_LOCK_ASSERT();
 	IN_MULTI_LIST_UNLOCK_ASSERT();
+
+	error = 0;
 
 	CTR5(KTR_IGMPV3, "%s: leave inm %p, 0x%08x/%s, imf %p", __func__,
 	    inm, ntohl(inm->inm_addr.s_addr),
@@ -2204,11 +2207,15 @@ inp_join_group(struct inpcb *inp, struct sockopt *sopt)
 			goto out_inp_unlocked;
 		}
 		if (error) {
-                        CTR1(KTR_IGMPV3, "%s: in_joingroup_locked failed", 
+                        CTR1(KTR_IGMPV3, "%s: in_joingroup_locked failed",
                             __func__);
 			goto out_inp_locked;
 		}
-		inm_acquire(imf->imf_inm);
+		/*
+		 * NOTE: Refcount from in_joingroup_locked()
+		 * is protecting membership.
+		 */
+		ip_mfilter_insert(&imo->imo_head, imf);
 	} else {
 		CTR1(KTR_IGMPV3, "%s: merge inm state", __func__);
 		IN_MULTI_LIST_LOCK();
@@ -2232,8 +2239,6 @@ inp_join_group(struct inpcb *inp, struct sockopt *sopt)
 			goto out_inp_locked;
 		}
 	}
-	if (is_new)
-		ip_mfilter_insert(&imo->imo_head, imf);
 
 	imf_commit(imf);
 	imf = NULL;
@@ -2246,7 +2251,9 @@ out_inp_unlocked:
 	if (is_new && imf) {
 		if (imf->imf_inm != NULL) {
 			IN_MULTI_LIST_LOCK();
+			IF_ADDR_WLOCK(ifp);
 			inm_release_deferred(imf->imf_inm);
+			IF_ADDR_WUNLOCK(ifp);
 			IN_MULTI_LIST_UNLOCK();
 		}
 		ip_mfilter_free(imf);
@@ -2402,6 +2409,12 @@ inp_leave_group(struct inpcb *inp, struct sockopt *sopt)
 	if (is_final) {
 		ip_mfilter_remove(&imo->imo_head, imf);
 		imf_leave(imf);
+
+		/*
+		 * Give up the multicast address record to which
+		 * the membership points.
+		 */
+		(void) in_leavegroup_locked(imf->imf_inm, imf);
 	} else {
 		if (imf->imf_st[0] == MCAST_EXCLUDE) {
 			error = EADDRNOTAVAIL;
@@ -2456,14 +2469,8 @@ inp_leave_group(struct inpcb *inp, struct sockopt *sopt)
 out_inp_locked:
 	INP_WUNLOCK(inp);
 
-	if (is_final && imf) {
-		/*
-		 * Give up the multicast address record to which
-		 * the membership points.
-		 */
-		(void) in_leavegroup_locked(imf->imf_inm, imf);
+	if (is_final && imf)
 		ip_mfilter_free(imf);
-	}
 
 	IN_MULTI_UNLOCK();
 	return (error);
@@ -2620,7 +2627,7 @@ inp_set_source_filters(struct inpcb *inp, struct sockopt *sopt)
 		int			 i;
 
 		INP_WUNLOCK(inp);
- 
+
 		CTR2(KTR_IGMPV3, "%s: loading %lu source list entries",
 		    __func__, (unsigned long)msfr.msfr_nsrcs);
 		kss = malloc(sizeof(struct sockaddr_storage) * msfr.msfr_nsrcs,
@@ -2908,8 +2915,10 @@ sysctl_ip_mcast_filters(SYSCTL_HANDLER_ARGS)
 		return (EINVAL);
 	}
 
+	NET_EPOCH_ENTER(et);
 	ifp = ifnet_byindex(ifindex);
 	if (ifp == NULL) {
+		NET_EPOCH_EXIT(et);
 		CTR2(KTR_IGMPV3, "%s: no ifp for ifindex %u",
 		    __func__, ifindex);
 		return (ENOENT);
@@ -2917,12 +2926,13 @@ sysctl_ip_mcast_filters(SYSCTL_HANDLER_ARGS)
 
 	retval = sysctl_wire_old_buffer(req,
 	    sizeof(uint32_t) + (in_mcast_maxgrpsrc * sizeof(struct in_addr)));
-	if (retval)
+	if (retval) {
+		NET_EPOCH_EXIT(et);
 		return (retval);
+	}
 
 	IN_MULTI_LIST_LOCK();
 
-	NET_EPOCH_ENTER(et);
 	CK_STAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
 		if (ifma->ifma_addr->sa_family != AF_INET ||
 		    ifma->ifma_protospec == NULL)
@@ -2951,9 +2961,9 @@ sysctl_ip_mcast_filters(SYSCTL_HANDLER_ARGS)
 				break;
 		}
 	}
-	NET_EPOCH_EXIT(et);
 
 	IN_MULTI_LIST_UNLOCK();
+	NET_EPOCH_EXIT(et);
 
 	return (retval);
 }

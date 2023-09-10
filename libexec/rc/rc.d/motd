@@ -48,7 +48,6 @@ motd_start()
 	T=`mktemp -t motd`
 	uname -v | sed -e 's,^\([^#]*\) #\(.* [1-2][0-9][0-9][0-9]\).*/\([^\]*\) $,\1 (\3) #\2,' > ${T}
 	awk '{if (NR == 1) {if ($1 == "FreeBSD" || $1 == "HardenedBSD") {next} else {print "\n"$0}} else {print}}' < ${MOTD_FILE} >> ${T}
-	cat "${TEMPLATE}" >> ${T}
 
 	install -C -o root -g wheel -m "${PERMS}" "$T" "${TARGET}"
 	rm -f "$T"

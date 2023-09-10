@@ -46,8 +46,6 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet.h"
 #include "opt_inet6.h"
 
-#include "opt_sctp.h"
-
 #include <sys/param.h>
 #include <sys/kernel.h>
 
@@ -782,7 +780,7 @@ xnb_connect_comms(struct xnb_softc *xnb)
 					  xnb->evtchn,
 					  /*filter*/NULL,
 					  xnb_intr, /*arg*/xnb,
-					  INTR_TYPE_BIO | INTR_MPSAFE,
+					  INTR_TYPE_NET | INTR_MPSAFE,
 					  &xnb->xen_intr_handle);
 	if (error != 0) {
 		(void)xnb_disconnect(xnb);

@@ -13,6 +13,12 @@ MAN=	nm.1
 
 LIBADD=	dwarf elftc elf
 
+.if ${MK_CASPER} != "no" && !defined(BOOTSTRAPPING) && !defined(NXB_TARGET)
+LIBADD+=	casper
+LIBADD+=	cap_fileargs
+CFLAGS+=	-DWITH_CASPER
+.endif
+
 CFLAGS+=-I${ELFTCDIR}/libelftc -I${ELFTCDIR}/common
 
 .if ${MK_LLVM_NM_IS_NM} == "no"
